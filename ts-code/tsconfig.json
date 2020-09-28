@@ -5,6 +5,7 @@
 		"strictNullChecks": true,
 		"strictBindCallApply": true,
 		"outDir": "../build",
+		"declaration": true,
 		"pretty": true
 	}
 }

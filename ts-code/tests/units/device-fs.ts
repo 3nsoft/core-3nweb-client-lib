@@ -22,8 +22,6 @@ import { resolve } from 'path';
 import { loadSpecs } from '../libs-for-tests/spec-module';
 import { SetupWithTestFS, clearFS } from '../fs-checks/test-utils';
 
-declare var testFS: web3n.files.WritableFS;
-
 type FileException = web3n.files.FileException;
 
 const TEST_DATA = resolve(__dirname, '../../../test-data');

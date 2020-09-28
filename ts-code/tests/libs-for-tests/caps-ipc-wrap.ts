@@ -15,11 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectsConnector, Envelope, msgProtoType } from "../../ipc-via-protobuf/connector";
 import { Subject } from "rxjs";
 import { map, delay } from "rxjs/operators";
-import { exposeStartupW3N, makeStartupW3Nclient } from "../../core-ipc/startup-caps";
-import { exposeW3N, makeW3Nclient } from "../../core-ipc/common-caps";
+import { exposeStartupW3N, makeStartupW3Nclient, exposeW3N, makeW3Nclient, Envelope, msgProtoType, ObjectsConnector } from "../../lib-index";
 
 type StartupW3N = web3n.startup.W3N;
 type CommonW3N = web3n.caps.common.W3N;

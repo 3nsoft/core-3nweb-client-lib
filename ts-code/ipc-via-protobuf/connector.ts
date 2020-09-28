@@ -461,6 +461,9 @@ function ensureCorrectRefObjType(objType: ExposedObjType): void {
 	}
 }
 
+/**
+ * Envelope is a message form that is sent in IPC channel.
+ */
 export interface Envelope {
 	headers: {
 		msgType: MsgType;

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core } from "../../core";
+import { Core } from "../../lib-index";
 import { makeNetClient } from "../../lib-client/request-utils";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";

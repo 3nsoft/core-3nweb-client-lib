@@ -37,7 +37,8 @@ export interface SpecDescribe {
 
 function readSpecs(folderWithModules: string): SpecDescribe[] {
 	const specs: SpecDescribe[] = [];
-	const modulesWithSpecs = readdirSync(folderWithModules);
+	const modulesWithSpecs = readdirSync(folderWithModules)
+	.filter(fName => fName.endsWith('.js'));
 	for (const fName of modulesWithSpecs) {
 		const s: SpecDescribe = require(resolve(folderWithModules, fName)).specs;
 		if (s) {
