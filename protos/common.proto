@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package common;
+
+message ObjectReference {
+	string obj_type = 1;
+	repeated string path = 2 [packed=true];
+}
+
+message BooleanValue {
+	bool value = 1;
+}
+
+message StringArrayValue {
+	repeated string values = 1 [packed=true];
+}
+
+message UInt64Value {
+	uint64 value = 1;
+}
+
+message UInt32Value {
+	uint64 value = 1;
+}
+
+message StringValue {
+	string value = 1;
+}
+
+message BytesValue {
+	bytes value = 1;
+}
+
+message ErrorValue {
+	optional string runtime_exc_json = 1;
+	optional string err = 2;
+}

@@ -1,0 +1,10 @@
+{
+	"compilerOptions": {
+		"target": "es2018",
+		"module": "commonjs",
+		"strictNullChecks": true,
+		"strictBindCallApply": true,
+		"outDir": "../build",
+		"pretty": true
+	}
+}

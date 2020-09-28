@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package logger;
+
+// --- log ---
+// Reply is status only and body is empty
+message LogRequestBody {
+	string log_type = 1;
+	string msg = 2;
+	optional common.ErrorValue err = 3;
+}

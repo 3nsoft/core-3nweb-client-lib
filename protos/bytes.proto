@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package bytes;
+
+
+// ==== FileByteSink referable object ====
+
+// --- FileByteSink.getSize ---
+// Request body is empty
+// Reply body is common.UInt64Value
+
+// --- FileByteSink.splice ---
+// Reply has only status and body is empty
+message SpliceRequestBody {
+	uint64 pos = 1;
+	uint64 del = 2;
+	optional common.BytesValue bytes = 3;
+}
+
+// --- FileByteSink.truncate ---
+// Reply has only status and body is empty
+message TruncateRequestBody {
+	uint64 size = 1;
+}
+
+// --- FileByteSink.showLayout ---
+// Request body is empty
+// Reply body is FileLayoutMsg
+message FileLayoutMsg {
+	message LayoutSection {
+		string src = 1;
+		uint64 ofs = 2;
+		uint64 len = 3;
+	}
+	optional common.UInt64Value base = 1;
+	repeated LayoutSection sections = 2 [packed=true];
+}
+
+// --- FileByteSink.done ---
+// Reply has only status and body is empty
+message DoneRequestBody {
+	optional common.ErrorValue err = 1;
+}
+
+
+// ==== FileByteSource referable object ====
+
+// --- FileByteSource.read ---
+message ReadRequestBody {
+	optional common.UInt64Value len = 1;
+}
+message ReadReplyBody {
+	optional common.BytesValue bytes = 1;
+}
+
+// --- FileByteSource.getSize ---
+// Request body is empty
+// Reply body is common.UInt64Value
+
+// --- FileByteSource.seek ---
+// Reply has only status and body is empty
+message SeekRequestBody {
+	uint64 offset = 1;
+}
+
+// --- FileByteSource.getPosition ---
+// Request body is empty
+// Reply body is common.UInt64Value

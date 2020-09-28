@@ -1,0 +1,42 @@
+{
+  "name": "core-3nweb-client-lib",
+  "version": "0.10.0",
+  "description": "3NWeb client core library, embeddable into different environments",
+  "main": "build/core/index.js",
+  "scripts": {
+    "build": "tsc -p ts-code",
+    "test": "tsc -p ts-code && node build/tests/jasmine.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3nsoft/core-3nweb-client-lib.git"
+  },
+  "keywords": [
+    "3NWeb",
+    "client",
+    "ASMail",
+    "MailerId",
+    "3NStorage"
+  ],
+  "author": {
+    "name": "3NSoft Inc.",
+    "url": "https://3nsoft.com",
+    "email": "hq@3nsoft.com"
+  },
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "ecma-nacl": "^2.4.2",
+    "protobufjs": "^6.10.1",
+    "rxjs": "^6.5.2",
+    "weak-napi": "^1.0.3",
+    "ws": "^7.0.0",
+    "xsp-files": "^3.1.7"
+  },
+  "devDependencies": {
+    "@types/jasmine": "^3.5.11",
+    "@types/node": "^12.0.4",
+    "@types/ws": "^4.0.0",
+    "jasmine": "^2.4.1",
+    "typescript": "^3.7.3"
+  }
+}

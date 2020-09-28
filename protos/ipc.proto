@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package ipc;
+
+message EnvelopeHeaders {
+	string msg_type = 1;
+	optional common.UInt64Value fn_call_num = 2;
+	repeated string path = 3 [packed=true];
+}
+
+message Envelope {
+	EnvelopeHeaders headers = 1;
+	optional common.BytesValue body = 2;
+}

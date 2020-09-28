@@ -1,0 +1,217 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package file;
+
+
+message File {
+	bool writable = 1;
+	bool is_versioned = 2;
+	string name = 3;
+	bool is_new = 4;
+	// impl is a reference to object with methods of either
+	// ReadonlyFile or WritableFile
+	common.ObjectReference impl = 5;
+}
+
+
+// ==== ReadonlyFile referable as impl object ====
+
+// --- ReadonlyFile.stat ---
+// Request body is empty
+// Reply body is StatsMsg
+message StatsMsg {
+	optional common.BooleanValue is_file = 1;
+	optional common.BooleanValue is_folder = 2;
+	optional common.BooleanValue is_link = 3;
+	bool writable = 4;
+	optional common.UInt64Value size = 5;
+	optional common.UInt64Value mtime = 6;
+	optional common.UInt64Value ctime = 7;
+	optional common.UInt64Value version = 8;
+}
+
+// --- ReadonlyFile.getXAttr ---
+// Reply body is XAttrValue
+message GetXAttrRequestBody {
+	string xa_name = 1;
+}
+
+message XAttrValue {
+	optional common.StringValue str = 1;
+	optional common.StringValue json = 2;
+	optional common.BytesValue bytes = 3;
+}
+
+// --- ReadonlyFile.listXAttrs ---
+// Request body is empty
+// Reply body is common.StringArrayValue
+
+// --- ReadonlyFile.readBytes ---
+message ReadBytesRequestBody {
+	optional common.UInt64Value start = 1;
+	optional common.UInt64Value end = 2;
+}
+message ReadBytesReplyBody {
+	optional common.BytesValue bytes = 1;
+}
+
+// --- ReadonlyFile.readTxt ---
+// Request body is empty
+// Reply body contains utf8 bytes of a string
+
+// --- ReadonlyFile.readJSON ---
+// Request body is empty
+// Reply body contains utf8 bytes of a json string
+
+// --- ReadonlyFile.getByteSource ---
+// Request body is empty
+// Reply body is common.ObjectReference to FileByteSource.
+
+// --- ReadonlyFile.watch ---
+// Its an observable call, and initial request is empty.
+// Observer expects FileEvent in next.
+
+message FileEventMsg {
+	string type = 1;
+	string path = 2;
+	optional common.BooleanValue is_remote = 3;
+	optional common.UInt64Value new_version = 4;
+	optional common.UInt64Value current = 14;
+	optional common.UInt64Value last_synced = 15;
+	optional common.UInt64Value remote_version = 16;
+}
+
+
+// ==== ReadonlyFileVersionedAPI referable object ====
+
+// --- ReadonlyFileVersionedAPI.getXAttr ---
+// Request body is GetXAttrRequestBody
+message VersionedGetXAttrReplyBody {
+	uint64 version = 1;
+	optional common.StringValue str = 2;
+	optional common.StringValue json = 3;
+	optional common.BytesValue bytes = 4;
+}
+
+// --- ReadonlyFileVersionedAPI.listXAttrs ---
+// Request body is empty
+message VersionedListXAttrsReplyBody {
+	uint64 version = 1;
+	repeated string xa_names = 2 [packed=true];
+}
+
+// --- ReadonlyFileVersionedAPI.readBytes ---
+// Request body is ReadBytesRequestBody
+message VersionedReadBytesReplyBody {
+	uint64 version = 1;
+	optional common.BytesValue bytes = 2;
+}
+
+// --- ReadonlyFileVersionedAPI.readTxt ---
+// Request body is empty
+message VersionedReadTxtReplyBody {
+	uint64 version = 1;
+	string txt = 2;
+}
+
+// --- ReadonlyFileVersionedAPI.readJSON ---
+// Request body is empty
+message VersionedReadJsonReplyBody {
+	uint64 version = 1;
+	string json = 2;
+}
+
+// --- ReadonlyFileVersionedAPI.getByteSource ---
+// Request body is empty
+message VersionedGetByteSourceReplyBody {
+	uint64 version = 1;
+	// src is a reference to FileByteSource
+	common.ObjectReference src = 2;
+}
+
+
+// ==== WritableFile referable as impl object (extends ReadonlyFile) ====
+
+// --- WritableFile.updateXAttrs ---
+// Reply has only status and body is empty
+message UpdateXAttrsRequestBody {
+	XAttrsChanges changes = 1;
+}
+
+message XAttrsChanges {
+	message NameAndAttrValue {
+		string xa_name = 1;
+		optional common.StringValue str = 2;
+		optional common.StringValue json = 3;
+		optional common.BytesValue bytes = 4;
+	}
+	repeated NameAndAttrValue set = 1 [packed=true];
+	repeated string remove = 2 [packed=true];
+}
+
+// --- WritableFile.writeBytes ---
+// Reply has only status and body is empty
+message WriteBytesRequestBody {
+	bytes bytes = 1;
+}
+
+// --- WritableFile.writeTxt ---
+// Reply has only status and body is empty
+message WriteTxtRequestBody {
+	string txt = 1;
+}
+
+// --- WritableFile.writeJSON ---
+// Reply has only status and body is empty
+message WriteJsonRequestBody {
+	string json = 1;
+}
+
+// --- WritableFile.getByteSink ---
+// Reply body is common.ObjectReference to FileByteSink.
+message GetByteSinkRequestBody {
+	optional common.BooleanValue truncate_file = 1;
+}
+
+// --- WritableFile.copy ---
+// Reply has only status and body is empty
+message CopyRequestBody {
+	// file is a reference to writable file
+	common.ObjectReference file = 1;
+}
+
+
+// ==== WritableFileVersionedAPI referable object ====
+
+// --- WritableFileVersionedAPI.updateXAttrs ---
+// Request body is UpdateXAttrsRequestBody
+// Reply body is common.UInt64Value
+
+// --- WritableFileVersionedAPI.writeBytes ---
+// Request body is WriteBytesRequestBody
+// Reply body is common.UInt64Value
+
+// --- WritableFileVersionedAPI.writeTxt ---
+// Request body is WriteTxtRequestBody
+// Reply body is common.UInt64Value
+
+// --- WritableFileVersionedAPI.writeJSON ---
+// Request body is WriteJsonRequestBody
+// Reply body is common.UInt64Value
+
+// --- WritableFileVersionedAPI.getByteSink ---
+message VersionedGetByteSinkRequestBody {
+	optional common.BooleanValue truncate_file = 1;
+	optional common.UInt64Value current_version = 2;
+}
+message VersionedGetByteSinkReplyBody {
+	uint64 version = 1;
+	// sink is a reference to FileByteSink
+	common.ObjectReference sink = 2;
+}
+
+// --- WritableFileVersionedAPI.copy ---
+// Request body is CopyRequestBody
+// Reply body is common.UInt64Value
