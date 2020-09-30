@@ -17,7 +17,7 @@
 
 import { ObjectsConnector, ExposedObj, ExposedFn, EnvelopeBody } from "./connector";
 import { join, resolve } from "path";
-import { ProtoType, strArrValType, boolValType, fixArray, packInt, unpackInt, toVal, Value, valOfOpt, fixInt } from "./protobuf-msg";
+import { ProtoType, strArrValType, boolValType, fixArray, packInt, unpackInt, toVal, Value, valOfOpt } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { defer } from "../lib-common/processes";

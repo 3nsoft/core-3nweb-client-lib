@@ -1,7 +1,7 @@
 /node_modules/
 /dist/
 /build/
-/spec-server/
+/spec-server
 /.idea/
 /.vscode/
 /test*

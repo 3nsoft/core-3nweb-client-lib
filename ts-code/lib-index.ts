@@ -22,5 +22,7 @@ export * from "./ipc-via-protobuf/connector";
 
 export * from "./core";
 
+export { makeNetClient } from "./lib-client/request-utils";
+
 
 Object.freeze(exports);
