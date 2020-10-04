@@ -1,7 +1,6 @@
 syntax = "proto3";
 
 import "common.proto";
-import "bytes.proto";
 import "file.proto";
 
 package fs;
@@ -26,7 +25,7 @@ message FS {
 
 message CheckPresenceRequestBody {
 	string path = 1;
-	optional common.BooleanValue throw_if_missing = 2;
+	common.BooleanValue throw_if_missing = 2;
 }
 
 // --- ReadonlyFS.checkFilePresence ---
@@ -62,15 +61,15 @@ message GetXAttrRequestBody {
 
 message SymLink {
 	bool readonly = 1;
-	optional common.BooleanValue is_file = 2;
-	optional common.BooleanValue is_folder = 3;
+	common.BooleanValue is_file = 2;
+	common.BooleanValue is_folder = 3;
 	// target references function that returns either File or FS
 	common.ObjectReference target = 4;
 }
 
 message SymLinkTargetReplyBody {
-	optional FS fs = 1;
-	optional file.File file = 2;
+	FS fs = 1;
+	file.File file = 2;
 }
 
 // --- ReadonlyFS.watchFolder ---
@@ -81,14 +80,14 @@ message FSEventMsg {
 	string type = 1;
 	string path = 2;
 	bool is_remote = 3;
-	optional common.UInt64Value new_version = 4;
-	optional common.StringValue name = 10;
-	optional common.StringValue old_name = 11;
-	optional common.StringValue new_name = 12;
-	optional ListingEntryMsg entry = 13;
-	optional common.UInt64Value current = 14;
-	optional common.UInt64Value last_synced = 15;
-	optional common.UInt64Value remote_version = 16;
+	common.UInt64Value new_version = 4;
+	common.StringValue name = 10;
+	common.StringValue old_name = 11;
+	common.StringValue new_name = 12;
+	ListingEntryMsg entry = 13;
+	common.UInt64Value current = 14;
+	common.UInt64Value last_synced = 15;
+	common.UInt64Value remote_version = 16;
 }
 
 // --- ReadonlyFS.watchFile ---
@@ -110,14 +109,14 @@ message FSEventMsg {
 // --- ReadonlyFS.listFolder ---
 // Request body is PathOnlyRequestBody
 message ListFolderReplyBody {
-	repeated ListingEntryMsg entries = 1 [packed=true];
+	repeated ListingEntryMsg entries = 1;
 }
 
 message ListingEntryMsg {
 	string name = 1;
-	optional common.BooleanValue is_file = 2;
-	optional common.BooleanValue is_folder = 3;
-	optional common.BooleanValue is_link = 4;
+	common.BooleanValue is_file = 2;
+	common.BooleanValue is_folder = 3;
+	common.BooleanValue is_link = 4;
 }
 
 // --- ReadonlyFS.readJSONFile ---
@@ -132,8 +131,8 @@ message ListingEntryMsg {
 // Reply body is file.ReadBytesReplyBody
 message ReadBytesRequestBody {
 	string path = 1;
-	optional common.UInt64Value start = 2;
-	optional common.UInt64Value end = 3;
+	common.UInt64Value start = 2;
+	common.UInt64Value end = 3;
 }
 
 // --- ReadonlyFS.getByteSource ---
@@ -150,11 +149,11 @@ message ReadBytesRequestBody {
 // Second and final reply body is empty, indicating completion of process
 message SelectRequestBody {
 	message SelectCriteria {
-		optional common.StringValue exact_name = 1;
-		optional common.StringValue pattern = 2;
-		optional common.StringValue regexp = 3;
-		optional common.UInt32Value depth = 4;
-		repeated string type = 5 [packed=true];
+		common.StringValue exact_name = 1;
+		common.StringValue pattern = 2;
+		common.StringValue regexp = 3;
+		common.UInt32Value depth = 4;
+		repeated string type = 5;
 		string action = 6;
 	}
 	string path = 1;
@@ -169,7 +168,7 @@ message FSCGetRequestBody {
 	string name = 1;
 }
 message FSCGetReplyBody {
-	optional FSItem item = 1;
+	FSItem item = 1;
 }
 
 message FSItem {
@@ -180,24 +179,24 @@ message FSItem {
 		string storage_type = 4;
 	}
 	message Item {
-		optional FS fs = 1;
-		optional File file = 2;
+		FS fs = 1;
+		file.File file = 2;
 		// collection is a reference to FSCollection
-		optional common.ObjectReference collection = 3;
+		common.ObjectReference collection = 3;
 	}
 
-	optional common.BooleanValue is_file = 1;
-	optional common.BooleanValue is_folder = 2;
-	optional common.BooleanValue is_link = 3;
-	optional common.BooleanValue is_collecton = 4;
-	optional Item item = 5;
-	optional Location location = 6;
+	common.BooleanValue is_file = 1;
+	common.BooleanValue is_folder = 2;
+	common.BooleanValue is_link = 3;
+	common.BooleanValue is_collecton = 4;
+	Item item = 5;
+	Location location = 6;
 }
 
 // --- FSCollection.getAll ---
 // Request body is empty
 message FSCGetAllReplyBody {
-	repeated NameAndItem items = 1 [packed=true];
+	repeated NameAndItem items = 1;
 }
 
 message NameAndItem {
@@ -210,8 +209,8 @@ message NameAndItem {
 // Reply body is common.ObjectReference to iterator of IterResMsg
 
 message IterResMsg {
-	optional common.BooleanValue done = 1;
-	optional NameAndItem value = 2;
+	common.BooleanValue done = 1;
+	NameAndItem value = 2;
 }
 
 // --- FSCollection.watch ---
@@ -220,8 +219,8 @@ message IterResMsg {
 
 message CollectionEvent {
 	string type = 1;
-	optional common.StringValue path = 2;
-	optional FSItem item = 3;
+	common.StringValue path = 2;
+	FSItem item = 3;
 }
 
 
@@ -239,7 +238,7 @@ message CollectionEvent {
 // Request body is PathOnlyRequestBody
 message VersionedListFolderReplyBody {
 	uint64 version = 1;
-	repeated ListingEntryMsg entries = 2 [packed=true];
+	repeated ListingEntryMsg entries = 2;
 }
 
 // --- ReadonlyFSVersionedAPI.readJSONFile ---
@@ -272,14 +271,14 @@ message UpdateXAttrsRequestBody {
 // Reply has only status and body is empty
 message MakeFolderRequestBody {
 	string path = 1;
-	optional common.BooleanValue exclusive = 2;
+	common.BooleanValue exclusive = 2;
 }
 
 // --- WritableFS.deleteFolder ---
 // Reply has only status and body is empty
 message DeleteFolderRequestBody {
 	string path = 1;
-	optional common.BooleanValue remove_content = 2;
+	common.BooleanValue remove_content = 2;
 }
 
 // --- WritableFS.deleteFile ---
@@ -298,7 +297,7 @@ message MoveRequestBody {
 message CopyFileRequestBody {
 	string src = 1;
 	string dst = 2;
-	optional common.BooleanValue overwrite = 3;
+	common.BooleanValue overwrite = 3;
 }
 
 // --- WritableFS.copyFolder ---
@@ -306,7 +305,7 @@ message CopyFileRequestBody {
 message CopyFolderRequestBody {
 	string src = 1;
 	string dst = 2;
-	optional common.BooleanValue merge_and_overwrite = 3;
+	common.BooleanValue merge_and_overwrite = 3;
 }
 
 // --- WritableFS.saveFile ---
@@ -315,7 +314,7 @@ message SaveFileRequestBody {
 	// file is a reference to File impl object
 	common.ObjectReference file = 1;
 	string dst = 2;
-	optional common.BooleanValue overwrite = 3;
+	common.BooleanValue overwrite = 3;
 }
 
 // --- WritableFS.saveFolder ---
@@ -324,7 +323,7 @@ message SaveFolderRequestBody {
 	// file is a reference to FS impl object
 	common.ObjectReference folder = 1;
 	string dst = 2;
-	optional common.BooleanValue merge_and_overwrite = 3;
+	common.BooleanValue merge_and_overwrite = 3;
 }
 
 // --- WritableFS.deleteLink ---
@@ -345,13 +344,13 @@ message LinkRequestBody {
 
 message PathAndOptFileFlags {
 	string path = 1;
-	optional FileFlags flags = 2;
+	FileFlags flags = 2;
 }
 
 message FileFlags {
-	optional common.BooleanValue truncate = 1;
-	optional common.BooleanValue create = 2;
-	optional common.BooleanValue exclusive = 3;
+	common.BooleanValue truncate = 1;
+	common.BooleanValue create = 2;
+	common.BooleanValue exclusive = 3;
 }
 
 // --- WritableFS.writeJSONFile ---
@@ -359,7 +358,7 @@ message FileFlags {
 message WriteJsonFileRequestBody {
 	string path = 1;
 	string json = 2;
-	optional FileFlags flags = 3;
+	FileFlags flags = 3;
 }
 
 // --- WritableFS.writeTxtFile ---
@@ -367,7 +366,7 @@ message WriteJsonFileRequestBody {
 message WriteTxtFileRequestBody {
 	string path = 1;
 	string txt = 2;
-	optional FileFlags flags = 3;
+	FileFlags flags = 3;
 }
 
 // --- WritableFS.writeBytes ---
@@ -375,7 +374,7 @@ message WriteTxtFileRequestBody {
 message WriteBytesRequestBody {
 	string path = 1;
 	bytes bytes = 2;
-	optional FileFlags flags = 3;
+	FileFlags flags = 3;
 }
 
 // --- WritableFS.getByteSink ---
@@ -399,13 +398,13 @@ message WriteBytesRequestBody {
 message VersionedWriteJsonFileRequestBody {
 	string path = 1;
 	string json = 2;
-	optional VersionedFileFlags flags = 3;
+	VersionedFileFlags flags = 3;
 }
 
 message VersionedFileFlags {
-	optional common.BooleanValue truncate = 1;
-	optional common.BooleanValue create = 2;
-	optional common.BooleanValue exclusive = 3;
+	common.BooleanValue truncate = 1;
+	common.BooleanValue create = 2;
+	common.BooleanValue exclusive = 3;
 	uint64 current_version = 10;
 }
 
@@ -414,7 +413,7 @@ message VersionedFileFlags {
 message VersionedWriteTxtFileRequestBody {
 	string path = 1;
 	string txt = 2;
-	optional VersionedFileFlags flags = 3;
+	VersionedFileFlags flags = 3;
 }
 
 // --- WritableFSVersionedAPI.writeBytes ---
@@ -422,13 +421,13 @@ message VersionedWriteTxtFileRequestBody {
 message VersionedWriteBytesRequestBody {
 	string path = 1;
 	bytes bytes = 2;
-	optional VersionedFileFlags flags = 3;
+	VersionedFileFlags flags = 3;
 }
 
 // --- WritableFSVersionedAPI.getByteSink ---
 // Reply body is file.VersionedGetByteSinkReplyBody
 message VersionedGetByteSinkRequestBody {
 	string path = 1;
-	optional VersionedFileFlags flags = 2;
+	VersionedFileFlags flags = 2;
 }
 

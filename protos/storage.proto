@@ -23,12 +23,12 @@ message GetAppSyncedFSRequestBody {
 // Reply body is common.ObjectReference to fs.FSItem
 message GetUserFSRequestBody {
 	string type = 1;
-	optional common.StringValue path = 2;
+	common.StringValue path = 2;
 }
 
 // --- storage.getSysFS ---
 // Reply body is common.ObjectReference to fs.FSItem
 message GetSysFSRequestBody {
 	string type = 1;
-	optional common.StringValue path = 2;
+	common.StringValue path = 2;
 }

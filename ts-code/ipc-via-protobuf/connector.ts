@@ -309,8 +309,13 @@ export class ObjectsConnector {
 		const deferred = defer<EnvelopeBody>();
 		const fnCallNum = this.nextFnCallNum();
 		this.fnCalls.set(fnCallNum, { deferred });
-		this.startCall(fnCallNum, path, req);
-		return deferred.promise;
+		try {
+			this.startCall(fnCallNum, path, req);
+			return deferred.promise;
+		} catch (err) {
+			this.fnCalls.delete(fnCallNum);
+			throw err;
+		}
 	}
 
 	startObservableCall(
@@ -318,8 +323,13 @@ export class ObjectsConnector {
 	): () => void {
 		const fnCallNum = this.nextFnCallNum();
 		this.fnCalls.set(fnCallNum, { obs });
-		this.startCall(fnCallNum, path, req);
-		return () => this.sendCallCancellation(fnCallNum);
+		try {
+			this.startCall(fnCallNum, path, req);
+			return () => this.sendCallCancellation(fnCallNum);
+		} catch (err) {
+			this.fnCalls.delete(fnCallNum);
+			throw err;
+		}
 	}
 
 	registerClientDrop(o: any, srvRef: ObjectReference): void {

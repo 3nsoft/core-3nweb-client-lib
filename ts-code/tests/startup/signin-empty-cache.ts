@@ -28,7 +28,7 @@ describe('signIn process (empty cache)', () => {
 	const s = setupWithUsers();
 	let user: User;
 	let w3n: web3n.startup.W3N;
-	let coreInit: Promise<void>;
+	let coreInit: Promise<string>;
 	let closeIPC: () => void;
 
 	beforeAllAsync(async () => {
@@ -87,7 +87,9 @@ describe('signIn process (empty cache)', () => {
 		expect(ok).toBe(true, 'indicates completion of login and storage setup');
 		checkKeyDerivNotifications(notifications);
 
-		await coreInit;
+		const initAs = await coreInit;
+		expect(initAs).toBe(user.userId);
+
 		try {
 			const { caps, close } = core.makeCAPsForApp(
 				testApp.appDomain, testApp);

@@ -16,7 +16,7 @@ package bytes;
 message SpliceRequestBody {
 	uint64 pos = 1;
 	uint64 del = 2;
-	optional common.BytesValue bytes = 3;
+	common.BytesValue bytes = 3;
 }
 
 // --- FileByteSink.truncate ---
@@ -34,14 +34,14 @@ message FileLayoutMsg {
 		uint64 ofs = 2;
 		uint64 len = 3;
 	}
-	optional common.UInt64Value base = 1;
-	repeated LayoutSection sections = 2 [packed=true];
+	common.UInt64Value base = 1;
+	repeated LayoutSection sections = 2;
 }
 
 // --- FileByteSink.done ---
 // Reply has only status and body is empty
 message DoneRequestBody {
-	optional common.ErrorValue err = 1;
+	common.ErrorValue err = 1;
 }
 
 
@@ -49,10 +49,10 @@ message DoneRequestBody {
 
 // --- FileByteSource.read ---
 message ReadRequestBody {
-	optional common.UInt64Value len = 1;
+	common.UInt64Value len = 1;
 }
 message ReadReplyBody {
-	optional common.BytesValue bytes = 1;
+	common.BytesValue bytes = 1;
 }
 
 // --- FileByteSource.getSize ---

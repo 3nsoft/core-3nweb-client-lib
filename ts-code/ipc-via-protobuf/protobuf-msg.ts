@@ -17,7 +17,7 @@
 
 import * as protobuf from 'protobufjs';
 import { join, resolve } from 'path';
-import { makeIPCException, EnvelopeBody, Envelope } from './connector';
+import { makeIPCException, EnvelopeBody } from './connector';
 import { stringifyErr, errWithCause, ErrorWithCause } from '../lib-common/exceptions/error';
 
 type RuntimeException = web3n.RuntimeException;

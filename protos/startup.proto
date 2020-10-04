@@ -51,7 +51,7 @@ message StartLoginToRemoteStorageRequestBody {
 
 message ProgressValue {
 	float p = 1;
-	optional common.BooleanValue decr_result = 2;
+	common.BooleanValue decr_result = 2;
 }
 
 // --- signIn.useExistingStorage ---

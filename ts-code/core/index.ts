@@ -118,7 +118,7 @@ export class Core {
 		});
 	}
 
-	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<void>; } {
+	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
 		const signUp = new SignUp(
 			this.signUpUrl, this.cryptor.cryptor, this.makeNet,
 			this.appDirs.getUsersOnDisk, this.logger.logError);
@@ -279,7 +279,7 @@ export class Core {
 		this.closeBroadcast.next();
 	}
 
-	private async initCore(idManager: IdManager): Promise<void> {
+	private async initCore(idManager: IdManager): Promise<string> {
 		try {
 			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
 				ASMAIL_APP_NAME);
@@ -289,6 +289,7 @@ export class Core {
 				idManager.getSigner, inboxSyncedFS, inboxLocalFS,
 				this.storages.storageGetterForASMail());
 			this.isInitialized = true;
+			return idManager.getId();
 		} catch (err) {
 			throw errWithCause(err, 'Failed to initialize core');
 		}

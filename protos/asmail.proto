@@ -11,7 +11,7 @@ package asmail;
 
 // --- inbox.listMsgs ---
 message ListMsgsRequestBody {
-	optional common.UInt64Value from_t_s = 1;
+	common.UInt64Value from_t_s = 1;
 }
 message ListMsgsInboxReplyBody {
 	message MsgInfo {
@@ -19,7 +19,7 @@ message ListMsgsInboxReplyBody {
 		uint64 delivery_t_s = 2;
 		string msg_type = 10;
 	}
-	repeated MsgInfo infos = 1 [packed=true];
+	repeated MsgInfo infos = 1;
 }
 
 // --- inbox.removeMsg ---
@@ -41,13 +41,13 @@ message IncomingMessageMsg {
 	bool established_sender_key_chain = 4;
 
 	string msg_type = 10;
-	repeated string recipients = 11 [packed=true];
-	optional common.StringValue subject = 12;
-	optional common.StringValue plain_txt_body = 13;
-	optional common.StringValue html_txt_body = 14;
-	optional common.StringValue json_body = 15;
-	repeated string carbon_copy = 16 [packed=true];
-	optional fs.FS attachments = 17;
+	repeated string recipients = 11;
+	common.StringValue subject = 12;
+	common.StringValue plain_txt_body = 13;
+	common.StringValue html_txt_body = 14;
+	common.StringValue json_body = 15;
+	repeated string carbon_copy = 16;
+	fs.FS attachments = 17;
 
 }
 
@@ -70,17 +70,17 @@ message PreFlightRequestBody {
 // --- delivery.addMsg ---
 // Reply has only status and body is empty
 message AddMsgRequestBody {
-	repeated string recipients = 1 [packed=true];
+	repeated string recipients = 1;
 	OutgoingMessageMsg msg = 2;
 	string id = 3;
-	optional common.BooleanValue send_immeditely = 4;
-	optional common.BytesValue local_meta = 5;
+	common.BooleanValue send_immeditely = 4;
+	common.BytesValue local_meta = 5;
 }
 
 message OutgoingMessageMsg {
 	message AttachmentsContainer {
-		repeated NamedFile files = 1 [packed=true];
-		repeated NamedFolder folders = 2 [packed=true];
+		repeated NamedFile files = 1;
+		repeated NamedFolder folders = 2;
 	}
 	message NamedFile {
 		string name = 1;
@@ -88,19 +88,19 @@ message OutgoingMessageMsg {
 	}
 	message NamedFolder {
 		string name = 1;
-		file.FS folder = 2;
+		fs.FS folder = 2;
 	}
 
-	optional common.StringValue msg_id = 1;
+	common.StringValue msg_id = 1;
 
 	string msg_type = 10;
 	repeated string recipients = 11;
-	optional common.StringValue subject = 12;
-	optional common.StringValue plain_txt_body = 13;
-	optional common.StringValue html_txt_body = 14;
-	optional common.StringValue json_body = 15;
-	optional common.StringValue carbon_copy = 16;
-	optional AttachmentsContainer attachments = 17;
+	common.StringValue subject = 12;
+	common.StringValue plain_txt_body = 13;
+	common.StringValue html_txt_body = 14;
+	common.StringValue json_body = 15;
+	common.StringValue carbon_copy = 16;
+	AttachmentsContainer attachments = 17;
 }
 
 // --- delivery.listMsgs ---
@@ -108,27 +108,27 @@ message OutgoingMessageMsg {
 message ListMsgsDeliveryReplyBody {
 	message MsgInfo {
 		string id = 1;
-		DeliveryProgress info = 2;
+		DeliveryProgressMsg info = 2;
 	}
-	repeated MsgInfo msgs = 1[packed=true];
+	repeated MsgInfo msgs = 1;
 }
 
 message DeliveryProgressMsg {
 	message DeliveryInfo {
 		bool done = 1;
-		optional common.StringValue id_on_delivery = 2;
+		common.StringValue id_on_delivery = 2;
 		uint64 bytes_sent = 3;
-		optional common.StringValue err = 4;
+		common.StringValue err = 4;
 	}
 	message AddrAndDeliveryInfo {
 		string address = 1;
 		DeliveryInfo info = 2;
 	}
-	optional common.BooleanValue not_connected = 1;
+	common.BooleanValue not_connected = 1;
 	bool all_done = 2;
 	uint64 msg_size = 3;
-	optional common.BytesValue local_meta = 4;
-	repeated AddrAndDeliveryInfo recipients = 5 [packed=true];
+	common.BytesValue local_meta = 4;
+	repeated AddrAndDeliveryInfo recipients = 5;
 }
 
 // --- delivery.currentState ---
@@ -148,7 +148,7 @@ message ObserveDeliveryRequestBody {
 // Reply has only status and body is empty
 message RmMsgRequestBody {
 	string id = 1;
-	optional common.BooleanValue cancel_sending = 2;
+	common.BooleanValue cancel_sending = 2;
 }
 
 // --- delivery.observeAllDeliveries ---

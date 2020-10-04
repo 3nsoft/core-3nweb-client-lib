@@ -4,7 +4,7 @@ package common;
 
 message ObjectReference {
 	string obj_type = 1;
-	repeated string path = 2 [packed=true];
+	repeated string path = 2;
 }
 
 message BooleanValue {
@@ -12,7 +12,7 @@ message BooleanValue {
 }
 
 message StringArrayValue {
-	repeated string values = 1 [packed=true];
+	repeated string values = 1;
 }
 
 message UInt64Value {
@@ -32,6 +32,6 @@ message BytesValue {
 }
 
 message ErrorValue {
-	optional string runtime_exc_json = 1;
-	optional string err = 2;
+	string runtime_exc_json = 1;
+	string err = 2;
 }

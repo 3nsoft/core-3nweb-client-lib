@@ -27,7 +27,7 @@ describe('signUp process', () => {
 
 	const s = minimalSetup();
 	let w3n: web3n.startup.W3N;
-	let coreInit: Promise<void>;
+	let coreInit: Promise<string>;
 	let closeIPC: () => void;
 
 	beforeAllAsync(async () => {
@@ -71,7 +71,9 @@ describe('signUp process', () => {
 		const isCreated = await w3n.signUp.addUser(userId);
 		expect(isCreated).toBe(true);
 
-		await coreInit;
+		const initAs = await coreInit;
+		expect(initAs).toBe(userId);
+
 		try {
 			const { caps, close } = s.runner.core.makeCAPsForApp(
 				testApp.appDomain, testApp);

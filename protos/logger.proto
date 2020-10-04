@@ -9,5 +9,5 @@ package logger;
 message LogRequestBody {
 	string log_type = 1;
 	string msg = 2;
-	optional common.ErrorValue err = 3;
+	common.ErrorValue err = 3;
 }

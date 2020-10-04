@@ -6,11 +6,11 @@ package ipc;
 
 message EnvelopeHeaders {
 	string msg_type = 1;
-	optional common.UInt64Value fn_call_num = 2;
-	repeated string path = 3 [packed=true];
+	common.UInt64Value fn_call_num = 2;
+	repeated string path = 3;
 }
 
 message Envelope {
 	EnvelopeHeaders headers = 1;
-	optional common.BytesValue body = 2;
+	common.BytesValue body = 2;
 }
