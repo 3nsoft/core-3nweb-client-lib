@@ -83,9 +83,8 @@ export function makeASMailCaller(
 	};
 }
 
-const asmailProtos = join(resolve(__dirname, '../../protos'), 'asmail.proto');
 function asmailType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(asmailProtos, `asmail.${type}`);
+	return ProtoType.makeFrom<T>('asmail.proto', `asmail.${type}`);
 }
 
 

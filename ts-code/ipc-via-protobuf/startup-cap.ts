@@ -71,9 +71,8 @@ export function makeSignUpCaller(
 	};
 }
 
-const startupProtos = join(resolve(__dirname, '../../protos'), 'startup.proto');
 function startupType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(startupProtos, `startup.${type}`);
+	return ProtoType.makeFrom<T>('startup.proto', `startup.${type}`);
 }
 
 

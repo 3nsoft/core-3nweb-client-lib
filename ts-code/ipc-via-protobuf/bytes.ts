@@ -84,9 +84,8 @@ export function exposeSrcService(
 	return ref;
 }
 
-const bytesProtos = join(resolve(__dirname, '../../protos'), 'bytes.proto');
 function bytesType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(bytesProtos, `bytes.${type}`);
+	return ProtoType.makeFrom<T>('bytes.proto', `bytes.${type}`);
 }
 
 

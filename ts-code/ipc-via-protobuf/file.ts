@@ -147,9 +147,8 @@ export function exposeFileService(
 	return fileMsg;
 }
 
-const fileProtos = join(resolve(__dirname, '../../protos'), 'file.proto');
 function makeFileType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(fileProtos, `file.${type}`);
+	return ProtoType.makeFrom<T>('file.proto', `file.${type}`);
 }
 
 export const fileMsgType = makeFileType<FileMsg>('File');

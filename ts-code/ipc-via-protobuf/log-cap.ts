@@ -21,9 +21,8 @@ import { ProtoType, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
 
 type Logger = web3n.caps.common.Logger;
 
-const loggerProtos = join(resolve(__dirname, '../../protos'), 'logger.proto');
 function loggerType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(loggerProtos, `logger.${type}`);
+	return ProtoType.makeFrom<T>('logger.proto', `logger.${type}`);
 }
 
 interface LogRequest {

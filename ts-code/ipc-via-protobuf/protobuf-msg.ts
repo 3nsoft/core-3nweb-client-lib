@@ -19,6 +19,7 @@ import * as protobuf from 'protobufjs';
 import { join, resolve } from 'path';
 import { makeIPCException, EnvelopeBody } from './connector';
 import { stringifyErr, errWithCause, ErrorWithCause } from '../lib-common/exceptions/error';
+import * as fs from 'fs';
 
 type RuntimeException = web3n.RuntimeException;
 
@@ -31,16 +32,10 @@ export class ProtoType<T extends object> {
 		Object.freeze(this);
 	}
 
-	private static roots = new Map<string, protobuf.Root>();
-
 	static makeFrom<T extends object>(
 		protoFile: string, typeName: string
 	): ProtoType<T> {
-		let root = ProtoType.roots.get(protoFile);
-		if (!root) {
-			root = protobuf.loadSync(protoFile);
-			ProtoType.roots.set(protoFile, root);
-		}
+		const root = loadRoot(protoFile);
 		const type = root.lookupType(typeName);
 		return new ProtoType<T>(type);
 	}
@@ -69,9 +64,40 @@ Object.freeze(ProtoType.prototype);
 Object.freeze(ProtoType);
 
 
-const commonProtos = join(resolve(__dirname, '../../protos'), 'common.proto');
+const protosDir = resolve(__dirname, '../../protos');
+
+const roots = new Map<string, protobuf.Root>();
+
+function loadRoot(fileName: string): protobuf.Root {
+	let root = roots.get(fileName);
+	if (!root) {
+		// if proto files file, we try to get definitions from the module
+		try {
+			root = protobuf.loadSync(join(protosDir, fileName));
+		} catch (err) {
+			const protos = require('./proto-defs').protos;
+			if (!protos || (typeof protos !== 'object')) { throw new Error(
+				`proto-defs doesn't have expected object`); }
+			const initFunc = fs.readFileSync;
+			try {
+				(fs as any).readFileSync = (fName: string): Buffer => {
+					const protoDefsStr = protos[fName];
+					if (!protoDefsStr) { throw new Error(
+						`Don't have in module proto definition for ${fName}`); }
+					return Buffer.from(protoDefsStr, 'utf8');
+				}
+				root = protobuf.loadSync(fileName);
+			} finally {
+				(fs as any).readFileSync = initFunc;
+			}
+		}
+		roots.set(fileName, root);
+	}
+	return root;
+}
+
 function commonType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(commonProtos, `common.${type}`);
+	return ProtoType.makeFrom<T>('common.proto', `common.${type}`);
 }
 
 export type ExposedObjType = 'FileByteSink' | 'FileByteSource' |

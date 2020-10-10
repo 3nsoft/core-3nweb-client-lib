@@ -490,7 +490,7 @@ export type ClientToService = 'start' | 'cancel' | 'drop' | 'list-obj';
 export type ServiceToClient = 'interim' | 'end' | 'error';
 
 export const msgProtoType = ProtoType.makeFrom<Envelope>(
-	join(resolve(__dirname, '../../protos'), 'ipc.proto'), 'ipc.Envelope');
+	'ipc.proto', 'ipc.Envelope');
 
 export type ExposedFn = (reqBody: EnvelopeBody) => ({
 	promise?: Promise<EnvelopeBody>;

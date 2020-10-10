@@ -57,9 +57,8 @@ export function makeStorageCaller(
 	return storage;
 }
 
-const storageProtos = join(resolve(__dirname, '../../protos'), 'storage.proto');
 function storageType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(storageProtos, `storage.${type}`);
+	return ProtoType.makeFrom<T>('storage.proto', `storage.${type}`);
 }
 
 

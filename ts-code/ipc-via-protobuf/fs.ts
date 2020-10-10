@@ -220,9 +220,8 @@ export interface FSMsg {
 	impl: ObjectReference;
 }
 
-const fsProtos = join(resolve(__dirname, '../../protos'), 'fs.proto');
 function makeFSType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>(fsProtos, `fs.${type}`);
+	return ProtoType.makeFrom<T>('fs.proto', `fs.${type}`);
 }
 
 export const fsMsgType = makeFSType<FSMsg>('FS');
