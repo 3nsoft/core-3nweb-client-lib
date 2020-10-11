@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 3NSoft Inc.
+ Copyright (C) 2016 - 2020 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,14 +12,15 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { FileException } from '../../../lib-common/exceptions/file';
 import { SingleProc } from '../../../lib-common/processes';
 import { MsgKeyInfo, MsgKeyRole } from '../keyring';
 import { base64 } from '../../../lib-common/buffer-utils';
-import { WeakCacheWithMinLifeTime } from '../../../lib-common/weak-cache';
-	
+import { makeTimedCache } from "../../../lib-common/timed-cache";
+
 type WritableFS = web3n.files.WritableFS;
 
 interface MsgRecord extends web3n.asmail.MsgInfo {
@@ -123,8 +124,7 @@ interface MsgInfoWithoutType {
 export class MsgIndex {
 	
 	private latest: MsgRecords = (undefined as any);
-	private readonly cached =
-		new WeakCacheWithMinLifeTime<number, MsgRecords>(10*60*1000);
+	private readonly cached = makeTimedCache<number, MsgRecords>(10*60*1000);
 	private fileTSs: number[] = (undefined as any);
 	private readonly fileProc = new SingleProc();
 	

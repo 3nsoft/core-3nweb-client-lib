@@ -12,9 +12,9 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { WeakCacheWithMinLifeTime } from '../../../lib-common/weak-cache';
 import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
 import { ObjOnDisk, GetBaseSegsOnDisk } from '../../../lib-client/objs-on-disk/obj-on-disk';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
@@ -26,12 +26,12 @@ import { ObjStatus } from './obj-status';
 import { tap } from 'rxjs/operators';
 import { flatTap } from '../../../lib-common/utils-for-observables';
 import { LogError } from '../../../lib-client/logging/log-to-file';
+import { makeTimedCache } from "../../../lib-common/timed-cache";
 
 
 export class ObjFiles {
 
-	private readonly objs =
-		new WeakCacheWithMinLifeTime<ObjId, LocalObj>(60*1000);
+	private readonly objs = makeTimedCache<ObjId, LocalObj>(60*1000);
 	private readonly folderAccessSyncProc = new NamedProcs();
 	private readonly gc = new GC(
 		obj => {
@@ -108,8 +108,7 @@ Object.freeze(ObjFiles);
 
 export class LocalObj {
 
-	private readonly verObjs =
-		new WeakCacheWithMinLifeTime<number, ObjOnDisk>(60*1000);
+	private readonly verObjs = makeTimedCache<number, ObjOnDisk>(60*1000);
 
 	private constructor(
 		public readonly objId: ObjId,

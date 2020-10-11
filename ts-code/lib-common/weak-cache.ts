@@ -12,9 +12,11 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { WeakRef } from './weakref';
+import { TimedCache } from './timed-cache';
 
 export class WeakCache<TKey, TVal> {
 
@@ -67,7 +69,8 @@ export class WeakCache<TKey, TVal> {
 Object.freeze(WeakCache.prototype);
 Object.freeze(WeakCache);
 
-export class WeakCacheWithMinLifeTime<TKey, TVal> {
+export class WeakCacheWithMinLifeTime<TKey, TVal>
+implements TimedCache<TKey, TVal> {
 
 	private readonly wCache = new WeakCache<TKey, TVal>();
 
@@ -131,7 +134,7 @@ export class WeakCacheWithMinLifeTime<TKey, TVal> {
 		this.wCache.clear();
 	}
 
-	destroy() {
+	destroy(): void {
 		if (!this.interval) { return; }
 		clearInterval(this.interval);
 		this.interval = (undefined as any);

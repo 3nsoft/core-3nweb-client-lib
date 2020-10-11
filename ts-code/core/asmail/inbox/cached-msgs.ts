@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 3NSoft Inc.
+ Copyright (C) 2019 - 2020 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,10 +12,11 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { MsgOnDisk } from "./msg-on-disk";
-import { WeakCacheWithMinLifeTime } from "../../../lib-common/weak-cache";
+import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { ObjFolders } from "../../../lib-client/objs-on-disk/obj-folders";
 import { MsgDownloader } from "./msg-downloader";
 import { MsgMeta } from "../../../lib-common/service-api/asmail/retrieval";
@@ -25,8 +26,7 @@ import { LogError } from "../../../lib-client/logging/log-to-file";
 export class CachedMessages {
 
 	private readonly syncProc = new NamedProcs();
-	private readonly msgFiles =
-		new WeakCacheWithMinLifeTime<string, MsgOnDisk>(60*1000);
+	private readonly msgFiles = makeTimedCache<string, MsgOnDisk>(60*1000);
 
 	private constructor(
 		private readonly folders: ObjFolders,

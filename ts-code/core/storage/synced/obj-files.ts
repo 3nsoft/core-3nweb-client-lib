@@ -12,10 +12,10 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { FileException } from '../../../lib-common/exceptions/file';
-import { WeakCacheWithMinLifeTime } from '../../../lib-common/weak-cache';
 import { Observable, from, MonoTypeOperatorFunction } from 'rxjs';
 import { sleep, NamedProcs } from '../../../lib-common/processes';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
@@ -32,6 +32,7 @@ import { flatTap } from '../../../lib-common/utils-for-observables';
 import { GC } from './obj-files-gc';
 import { ObjStatus } from './obj-status';
 import { LogError } from '../../../lib-client/logging/log-to-file';
+import { makeTimedCache } from "../../../lib-common/timed-cache";
 
 /**
  * This is an extention for an unsynced version file. File name starts with a
@@ -54,8 +55,7 @@ export const UNSYNCED_REMOVAL = 'unsynced-removal';
 
 export class ObjFiles {
 
-	private readonly objs =
-		new WeakCacheWithMinLifeTime<ObjId, SyncedObj>(60*1000);
+	private readonly objs = makeTimedCache<ObjId, SyncedObj>(60*1000);
 	private readonly sync = makeSynchronizer();
 	private readonly gc = new GC(
 		this.sync,
@@ -213,8 +213,7 @@ export class SyncedObj {
 	 * These versions are what simple programs see. It is a local opinion about
 	 * object's versions. Versions here can be either synced, or unsynced.
 	 */
-	private readonly verObjs =
-		new WeakCacheWithMinLifeTime<number, ObjOnDisk>(60*1000);
+	private readonly verObjs = makeTimedCache<number, ObjOnDisk>(60*1000);
 
 	/**
 	 * These are conflicting versions, coming from a server. Of course, universal
@@ -223,8 +222,8 @@ export class SyncedObj {
 	 * should be adopted by conflict resolution process. In other words, these
 	 * versions are not for common use.
 	 */
-	private readonly remoteConflictVerObjs =
-		new WeakCacheWithMinLifeTime<number, ObjOnDisk>(60*1000);
+	private readonly remoteConflictVerObjs = makeTimedCache<number, ObjOnDisk>(
+		60*1000);
 
 	private constructor(
 		public readonly objId: ObjId,

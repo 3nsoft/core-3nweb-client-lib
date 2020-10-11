@@ -20,7 +20,6 @@ import { ProtoType, ObjectReference, ExposedObjType, strArrValType, fixArray, er
 import { Deferred, defer } from "../lib-common/processes";
 import { stringOfB64CharsSync } from '../lib-common/random-node';
 import { WeakRef } from "../lib-common/weakref";
-import { join, resolve } from "path";
 
 
 export class ObjectsConnector {
