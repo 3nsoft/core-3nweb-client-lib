@@ -16,8 +16,7 @@
 */
 
 import { ObjectReference, ProtoType, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
-import { checkRefObjTypeIs, ObjectsConnector, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException } from "./connector";
-import { join, resolve } from "path";
+import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
 import { packStats, unpackStats, packXAttrValue, unpackXAttrValue, exposeFileService, FileMsg, makeFileCaller, packJSON, unpackJSON, fileMsgType, unpackFileEvent, packFileEvent } from "./file";
 import * as file from "./file";
 import { assert } from "../lib-common/assert";
@@ -51,93 +50,93 @@ type FSItem = web3n.files.FSItem;
 type FSCollection = web3n.files.FSCollection;
 type CollectionEvent = web3n.files.CollectionEvent;
 
-export function makeFSCaller(connector: ObjectsConnector, fsMsg: FSMsg): FS {
+export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	checkRefObjTypeIs('FSImpl', fsMsg.impl);
 	const objPath = fsMsg.impl.path;
 	const fs = {
 		name: fsMsg.name,
 		type: fsMsg.type,
 		writable: fsMsg.writable,
-		checkFilePresence: checkPresence.makeFileCaller(connector, objPath),
-		checkFolderPresence: checkPresence.makeFolderCaller(connector, objPath),
-		checkLinkPresence: checkPresence.makeLinkCaller(connector, objPath),
-		close: close.makeCaller(connector, objPath),
-		getByteSource: getByteSource.makeCaller(connector, objPath),
-		getXAttr: getXAttr.makeCaller(connector, objPath),
-		listXAttrs: listXAttrs.makeCaller(connector, objPath),
-		listFolder: listFolder.makeCaller(connector, objPath),
-		readBytes: readBytes.makeCaller(connector, objPath),
-		readLink: readLink.makeCaller(connector, objPath),
-		readJSONFile: readJSONFile.makeCaller(connector, objPath),
-		readTxtFile: readTxtFile.makeCaller(connector, objPath),
-		readonlyFile: readonlyFile.makeCaller(connector, objPath),
-		readonlySubRoot: readonlySubRoot.makeCaller(connector, objPath),
-		select: select.makeCaller(connector, objPath),
-		stat: stat.makeCaller(connector, objPath),
-		watchFolder: watch.makeFolderCaller(connector, objPath),
-		watchFile: watch.makeFileCaller(connector, objPath),
-		watchTree: watch.makeTreeCaller(connector, objPath),
+		checkFilePresence: checkPresence.makeFileCaller(caller, objPath),
+		checkFolderPresence: checkPresence.makeFolderCaller(caller, objPath),
+		checkLinkPresence: checkPresence.makeLinkCaller(caller, objPath),
+		close: close.makeCaller(caller, objPath),
+		getByteSource: getByteSource.makeCaller(caller, objPath),
+		getXAttr: getXAttr.makeCaller(caller, objPath),
+		listXAttrs: listXAttrs.makeCaller(caller, objPath),
+		listFolder: listFolder.makeCaller(caller, objPath),
+		readBytes: readBytes.makeCaller(caller, objPath),
+		readLink: readLink.makeCaller(caller, objPath),
+		readJSONFile: readJSONFile.makeCaller(caller, objPath),
+		readTxtFile: readTxtFile.makeCaller(caller, objPath),
+		readonlyFile: readonlyFile.makeCaller(caller, objPath),
+		readonlySubRoot: readonlySubRoot.makeCaller(caller, objPath),
+		select: select.makeCaller(caller, objPath),
+		stat: stat.makeCaller(caller, objPath),
+		watchFolder: watch.makeFolderCaller(caller, objPath),
+		watchFile: watch.makeFileCaller(caller, objPath),
+		watchTree: watch.makeTreeCaller(caller, objPath),
 	} as WritableFS;
 	if (fsMsg.writable) {
-		fs.copyFile = copyFile.makeCaller(connector, objPath);
-		fs.copyFolder = copyFolder.makeCaller(connector, objPath);
-		fs.deleteFile = deleteFile.makeCaller(connector, objPath);
-		fs.deleteFolder = deleteFolder.makeCaller(connector, objPath);
-		fs.deleteLink = deleteLink.makeCaller(connector, objPath);
-		fs.getByteSink = getByteSink.makeCaller(connector, objPath);
-		fs.link = link.makeCaller(connector, objPath);
-		fs.makeFolder = makeFolder.makeCaller(connector, objPath);
-		fs.move = move.makeCaller(connector, objPath);
-		fs.saveFile = saveFile.makeCaller(connector, objPath);
-		fs.saveFolder = saveFolder.makeCaller(connector, objPath);
-		fs.updateXAttrs = updateXAttrs.makeCaller(connector, objPath);
-		fs.writableFile = writableFile.makeCaller(connector, objPath);
-		fs.writableSubRoot = writableSubRoot.makeCaller(connector, objPath);
-		fs.writeBytes = writeBytes.makeCaller(connector, objPath);
-		fs.writeJSONFile = writeJSONFile.makeCaller(connector, objPath);
-		fs.writeTxtFile = writeTxtFile.makeCaller(connector, objPath);
+		fs.copyFile = copyFile.makeCaller(caller, objPath);
+		fs.copyFolder = copyFolder.makeCaller(caller, objPath);
+		fs.deleteFile = deleteFile.makeCaller(caller, objPath);
+		fs.deleteFolder = deleteFolder.makeCaller(caller, objPath);
+		fs.deleteLink = deleteLink.makeCaller(caller, objPath);
+		fs.getByteSink = getByteSink.makeCaller(caller, objPath);
+		fs.link = link.makeCaller(caller, objPath);
+		fs.makeFolder = makeFolder.makeCaller(caller, objPath);
+		fs.move = move.makeCaller(caller, objPath);
+		fs.saveFile = saveFile.makeCaller(caller, objPath);
+		fs.saveFolder = saveFolder.makeCaller(caller, objPath);
+		fs.updateXAttrs = updateXAttrs.makeCaller(caller, objPath);
+		fs.writableFile = writableFile.makeCaller(caller, objPath);
+		fs.writableSubRoot = writableSubRoot.makeCaller(caller, objPath);
+		fs.writeBytes = writeBytes.makeCaller(caller, objPath);
+		fs.writeJSONFile = writeJSONFile.makeCaller(caller, objPath);
+		fs.writeTxtFile = writeTxtFile.makeCaller(caller, objPath);
 	}
 	if (fsMsg.isVersioned) {
 		const vPath = objPath.concat('v');
 		fs.v = {
-			getByteSource: vGetByteSource.makeCaller(connector, vPath),
-			getXAttr: vGetXAttr.makeCaller(connector, vPath),
-			listXAttrs: vListXAttrs.makeCaller(connector, vPath),
-			listFolder: vListFolder.makeCaller(connector, vPath),
-			readBytes: vReadBytes.makeCaller(connector, vPath),
-			readJSONFile: vReadJSONFile.makeCaller(connector, vPath),
-			readTxtFile: vReadTxtFile.makeCaller(connector, vPath),
+			getByteSource: vGetByteSource.makeCaller(caller, vPath),
+			getXAttr: vGetXAttr.makeCaller(caller, vPath),
+			listXAttrs: vListXAttrs.makeCaller(caller, vPath),
+			listFolder: vListFolder.makeCaller(caller, vPath),
+			readBytes: vReadBytes.makeCaller(caller, vPath),
+			readJSONFile: vReadJSONFile.makeCaller(caller, vPath),
+			readTxtFile: vReadTxtFile.makeCaller(caller, vPath),
 		} as WritableFSVersionedAPI;
 		if (fsMsg.writable) {
-			fs.v.getByteSink = vGetByteSink.makeCaller(connector, vPath);
-			fs.v.writeBytes = vWriteBytes.makeCaller(connector, vPath);
-			fs.v.writeJSONFile = vWriteJSONFile.makeCaller(connector, vPath);
-			fs.v.writeTxtFile = vWriteTxtFile.makeCaller(connector, vPath);
-			fs.v.updateXAttrs = vUpdateXAttrs.makeCaller(connector, vPath);
+			fs.v.getByteSink = vGetByteSink.makeCaller(caller, vPath);
+			fs.v.writeBytes = vWriteBytes.makeCaller(caller, vPath);
+			fs.v.writeJSONFile = vWriteJSONFile.makeCaller(caller, vPath);
+			fs.v.writeTxtFile = vWriteTxtFile.makeCaller(caller, vPath);
+			fs.v.updateXAttrs = vUpdateXAttrs.makeCaller(caller, vPath);
 		}
 	}
-	connector.registerClientDrop(fs, fsMsg.impl);
+	caller.registerClientDrop(fs, fsMsg.impl);
 	return fs;
 }
 
-export function exposeFSService(fs: FS, connector: ObjectsConnector): FSMsg {
+export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 	const implExp = {
 		checkFilePresence: checkPresence.wrapService(fs.checkFilePresence),
 		checkFolderPresence: checkPresence.wrapService(fs.checkFolderPresence),
 		checkLinkPresence: checkPresence.wrapService(fs.checkLinkPresence),
 		close: close.wrapService(fs.close),
-		getByteSource: getByteSource.wrapService(fs.getByteSource, connector),
+		getByteSource: getByteSource.wrapService(fs.getByteSource, expServices),
 		getXAttr: getXAttr.wrapService(fs.getXAttr),
 		listXAttrs: listXAttrs.wrapService(fs.listXAttrs),
 		listFolder: listFolder.wrapService(fs.listFolder),
 		readBytes: readBytes.wrapService(fs.readBytes),
-		readLink: readLink.wrapService(fs.readLink, connector),
+		readLink: readLink.wrapService(fs.readLink, expServices),
 		readJSONFile: readJSONFile.wrapService(fs.readJSONFile),
 		readTxtFile: readTxtFile.wrapService(fs.readTxtFile),
-		readonlyFile: readonlyFile.wrapService(fs.readonlyFile, connector),
+		readonlyFile: readonlyFile.wrapService(fs.readonlyFile, expServices),
 		readonlySubRoot: readonlySubRoot.wrapService(
-			fs.readonlySubRoot, connector),
-		select: select.wrapService(fs.select, connector),
+			fs.readonlySubRoot, expServices),
+		select: select.wrapService(fs.select, expServices),
 		stat: stat.wrapService(fs.stat),
 		watchFolder: watch.wrapService(fs.watchFolder, packFSEvent),
 		watchFile: watch.wrapService(fs.watchFile, packFileEvent),
@@ -154,21 +153,21 @@ export function exposeFSService(fs: FS, connector: ObjectsConnector): FSMsg {
 		implExp.deleteLink = deleteLink.wrapService(
 			(fs as WritableFS).deleteLink);
 		implExp.getByteSink = getByteSink.wrapService(
-			(fs as WritableFS).getByteSink, connector);
-		implExp.link = link.wrapService((fs as WritableFS).link, connector);
+			(fs as WritableFS).getByteSink, expServices);
+		implExp.link = link.wrapService((fs as WritableFS).link, expServices);
 		implExp.makeFolder = makeFolder.wrapService(
 			(fs as WritableFS).makeFolder);
 		implExp.move = move.wrapService((fs as WritableFS).move);
 		implExp.saveFile = saveFile.wrapService(
-			(fs as WritableFS).saveFile, connector);
+			(fs as WritableFS).saveFile, expServices);
 		implExp.saveFolder = saveFolder.wrapService(
-			(fs as WritableFS).saveFolder, connector);
+			(fs as WritableFS).saveFolder, expServices);
 		implExp.updateXAttrs = updateXAttrs.wrapService(
 			(fs as WritableFS).updateXAttrs);
 		implExp.writableFile = writableFile.wrapService(
-			(fs as WritableFS).writableFile, connector);
+			(fs as WritableFS).writableFile, expServices);
 		implExp.writableSubRoot = writableSubRoot.wrapService(
-			(fs as WritableFS).writableSubRoot, connector);
+			(fs as WritableFS).writableSubRoot, expServices);
 		implExp.writeBytes = writeBytes.wrapService(
 			(fs as WritableFS).writeBytes);
 		implExp.writeJSONFile = writeJSONFile.wrapService(
@@ -179,7 +178,7 @@ export function exposeFSService(fs: FS, connector: ObjectsConnector): FSMsg {
 	if (fs.v) {
 		implExp.v = {
 			getByteSource: vGetByteSource.wrapService(
-				fs.v.getByteSource, connector),
+				fs.v.getByteSource, expServices),
 			getXAttr: vGetXAttr.wrapService(fs.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(fs.v.listXAttrs),
 			listFolder: vListFolder.wrapService(fs.v.listFolder),
@@ -189,7 +188,7 @@ export function exposeFSService(fs: FS, connector: ObjectsConnector): FSMsg {
 		} as ExposedObj<WritableFSVersionedAPI>;
 		if (fs.writable) {
 			implExp.v.getByteSink = vGetByteSink.wrapService(
-				(fs.v as WritableFSVersionedAPI).getByteSink, connector);
+				(fs.v as WritableFSVersionedAPI).getByteSink, expServices);
 			implExp.v.writeBytes = vWriteBytes.wrapService(
 				(fs.v as WritableFSVersionedAPI).writeBytes);
 			implExp.v.writeJSONFile = vWriteJSONFile.wrapService(
@@ -200,8 +199,7 @@ export function exposeFSService(fs: FS, connector: ObjectsConnector): FSMsg {
 				(fs.v as WritableFSVersionedAPI).updateXAttrs);
 		}
 	}
-	const impl = connector.exposedObjs.exposeDroppableService(
-		'FSImpl', implExp, fs);
+	const impl = expServices.exposeDroppableService('FSImpl', implExp, fs);
 	const fsMsg: FSMsg = {
 		impl,
 		isVersioned: !!fs.v,
@@ -246,9 +244,9 @@ namespace checkPresence {
 	}
 
 	function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkFilePresence'] {
-		return (path, throwIfMissing) => connector
+		return (path, throwIfMissing) => caller
 		.startPromiseCall(objPath, requestType.pack({
 			path, throwIfMissing: toOptVal(throwIfMissing)
 		}))
@@ -256,21 +254,21 @@ namespace checkPresence {
 	}
 
 	export function makeFileCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkFilePresence'] {
-		return makeCaller(connector, objPath.concat('checkFilePresence'));
+		return makeCaller(caller, objPath.concat('checkFilePresence'));
 	}
 
 	export function makeFolderCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkFolderPresence'] {
-		return makeCaller(connector, objPath.concat('checkFolderPresence'));
+		return makeCaller(caller, objPath.concat('checkFolderPresence'));
 	}
 
 	export function makeLinkCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkLinkPresence'] {
-		return makeCaller(connector, objPath.concat('checkLinkPresence'));
+		return makeCaller(caller, objPath.concat('checkLinkPresence'));
 	}
 
 }
@@ -296,10 +294,10 @@ namespace stat {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['stat'] {
 		const ipcPath = objPath.concat('stat');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(unpackStats);
 	}
@@ -327,10 +325,10 @@ namespace getXAttr {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['getXAttr'] {
 		const ipcPath = objPath.concat('getXAttr');
-		return (path, xaName) => connector
+		return (path, xaName) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, xaName }))
 		.then(unpackXAttrValue);
 	}
@@ -351,10 +349,10 @@ namespace listXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['listXAttrs'] {
 		const ipcPath = objPath.concat('listXAttrs');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
 	}
@@ -378,20 +376,20 @@ interface SymLinkTarget {
 const symLinkTargetType = makeFSType<SymLinkTarget>('SymLinkTargetReplyBody');
 
 function exposeSymLink(
-	link: SymLink, connector: ObjectsConnector
+	link: SymLink, expServices: ExposedServices
 ): SymLinkMsg {
 	const exp: ExposedFn = () => {
 		if (link.isFile) {
 			const promise = link.target()
 			.then(f => {
-				const file = exposeFileService(f as File, connector);
+				const file = exposeFileService(f as File, expServices);
 				return symLinkTargetType.pack({ file });
 			});
 			return { promise };
 		} else if (link.isFolder) {
 			const promise = link.target()
 			.then(f => {
-				const fs = exposeFSService(f as FS, connector);
+				const fs = exposeFSService(f as FS, expServices);
 				return symLinkTargetType.pack({ fs });
 			});
 			return { promise };
@@ -399,8 +397,7 @@ function exposeSymLink(
 			assert(false);
 		}
 	};
-	const ref = connector.exposedObjs.exposeDroppableService(
-		'SymLinkImpl', exp, link);
+	const ref = expServices.exposeDroppableService('SymLinkImpl', exp, link);
 	const msg: SymLinkMsg = {
 		readonly: link.readonly,
 		isFile: toOptVal(link.isFile),
@@ -411,18 +408,18 @@ function exposeSymLink(
 }
 
 function makeSymLinkCaller(
-	connector: ObjectsConnector, linkMsg: SymLinkMsg
+	caller: Caller, linkMsg: SymLinkMsg
 ): SymLink {
 	const link: SymLink = {
 		readonly: linkMsg.readonly,
-		target: () => connector
+		target: () => caller
 		.startPromiseCall(linkMsg.target.path, undefined)
 		.then(buf => {
 			const { file, fs } = symLinkTargetType.unpack(buf);
 			if (file) {
-				return makeFileCaller(connector, file);
+				return makeFileCaller(caller, file);
 			} else if (fs) {
-				return makeFSCaller(connector, fs);
+				return makeFSCaller(caller, fs);
 			} else {
 				throw new Error('Missing target info');
 			}
@@ -437,13 +434,13 @@ function makeSymLinkCaller(
 namespace readLink {
 
 	export function wrapService(
-		fn: ReadonlyFS['readLink'], connector: ObjectsConnector
+		fn: ReadonlyFS['readLink'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
 			.then(link => {
-				const msg = exposeSymLink(link, connector);
+				const msg = exposeSymLink(link, expServices);
 				return symLinkMsgType.pack(msg);
 			});
 			return { promise };
@@ -451,14 +448,14 @@ namespace readLink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readLink'] {
 		const ipcPath = objPath.concat('readLink');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const linkMsg = symLinkMsgType.unpack(buf);
-			return makeSymLinkCaller(connector, linkMsg);
+			return makeSymLinkCaller(caller, linkMsg);
 		});
 	}
 
@@ -564,12 +561,12 @@ namespace watch {
 	}
 
 	function makeCaller<E>(
-		connector: ObjectsConnector, ipcPath: string[],
+		caller: Caller, ipcPath: string[],
 		unpackEvent: (buf: EnvelopeBody) => E
 	): watchFn {
 		return (path, obs) => {
 			const s = new Subject<EnvelopeBody>();
-			const unsub = connector.startObservableCall(
+			const unsub = caller.startObservableCall(
 				ipcPath, reqWithPathType.pack({ path }), s);
 			s.subscribe({
 				next: buf => {
@@ -585,27 +582,27 @@ namespace watch {
 	}
 
 	export function makeFolderCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchFolder'] {
 		const ipcPath = objPath.concat('watchFolder');
 		return makeCaller(
-			connector, ipcPath, unpackFSEvent) as ReadonlyFS['watchFolder'];
+			caller, ipcPath, unpackFSEvent) as ReadonlyFS['watchFolder'];
 	}
 
 	export function makeTreeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchTree'] {
 		const ipcPath = objPath.concat('watchTree');
 		return makeCaller(
-			connector, ipcPath, unpackFSEvent) as ReadonlyFS['watchTree'];
+			caller, ipcPath, unpackFSEvent) as ReadonlyFS['watchTree'];
 	}
 
 	export function makeFileCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchFile'] {
 		const ipcPath = objPath.concat('watchFile');
 		return makeCaller(
-			connector, ipcPath, unpackFileEvent) as ReadonlyFS['watchFile'];
+			caller, ipcPath, unpackFileEvent) as ReadonlyFS['watchFile'];
 	}
 
 }
@@ -622,10 +619,10 @@ namespace close {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['close'] {
 		const path = objPath.concat('close');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined) as Promise<undefined>;
 	}
 
@@ -636,13 +633,13 @@ Object.freeze(close);
 namespace readonlySubRoot {
 
 	export function wrapService(
-		fn: ReadonlyFS['readonlySubRoot'], connector: ObjectsConnector
+		fn: ReadonlyFS['readonlySubRoot'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
 			.then(fs => {
-				const msg = exposeFSService(fs, connector);
+				const msg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(msg);
 			});
 			return { promise };
@@ -650,14 +647,14 @@ namespace readonlySubRoot {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readonlySubRoot'] {
 		const ipcPath = objPath.concat('readonlySubRoot');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
-			return makeFSCaller(connector, fsMsg);
+			return makeFSCaller(caller, fsMsg);
 		});
 	}
 
@@ -685,10 +682,10 @@ namespace listFolder {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['listFolder'] {
 		const ipcPath = objPath.concat('listFolder');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => fixArray(requestType.unpack(buf).entries).map(
 			lsEntryFromMsg));
@@ -712,10 +709,10 @@ namespace readJSONFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readJSONFile'] {
 		const ipcPath = objPath.concat('readJSONFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(unpackJSON);
 	}
@@ -738,10 +735,10 @@ namespace readTxtFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readTxtFile'] {
 		const ipcPath = objPath.concat('readTxtFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => (buf ? buf.toString('utf8') : ''));
 	}
@@ -774,10 +771,10 @@ namespace readBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readBytes'] {
 		const ipcPath = objPath.concat('readBytes');
-		return (path, start, end) => connector
+		return (path, start, end) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, start: toOptVal(start), end: toOptVal(end)
 		}))
@@ -791,13 +788,13 @@ Object.freeze(readBytes);
 namespace getByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFS['getByteSource'], connector: ObjectsConnector
+		fn: ReadonlyFS['getByteSource'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
 			.then(src => {
-				const ref = exposeSrcService(src, connector);
+				const ref = exposeSrcService(src, expServices);
 				return objRefType.pack(ref);
 			});
 			return { promise };
@@ -805,14 +802,14 @@ namespace getByteSource {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['getByteSource'] {
 		const ipcPath = objPath.concat('getByteSource');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const ref = objRefType.unpack(buf);
-			return makeSrcCaller(connector, ref);
+			return makeSrcCaller(caller, ref);
 		});
 	}
 
@@ -823,13 +820,13 @@ Object.freeze(getByteSource);
 namespace readonlyFile {
 
 	export function wrapService(
-		fn: ReadonlyFS['readonlyFile'], connector: ObjectsConnector
+		fn: ReadonlyFS['readonlyFile'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
 			.then(file => {
-				const fileMsg = exposeFileService(file, connector);
+				const fileMsg = exposeFileService(file, expServices);
 				return fileMsgType.pack(fileMsg);
 			});
 			return { promise };
@@ -837,14 +834,14 @@ namespace readonlyFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['readonlyFile'] {
 		const ipcPath = objPath.concat('readonlyFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const fileMsg = fileMsgType.unpack(buf);
-			return makeFileCaller(connector, fileMsg);
+			return makeFileCaller(caller, fileMsg);
 		});
 	}
 
@@ -912,14 +909,15 @@ namespace select {
 	}
 
 	export function wrapService(
-		fn: ReadonlyFS['select'], connector: ObjectsConnector
+		fn: ReadonlyFS['select'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, criteria } = requestType.unpack(buf);
 			const s = new Subject<EnvelopeBody>();
 			fn(path, criteriaFromMsg(criteria))
 			.then(({ completion, items }) => {
-				const ref = fsCollection.exposeCollectionService(items, connector);
+				const ref = fsCollection.exposeCollectionService(
+					items, expServices);
 				s.next(objRefType.pack(ref));
 				completion.then(() => s.complete(), err => s.error(err));
 			}, err => s.error(err));
@@ -928,20 +926,20 @@ namespace select {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFS['select'] {
 		const ipcPath = objPath.concat('select');
 		return async (path, criteria) => {
 			const req: Request = { path, criteria: criteriaToMsg(criteria) };
 			const s = new Subject<EnvelopeBody>();
-			connector.startObservableCall(ipcPath, requestType.pack(req), s);
+			caller.startObservableCall(ipcPath, requestType.pack(req), s);
 			const reply = defer<FSCollection>();
 			let completion: Deferred<void>|undefined = undefined;
 			s.subscribe({
 				next: buf => {
 					const ref = objRefType.unpack(buf);
 					const collection = fsCollection.makeCollectionCaller(
-						ref, connector);
+						ref, caller);
 					reply.resolve(collection);
 					completion = defer<void>();
 				},
@@ -975,31 +973,31 @@ namespace fsCollection {
 
 
 	export function exposeCollectionService(
-		collection: FSCollection, connector: ObjectsConnector
+		collection: FSCollection, expServices: ExposedServices
 	): ObjectReference {
 		const exp: ExposedObj<FSCollection> = {
-			get: get.wrapService(collection.get, connector),
-			getAll: getAll.wrapService(collection.getAll, connector),
-			entries: entries.wrapService(collection.entries, connector),
-			watch: watch.wrapService(collection.watch, connector)
+			get: get.wrapService(collection.get, expServices),
+			getAll: getAll.wrapService(collection.getAll, expServices),
+			entries: entries.wrapService(collection.entries, expServices),
+			watch: watch.wrapService(collection.watch, expServices)
 		};
-		const ref = connector.exposedObjs.exposeDroppableService(
+		const ref = expServices.exposeDroppableService(
 			'FSCollection', exp, collection);
 		return ref;
 	}
 
 	export function makeCollectionCaller(
-		ref: ObjectReference, connector: ObjectsConnector
+		ref: ObjectReference, caller: Caller
 	): FSCollection {
 		checkRefObjTypeIs('FSCollection', ref);
 		const objPath = ref.path;
 		const collection: FSCollection = {
-			get: get.makeCaller(connector, objPath),
-			getAll: getAll.makeCaller(connector, objPath),
-			entries: entries.makeCaller(connector, objPath),
-			watch: watch.makeCaller(connector, objPath)
+			get: get.makeCaller(caller, objPath),
+			getAll: getAll.makeCaller(caller, objPath),
+			entries: entries.makeCaller(caller, objPath),
+			watch: watch.makeCaller(caller, objPath)
 		}
-		connector.registerClientDrop(collection, ref);
+		caller.registerClientDrop(collection, ref);
 		return collection;
 	}
 
@@ -1019,14 +1017,14 @@ namespace fsCollection {
 		const replyType = makeFSType<Reply>('FSCGetReplyBody');
 
 		export function wrapService(
-			fn: FSCollection['get'], connector: ObjectsConnector
+			fn: FSCollection['get'], expServices: ExposedServices
 		): ExposedFn {
 			return buf => {
 				const { name } = requestType.unpack(buf);
 				const promise = fn(name)
 				.then(item => {
 					const reply = (item ?
-						{ item: fsItem.exposeFSItem(connector, item) } : {});
+						{ item: fsItem.exposeFSItem(expServices, item) } : {});
 					return replyType.pack(reply);
 				});
 				return { promise };
@@ -1034,14 +1032,14 @@ namespace fsCollection {
 		}
 
 		export function makeCaller(
-			connector: ObjectsConnector, objPath: string[]
+			caller: Caller, objPath: string[]
 		): FSCollection['get'] {
 			const ipcPath = objPath.concat('get');
-			return name => connector
+			return name => caller
 			.startPromiseCall(ipcPath, requestType.pack({ name }))
 			.then(buf => {
 				const { item } = replyType.unpack(buf);
-				return (item ? fsItem.fsItemFromMsg(connector, item) : undefined);
+				return (item ? fsItem.fsItemFromMsg(caller, item) : undefined);
 			});
 		}
 
@@ -1064,7 +1062,7 @@ namespace fsCollection {
 		const replyType = makeFSType<Reply>('FSCGetAllReplyBody');
 
 		export function wrapService(
-			fn: FSCollection['getAll'], connector: ObjectsConnector
+			fn: FSCollection['getAll'], expServices: ExposedServices
 		): ExposedFn {
 			return buf => {
 				const promise = fn()
@@ -1072,7 +1070,7 @@ namespace fsCollection {
 					const reply: Reply = { items: [] };
 					for (const [ name, item ] of items) {
 						reply.items.push({
-							name, item: fsItem.exposeFSItem(connector, item)
+							name, item: fsItem.exposeFSItem(expServices, item)
 						});
 					}
 					return replyType.pack(reply);
@@ -1082,16 +1080,16 @@ namespace fsCollection {
 		}
 
 		export function makeCaller(
-			connector: ObjectsConnector, objPath: string[]
+			caller: Caller, objPath: string[]
 		): FSCollection['getAll'] {
 			const ipcPath = objPath.concat('getAll');
-			return () => connector
+			return () => caller
 			.startPromiseCall(ipcPath, undefined)
 			.then(buf => {
 				const items = fixArray(replyType.unpack(buf).items);
 				const pairs: [ string, FSItem ][] = [];
 				for (const { name, item } of items) {
-					pairs.push([ name, fsItem.fsItemFromMsg(connector, item) ]);
+					pairs.push([ name, fsItem.fsItemFromMsg(caller, item) ]);
 				}
 				return pairs;
 			});
@@ -1106,25 +1104,25 @@ namespace fsCollection {
 		type Iter = web3n.AsyncIterator<[ string, FSItem ]>;
 
 		function exposeIter(
-			iter: Iter, connector: ObjectsConnector
+			iter: Iter, expServices: ExposedServices
 		): ObjectReference {
 			const exp: ExposedObj<Iter> = {
-				next: wrapIterNext(iter.next, connector)
+				next: wrapIterNext(iter.next, expServices)
 			};
-			const ref = connector.exposedObjs.exposeDroppableService(
+			const ref = expServices.exposeDroppableService(
 				'FSItemsIter', exp, iter);
 			return ref;
 		}
 
 		function makeIterCaller(
-			ref: ObjectReference, connector: ObjectsConnector
+			ref: ObjectReference, caller: Caller
 		): Iter {
 			checkRefObjTypeIs('FSItemsIter', ref);
 			const objPath = ref.path;
 			const iter: Iter = {
-				next: makeIterNextCaller(connector, objPath)
+				next: makeIterNextCaller(caller, objPath)
 			};
-			connector.registerClientDrop(iter, ref);
+			caller.registerClientDrop(iter, ref);
 			return iter;
 		}
 
@@ -1135,57 +1133,57 @@ namespace fsCollection {
 		const iterResMsgType = makeFSType<IterResMsg>('IterResMsg');
 
 		function packIterRes(
-			res: IteratorResult<[string, FSItem]>, connector: ObjectsConnector
+			res: IteratorResult<[string, FSItem]>, expServices: ExposedServices
 		): Buffer {
 			let msg: IterResMsg;
 			if (res.done) {
 				msg = { done: toVal(true) };
 			} else {
-				const itemRef = fsItem.exposeFSItem(connector, res.value[1]);
+				const itemRef = fsItem.exposeFSItem(expServices, res.value[1]);
 				msg = { value: { name: res.value[0], item: itemRef } };
 			}
 			return iterResMsgType.pack(msg);
 		}
 
 		function unpackIterRes(
-			buf: EnvelopeBody, connector: ObjectsConnector
+			buf: EnvelopeBody, caller: Caller
 		): IteratorResult<[string, FSItem]> {
 			const msg = iterResMsgType.unpack(buf);
 			if (msg.done) {
 				return { done: true } as IteratorResult<[string, FSItem]>;
 			} else {
 				const v = msg.value!;
-				const item = fsItem.fsItemFromMsg(connector, v.item);
+				const item = fsItem.fsItemFromMsg(caller, v.item);
 				return { value: [ v.name, item ] };
 			}
 		}
 
 		function wrapIterNext(
-			fn: Iter['next'], connector: ObjectsConnector
+			fn: Iter['next'], expServices: ExposedServices
 		): ExposedFn {
 			return () => {
 				const promise = fn()
-				.then(res => packIterRes(res, connector));
+				.then(res => packIterRes(res, expServices));
 				return { promise };
 			};
 		}
 
 		function makeIterNextCaller(
-			connector: ObjectsConnector, objPath: string[]
+			caller: Caller, objPath: string[]
 		): Iter['next'] {
 			const ipcPath = objPath.concat('next');
-			return () => connector
+			return () => caller
 			.startPromiseCall(ipcPath, undefined)
-			.then(buf => unpackIterRes(buf, connector));
+			.then(buf => unpackIterRes(buf, caller));
 		}
 
 		export function wrapService(
-			fn: FSCollection['entries'], connector: ObjectsConnector
+			fn: FSCollection['entries'], expServices: ExposedServices
 		): ExposedFn {
 			return () => {
 				const promise = fn()
 				.then(iter => {
-					const ref = exposeIter(iter, connector);
+					const ref = exposeIter(iter, expServices);
 					return objRefType.pack(ref);
 				});
 				return { promise };
@@ -1193,14 +1191,14 @@ namespace fsCollection {
 		}
 
 		export function makeCaller(
-			connector: ObjectsConnector, objPath: string[]
+			caller: Caller, objPath: string[]
 		): FSCollection['entries'] {
 			const ipcPath = objPath.concat('entries');
-			return () => connector
+			return () => caller
 			.startPromiseCall(ipcPath, undefined)
 			.then(buf => {
 				const ref = objRefType.unpack(buf);
-				return makeIterCaller(ref, connector);
+				return makeIterCaller(ref, caller);
 			});
 		}
 
@@ -1219,12 +1217,12 @@ namespace fsCollection {
 		const eventType = makeFSType<CollectionEventMsg>('CollectionEvent');
 
 		export function wrapService(
-			fn: FSCollection['watch'], connector: ObjectsConnector
+			fn: FSCollection['watch'], expServices: ExposedServices
 		): ExposedFn {
 			return () => {
 				const s = new Subject<CollectionEvent>();
 				const obs = s.asObservable().pipe(
-					map(event => packEvent(event, connector))
+					map(event => packEvent(event, expServices))
 				);
 				const onCancel = fn(s);
 				return { obs, onCancel };
@@ -1232,20 +1230,20 @@ namespace fsCollection {
 		}
 
 		function packEvent(
-			event: CollectionEvent, connector: ObjectsConnector
+			event: CollectionEvent, expServices: ExposedServices
 		): Buffer {
 			const msg: CollectionEventMsg = {
 				type: event.type,
 				path: toOptVal(event.path)
 			};
 			if ((event as any).item) {
-				msg.item = fsItem.exposeFSItem(connector, (event as any).item);
+				msg.item = fsItem.exposeFSItem(expServices, (event as any).item);
 			}
 			return eventType.pack(msg);
 		}
 
 		function unpackEvent(
-			buf: EnvelopeBody, connector: ObjectsConnector
+			buf: EnvelopeBody, caller: Caller
 		): CollectionEvent {
 			const msg = eventType.unpack(buf);
 			const event: CollectionEvent = {
@@ -1253,23 +1251,22 @@ namespace fsCollection {
 				path: valOfOpt(msg.path)
 			};
 			if (msg.item) {
-				(event as any).item = fsItem.fsItemFromMsg(
-					connector, msg.item);
+				(event as any).item = fsItem.fsItemFromMsg(caller, msg.item);
 			}
 			return event;
 		}
 	
 		export function makeCaller(
-			connector: ObjectsConnector, objPath: string[]
+			caller: Caller, objPath: string[]
 		): FSCollection['watch'] {
 			const path = objPath.concat('watch');
 			return obs => {
 				const s = new Subject<EnvelopeBody>();
-				const unsub = connector.startObservableCall(path, undefined, s);
+				const unsub = caller.startObservableCall(path, undefined, s);
 				s.subscribe({
 					next: buf => {
 						if (obs.next) {
-							obs.next(unpackEvent(buf, connector));
+							obs.next(unpackEvent(buf, caller));
 						}
 					},
 					complete: obs.complete,
@@ -1310,7 +1307,7 @@ export namespace fsItem {
 	export const msgType = makeFSType<FSItemMsg>('FSItem');
 
 	export function exposeFSItem(
-		connector: ObjectsConnector, item: FSItem
+		expServices: ExposedServices, item: FSItem
 	): FSItemMsg {
 		const msg: FSItemMsg = {
 			isLink: toOptVal(item.isLink)
@@ -1319,14 +1316,14 @@ export namespace fsItem {
 			msg.isFile = toVal(true);
 			if (item.item) {
 				msg.item = {
-					file: exposeFileService(item.item as File, connector)
+					file: exposeFileService(item.item as File, expServices)
 				};
 			}
 		} else if (item.isFolder) {
 			msg.isFolder = toVal(true);
 			if (item.item) {
 				msg.item = {
-					fs: exposeFSService(item.item as FS, connector)
+					fs: exposeFSService(item.item as FS, expServices)
 				};
 			}
 		} else if (item.isCollection) {
@@ -1334,7 +1331,7 @@ export namespace fsItem {
 			if (item.item) {
 				msg.item = {
 					collection: fsCollection.exposeCollectionService(
-						item.item as FSCollection, connector)
+						item.item as FSCollection, expServices)
 				};
 			}
 		} else {
@@ -1345,14 +1342,14 @@ export namespace fsItem {
 				path: item.location.path,
 				storageType: item.location.storageType,
 				storageUse: item.location.storageUse,
-				fs: exposeFSService(item.location.fs, connector)
+				fs: exposeFSService(item.location.fs, expServices)
 			};
 		}
 		return msg;
 	}
 
 	export function fsItemFromMsg(
-		connector: ObjectsConnector, msg: FSItemMsg
+		caller: Caller, msg: FSItemMsg
 	): FSItem {
 		const item: FSItem = {
 			isLink: valOfOpt(msg.isLink)
@@ -1360,18 +1357,18 @@ export namespace fsItem {
 		if (valOfOpt(msg.isFile)) {
 			item.isFile = true;
 			if (msg.item) {
-				item.item = makeFileCaller(connector, msg.item.file!);
+				item.item = makeFileCaller(caller, msg.item.file!);
 			}
 		} else if (valOfOpt(msg.isFolder)) {
 			item.isFolder = true;
 			if (msg.item) {
-				item.item = makeFSCaller(connector, msg.item.fs!);
+				item.item = makeFSCaller(caller, msg.item.fs!);
 			}
 		} else if (valOfOpt(msg.isCollection)) {
 			item.isCollection = true;
 			if (msg.item) {
 				item.item = fsCollection.makeCollectionCaller(
-					msg.item.collection!, connector);
+					msg.item.collection!, caller);
 			}
 		} else {
 			throw new TypeError(`Missing type flag in FSItem`);
@@ -1381,7 +1378,7 @@ export namespace fsItem {
 				path: msg.location.path,
 				storageType: msg.location.storageType,
 				storageUse: msg.location.storageUse,
-				fs: makeFSCaller(connector, msg.location.fs)
+				fs: makeFSCaller(caller, msg.location.fs)
 			};
 		}
 		return item;
@@ -1405,10 +1402,10 @@ namespace vGetXAttr {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getXAttr'] {
 		const ipcPath = objPath.concat('getXAttr');
-		return (path, xaName) => connector
+		return (path, xaName) => caller
 		.startPromiseCall(ipcPath, getXAttr.requestType.pack({ path, xaName }))
 		.then(unpackXAttrValue);
 	}
@@ -1432,10 +1429,10 @@ namespace vListXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listXAttrs'] {
 		const ipcPath = objPath.concat('listXAttrs');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const { version: v, xaNames } = file.vListXAttrs.replyType.unpack(buf);
@@ -1470,10 +1467,10 @@ namespace vListFolder {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listFolder'] {
 		const ipcPath = objPath.concat('listFolder');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const { version: v, entries } = replyType.unpack(buf);
@@ -1504,10 +1501,10 @@ namespace vReadJSONFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readJSONFile'] {
 		const ipcPath = objPath.concat('readJSONFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const { version: v, json } = file.vReadJSON.replyType.unpack(buf);
@@ -1533,10 +1530,10 @@ namespace vReadTxtFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readTxtFile'] {
 		const ipcPath = objPath.concat('readTxtFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const { version: v, txt } = file.vReadTxt.replyType.unpack(buf);
@@ -1562,11 +1559,11 @@ namespace vReadBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readBytes'] {
 		const ipcPath = objPath.concat('readBytes');
 		return (path, start, end) => {
-		return connector
+		return caller
 		.startPromiseCall(ipcPath, readBytes.requestType.pack({
 			path, start: toOptVal(start), end: toOptVal(end) }))
 		.then(file.vReadBytes.unpackReply);
@@ -1580,13 +1577,13 @@ Object.freeze(vReadBytes);
 namespace vGetByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFSVersionedAPI['getByteSource'], connector: ObjectsConnector
+		fn: ReadonlyFSVersionedAPI['getByteSource'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
 			.then(({ version, src }) => {
-				const ref = exposeSrcService(src, connector);
+				const ref = exposeSrcService(src, expServices);
 				return file.vGetByteSource.replyType.pack({ version, src: ref });
 			});
 			return { promise };
@@ -1594,14 +1591,14 @@ namespace vGetByteSource {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getByteSource'] {
 		const ipcPath = objPath.concat('getByteSource');
-		return path => connector
+		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
 			const { version: v, src } = file.vGetByteSource.replyType.unpack(buf);
-			return { version: fixInt(v), src: makeSrcCaller(connector, src) };
+			return { version: fixInt(v), src: makeSrcCaller(caller, src) };
 		});
 	}
 
@@ -1640,10 +1637,10 @@ namespace updateXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['updateXAttrs'] {
 		const ipcPath = objPath.concat('updateXAttrs');
-		return (path, changes) => connector
+		return (path, changes) => caller
 		.startPromiseCall(ipcPath, packRequest(path, changes)) as Promise<void>;
 	}
 
@@ -1669,10 +1666,10 @@ namespace makeFolder {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['makeFolder'] {
 		const ipcPath = objPath.concat('makeFolder');
-		return (path, exclusive) => connector
+		return (path, exclusive) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, exclusive: toOptVal(exclusive)
 		})) as Promise<void>;
@@ -1700,10 +1697,10 @@ namespace deleteFolder {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['deleteFolder'] {
 		const ipcPath = objPath.concat('deleteFolder');
-		return (path, removeContent) => connector
+		return (path, removeContent) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, removeContent: toOptVal(removeContent)
 		})) as Promise<void>;
@@ -1724,10 +1721,10 @@ namespace deleteFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['deleteFile'] {
 		const ipcPath = objPath.concat('deleteFile');
-		return path => connector
+		return path => caller
 		.startPromiseCall(
 			ipcPath, reqWithPathType.pack({ path })
 		) as Promise<void>;
@@ -1748,10 +1745,10 @@ namespace deleteLink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['deleteLink'] {
 		const ipcPath = objPath.concat('deleteLink');
-		return path => connector
+		return path => caller
 		.startPromiseCall(
 			ipcPath, reqWithPathType.pack({ path })
 		) as Promise<void>;
@@ -1779,10 +1776,10 @@ namespace move {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['move'] {
 		const ipcPath = objPath.concat('move');
-		return (src, dst) => connector
+		return (src, dst) => caller
 		.startPromiseCall(
 			ipcPath, requestType.pack({ src, dst })
 		) as Promise<void>;
@@ -1811,10 +1808,10 @@ namespace copyFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['copyFile'] {
 		const ipcPath = objPath.concat('copyFile');
-		return (src, dst, overwrite) => connector
+		return (src, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			src, dst, overwrite: toOptVal(overwrite)
 		})) as Promise<void>;
@@ -1843,10 +1840,10 @@ namespace copyFolder {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['copyFolder'] {
 		const ipcPath = objPath.concat('copyFolder');
-		return (src, dst, mergeAndOverwrite) => connector
+		return (src, dst, mergeAndOverwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			src, dst, mergeAndOverwrite: toOptVal(mergeAndOverwrite)
 		})) as Promise<void>;
@@ -1867,23 +1864,23 @@ namespace saveFile {
 	const requestType = makeFSType<Request>('SaveFileRequestBody');
 
 	export function wrapService(
-		fn: WritableFS['saveFile'], connector: ObjectsConnector
+		fn: WritableFS['saveFile'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { dst, file, overwrite } = requestType.unpack(buf);
-			const f = connector.exposedObjs.getOriginalObj<File>(file);
+			const f = expServices.getOriginalObj<File>(file);
 			const promise = fn(f, dst, valOfOpt(overwrite));
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['saveFile'] {
 		const ipcPath = objPath.concat('saveFile');
-		return (f, dst, overwrite) => connector
+		return (f, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
-			file: connector.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
+			file: caller.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
 		})) as Promise<void>;
 	}
 
@@ -1902,23 +1899,23 @@ namespace saveFolder {
 	const requestType = makeFSType<Request>('SaveFolderRequestBody');
 
 	export function wrapService(
-		fn: WritableFS['saveFolder'], connector: ObjectsConnector
+		fn: WritableFS['saveFolder'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { dst, folder: file, overwrite } = requestType.unpack(buf);
-			const f = connector.exposedObjs.getOriginalObj<FS>(file);
+			const f = expServices.getOriginalObj<FS>(file);
 			const promise = fn(f, dst, valOfOpt(overwrite));
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['saveFolder'] {
 		const ipcPath = objPath.concat('saveFolder');
-		return (f, dst, overwrite) => connector
+		return (f, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
-			folder: connector.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
+			folder: caller.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
 		})) as Promise<void>;
 	}
 
@@ -1936,23 +1933,23 @@ namespace link {
 	const requestType = makeFSType<Request>('LinkRequestBody');
 
 	export function wrapService(
-		fn: WritableFS['link'], connector: ObjectsConnector
+		fn: WritableFS['link'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, target } = requestType.unpack(buf);
-			const f = connector.exposedObjs.getOriginalObj<FS|File>(target);
+			const f = expServices.getOriginalObj<FS|File>(target);
 			const promise = fn(path, f);
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['link'] {
 		const ipcPath = objPath.concat('link');
-		return (path, f) => connector
+		return (path, f) => caller
 		.startPromiseCall(ipcPath, requestType.pack(
-			{ path, target: connector.srvRefOf(f) })) as Promise<void>;
+			{ path, target: caller.srvRefOf(f) })) as Promise<void>;
 	}
 
 }
@@ -2003,13 +2000,13 @@ function optFlagsFromMsg(m: FileFlagsMsg|undefined): FileFlags|undefined {
 namespace writableSubRoot {
 
 	export function wrapService(
-		fn: WritableFS['writableSubRoot'], connector: ObjectsConnector
+		fn: WritableFS['writableSubRoot'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
 			const promise = fn(path, flags)
 			.then(fs => {
-				const fsMsg = exposeFSService(fs, connector);
+				const fsMsg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(fsMsg);
 			});
 			return { promise };
@@ -2017,14 +2014,14 @@ namespace writableSubRoot {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['writableSubRoot'] {
 		const ipcPath = objPath.concat('writableSubRoot');
-		return (path, flags) => connector
+		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
-			return makeFSCaller(connector, fsMsg);
+			return makeFSCaller(caller, fsMsg);
 		}) as Promise<WritableFS>;
 	}
 
@@ -2035,13 +2032,13 @@ Object.freeze(writableSubRoot);
 namespace writableFile {
 
 	export function wrapService(
-		fn: WritableFS['writableFile'], connector: ObjectsConnector
+		fn: WritableFS['writableFile'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
 			const promise = fn(path, flags)
 			.then(file => {
-				const fileMsg = exposeFileService(file, connector);
+				const fileMsg = exposeFileService(file, expServices);
 				return fileMsgType.pack(fileMsg);
 			});
 			return { promise };
@@ -2049,14 +2046,14 @@ namespace writableFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['writableFile'] {
 		const ipcPath = objPath.concat('writableFile');
-		return (path, flags) => connector
+		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
 			const fileMsg = fileMsgType.unpack(buf);
-			return makeFileCaller(connector, fileMsg);
+			return makeFileCaller(caller, fileMsg);
 		}) as Promise<WritableFile>;
 	}
 
@@ -2083,10 +2080,10 @@ namespace writeJSONFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['writeJSONFile'] {
 		const ipcPath = objPath.concat('writeJSONFile');
-		return (path, json, flags) => connector
+		return (path, json, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, json: JSON.stringify(json), flags: optFlagsToMsg(flags)
 		})) as Promise<void>;
@@ -2115,10 +2112,10 @@ namespace writeTxtFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['writeTxtFile'] {
 		const ipcPath = objPath.concat('writeTxtFile');
-		return (path, txt, flags) => connector
+		return (path, txt, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, txt, flags: optFlagsToMsg(flags)
 		})) as Promise<void>;
@@ -2147,10 +2144,10 @@ namespace writeBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['writeBytes'] {
 		const ipcPath = objPath.concat('writeBytes');
-		return (path, bytes, flags) => connector
+		return (path, bytes, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, bytes: bytes as Buffer, flags: optFlagsToMsg(flags)
 		})) as Promise<void>;
@@ -2163,13 +2160,13 @@ Object.freeze(writeBytes);
 namespace getByteSink {
 
 	export function wrapService(
-		fn: WritableFS['getByteSink'], connector: ObjectsConnector
+		fn: WritableFS['getByteSink'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
 			const promise = fn(path, flags)
 			.then(sink => {
-				const ref = exposeSinkService(sink, connector);
+				const ref = exposeSinkService(sink, expServices);
 				return objRefType.pack(ref);
 			});
 			return { promise };
@@ -2177,14 +2174,14 @@ namespace getByteSink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFS['getByteSink'] {
 		const ipcPath = objPath.concat('getByteSink');
-		return (path, flags) => connector
+		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
 			const ref = objRefType.unpack(buf);
-			return makeSinkCaller(connector, ref);
+			return makeSinkCaller(caller, ref);
 		});
 	}
 
@@ -2206,10 +2203,10 @@ namespace vUpdateXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['updateXAttrs'] {
 		const ipcPath = objPath.concat('updateXAttrs');
-		return (path, changes) => connector
+		return (path, changes) => caller
 		.startPromiseCall(ipcPath, updateXAttrs.packRequest(path, changes))
 		.then(unpackInt);
 	}
@@ -2263,10 +2260,10 @@ namespace vWriteJSONFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeJSONFile'] {
 		const ipcPath = objPath.concat('writeJSONFile');
-		return (path, json, flags) => connector
+		return (path, json, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, json: JSON.stringify(json), flags: optVerFlagsToMsg(flags)
 		}))
@@ -2299,10 +2296,10 @@ namespace vWriteTxtFile {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeTxtFile'] {
 		const ipcPath = objPath.concat('writeTxtFile');
-		return (path, txt, flags) => connector
+		return (path, txt, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, txt, flags: optVerFlagsToMsg(flags)
 		}))
@@ -2335,10 +2332,10 @@ namespace vWriteBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeBytes'] {
 		const ipcPath = objPath.concat('writeBytes');
-		return (path, bytes, flags) => connector
+		return (path, bytes, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, bytes: bytes as Buffer, flags: optVerFlagsToMsg(flags)
 		}))
@@ -2359,13 +2356,13 @@ namespace vGetByteSink {
 	const requestType = makeFSType<Request>('VersionedGetByteSinkRequestBody');
 
 	export function wrapService(
-		fn: WritableFSVersionedAPI['getByteSink'], connector: ObjectsConnector
+		fn: WritableFSVersionedAPI['getByteSink'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = requestType.unpack(buf);
 			const promise = fn(path, optVerFlagsFromMsg(flags))
 			.then(({ version, sink}) => {
-				const ref = exposeSinkService(sink, connector);
+				const ref = exposeSinkService(sink, expServices);
 				return file.vGetByteSink.replyType.pack({ version, sink: ref });
 			});
 			return { promise };
@@ -2373,16 +2370,16 @@ namespace vGetByteSink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['getByteSink'] {
 		const ipcPath = objPath.concat('getByteSink');
-		return (path, flags) => connector
+		return (path, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, flags: optVerFlagsToMsg(flags)
 		}))
 		.then(buf => {
 			const { sink, version: v } = file.vGetByteSink.replyType.unpack(buf);
-			return { version: fixInt(v), sink: makeSinkCaller(connector, sink) };
+			return { version: fixInt(v), sink: makeSinkCaller(caller, sink) };
 		});
 	}
 

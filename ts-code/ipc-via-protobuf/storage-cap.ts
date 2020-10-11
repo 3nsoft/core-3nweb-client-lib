@@ -16,8 +16,7 @@
 */
 
 import { ProtoType, Value, valOfOpt, toOptVal } from './protobuf-msg';
-import { ExposedObj, ExposedFn, ObjectsConnector } from './connector';
-import { join, resolve } from 'path';
+import { ExposedObj, ExposedFn, Caller, ExposedServices } from './connector';
 import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from './fs';
 
 type Storage = web3n.storage.Service;
@@ -25,34 +24,35 @@ type StorageType = web3n.storage.StorageType;
 type WritableFS = web3n.files.WritableFS;
 
 export function exposeStorageCAP(
-	cap: Storage, connector: ObjectsConnector
+	cap: Storage, expServices: ExposedServices
 ): ExposedObj<Storage> {
 	const wrap: ExposedObj<Storage> = {
-		getAppLocalFS: getAppLocalFS.wrapService(cap.getAppLocalFS, connector),
-		getAppSyncedFS: getAppSyncedFS.wrapService(cap.getAppSyncedFS, connector)
+		getAppLocalFS: getAppLocalFS.wrapService(cap.getAppLocalFS, expServices),
+		getAppSyncedFS: getAppSyncedFS.wrapService(
+			cap.getAppSyncedFS, expServices)
 	};
 	if (cap.getSysFS) {
-		wrap.getSysFS = getSysFS.wrapService(cap.getSysFS, connector);
+		wrap.getSysFS = getSysFS.wrapService(cap.getSysFS, expServices);
 	}
 	if (cap.getUserFS) {
-		wrap.getUserFS = getUserFS.wrapService(cap.getUserFS, connector);
+		wrap.getUserFS = getUserFS.wrapService(cap.getUserFS, expServices);
 	}
 	return wrap;
 }
 
 export function makeStorageCaller(
-	connector: ObjectsConnector, objPath: string[],
+	caller: Caller, objPath: string[],
 	sysFS: boolean, userFS: boolean
 ): Storage {
 	const storage: Storage = {
-		getAppLocalFS: getAppLocalFS.makeCaller(connector, objPath),
-		getAppSyncedFS: getAppSyncedFS.makeCaller(connector, objPath)
+		getAppLocalFS: getAppLocalFS.makeCaller(caller, objPath),
+		getAppSyncedFS: getAppSyncedFS.makeCaller(caller, objPath)
 	};
 	if (sysFS) {
-		storage.getSysFS = getSysFS.makeCaller(connector, objPath);
+		storage.getSysFS = getSysFS.makeCaller(caller, objPath);
 	}
 	if (userFS) {
-		storage.getUserFS = getUserFS.makeCaller(connector, objPath);
+		storage.getUserFS = getUserFS.makeCaller(caller, objPath);
 	}
 	return storage;
 }
@@ -71,13 +71,13 @@ namespace getAppLocalFS {
 	const requestType = storageType<Request>('GetAppLocalFSRequestBody');
 
 	export function wrapService(
-		fn: Storage['getAppLocalFS'], connector: ObjectsConnector
+		fn: Storage['getAppLocalFS'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
 			const promise = fn(appName)
 			.then(fs => {
-				const fsMsg = exposeFSService(fs, connector);
+				const fsMsg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(fsMsg);
 			});
 			return { promise };
@@ -85,14 +85,14 @@ namespace getAppLocalFS {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Storage['getAppLocalFS'] {
 		const path = objPath.concat('getAppLocalFS');
-		return appName => connector
+		return appName => caller
 		.startPromiseCall(path, requestType.pack({ appName }))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
-			return makeFSCaller(connector, fsMsg) as WritableFS;
+			return makeFSCaller(caller, fsMsg) as WritableFS;
 		});
 	}
 
@@ -109,13 +109,13 @@ namespace getAppSyncedFS {
 	const requestType = storageType<Request>('GetAppSyncedFSRequestBody');
 
 	export function wrapService(
-		fn: Storage['getAppSyncedFS'], connector: ObjectsConnector
+		fn: Storage['getAppSyncedFS'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
 			const promise = fn(appName)
 			.then(fs => {
-				const fsMsg = exposeFSService(fs, connector);
+				const fsMsg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(fsMsg);
 			});
 			return { promise };
@@ -123,14 +123,14 @@ namespace getAppSyncedFS {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Storage['getAppSyncedFS'] {
 		const path = objPath.concat('getAppSyncedFS');
-		return appName => connector
+		return appName => caller
 		.startPromiseCall(path, requestType.pack({ appName }))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
-			return makeFSCaller(connector, fsMsg) as WritableFS;
+			return makeFSCaller(caller, fsMsg) as WritableFS;
 		});
 	}
 
@@ -148,13 +148,13 @@ namespace getSysFS {
 	const requestType = storageType<Request>('GetSysFSRequestBody');
 
 	export function wrapService(
-		fn: NonNullable<Storage['getSysFS']>, connector: ObjectsConnector
+		fn: NonNullable<Storage['getSysFS']>, expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { type, path } = requestType.unpack(buf);
 			const promise = fn(type, valOfOpt(path))
 			.then(item => {
-				const msg = fsItem.exposeFSItem(connector, item);
+				const msg = fsItem.exposeFSItem(expServices, item);
 				return fsItem.msgType.pack(msg);
 			});
 			return { promise };
@@ -162,16 +162,16 @@ namespace getSysFS {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Storage['getSysFS'] {
 		const ipcPath = objPath.concat('getSysFS');
-		return (type, path) => connector
+		return (type, path) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			type, path: toOptVal(path)
 		}))
 		.then(buf => {
 			const msg = fsItem.msgType.unpack(buf);
-			return fsItem.fsItemFromMsg(connector, msg);
+			return fsItem.fsItemFromMsg(caller, msg);
 		});
 	}
 
@@ -189,13 +189,13 @@ namespace getUserFS {
 	const requestType = storageType<Request>('GetUserFSRequestBody');
 
 	export function wrapService(
-		fn: NonNullable<Storage['getUserFS']>, connector: ObjectsConnector
+		fn: NonNullable<Storage['getUserFS']>, expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { type, path } = requestType.unpack(buf);
 			const promise = fn(type, valOfOpt(path))
 			.then(item => {
-				const msg = fsItem.exposeFSItem(connector, item);
+				const msg = fsItem.exposeFSItem(expServices, item);
 				return fsItem.msgType.pack(msg);
 			});
 			return { promise };
@@ -203,16 +203,16 @@ namespace getUserFS {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Storage['getUserFS'] {
 		const ipcPath = objPath.concat('getUserFS');
-		return (type, path) => connector
+		return (type, path) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			type, path: toOptVal(path)
 		}))
 		.then(buf => {
 			const msg = fsItem.msgType.unpack(buf);
-			return fsItem.fsItemFromMsg(connector, msg);
+			return fsItem.fsItemFromMsg(caller, msg);
 		});
 	}
 

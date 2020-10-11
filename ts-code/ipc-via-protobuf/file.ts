@@ -16,8 +16,7 @@
 */
 
 import { ObjectReference, ProtoType, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
-import { ObjectsConnector, checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj } from "./connector";
-import { join, resolve } from "path";
+import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
 import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
@@ -36,7 +35,7 @@ type UnsyncedEvent = web3n.files.UnsyncedEvent;
 type ConflictEvent = web3n.files.ConflictEvent;
 
 export function makeFileCaller(
-	connector: ObjectsConnector, fileMsg: FileMsg
+	caller: Caller, fileMsg: FileMsg
 ): File {
 	checkRefObjTypeIs('FileImpl', fileMsg.impl);
 	const objPath = fileMsg.impl.path;
@@ -44,51 +43,51 @@ export function makeFileCaller(
 		writable: fileMsg.writable,
 		isNew: fileMsg.isNew,
 		name: fileMsg.name,
-		getByteSource: getByteSource.makeCaller(connector, objPath),
-		getXAttr: getXAttr.makeCaller(connector, objPath),
-		listXAttrs: listXAttrs.makeCaller(connector, objPath),
-		readBytes: readBytes.makeCaller(connector, objPath),
-		readJSON: readJSON.makeCaller(connector, objPath),
-		readTxt: readTxt.makeCaller(connector, objPath),
-		watch: watch.makeCaller(connector, objPath),
-		stat: stat.makeCaller(connector, objPath)
+		getByteSource: getByteSource.makeCaller(caller, objPath),
+		getXAttr: getXAttr.makeCaller(caller, objPath),
+		listXAttrs: listXAttrs.makeCaller(caller, objPath),
+		readBytes: readBytes.makeCaller(caller, objPath),
+		readJSON: readJSON.makeCaller(caller, objPath),
+		readTxt: readTxt.makeCaller(caller, objPath),
+		watch: watch.makeCaller(caller, objPath),
+		stat: stat.makeCaller(caller, objPath)
 	} as WritableFile;
 	if (file.writable) {
-		file.copy = copy.makeCaller(connector, objPath);
-		file.getByteSink = getByteSink.makeCaller(connector, objPath);
-		file.updateXAttrs = updateXAttrs.makeCaller(connector, objPath);
-		file.writeBytes = writeBytes.makeCaller(connector, objPath);
-		file.writeJSON = writeJSON.makeCaller(connector, objPath);
-		file.writeTxt = writeTxt.makeCaller(connector, objPath);
+		file.copy = copy.makeCaller(caller, objPath);
+		file.getByteSink = getByteSink.makeCaller(caller, objPath);
+		file.updateXAttrs = updateXAttrs.makeCaller(caller, objPath);
+		file.writeBytes = writeBytes.makeCaller(caller, objPath);
+		file.writeJSON = writeJSON.makeCaller(caller, objPath);
+		file.writeTxt = writeTxt.makeCaller(caller, objPath);
 	}
 	if (fileMsg.isVersioned) {
 		const vPath = objPath.concat('v');
 		file.v = {
-			getByteSource: vGetByteSource.makeCaller(connector, vPath),
-			getXAttr: vGetXAttr.makeCaller(connector, vPath),
-			listXAttrs: vListXAttrs.makeCaller(connector, vPath),
-			readBytes: vReadBytes.makeCaller(connector, vPath),
-			readJSON: vReadJSON.makeCaller(connector, vPath),
-			readTxt: vReadTxt.makeCaller(connector, vPath),
+			getByteSource: vGetByteSource.makeCaller(caller, vPath),
+			getXAttr: vGetXAttr.makeCaller(caller, vPath),
+			listXAttrs: vListXAttrs.makeCaller(caller, vPath),
+			readBytes: vReadBytes.makeCaller(caller, vPath),
+			readJSON: vReadJSON.makeCaller(caller, vPath),
+			readTxt: vReadTxt.makeCaller(caller, vPath),
 		} as WritableFileVersionedAPI;
 		if (file.writable) {
-			file.v.copy = vCopy.makeCaller(connector, vPath);
-			file.v.getByteSink = vGetByteSink.makeCaller(connector, vPath);
-			file.v.updateXAttrs = vUpdateXAttrs.makeCaller(connector, vPath);
-			file.v.writeBytes = vWriteBytes.makeCaller(connector, vPath);
-			file.v.writeJSON = vWriteJSON.makeCaller(connector, vPath);
-			file.v.writeTxt = vWriteTxt.makeCaller(connector, vPath);
+			file.v.copy = vCopy.makeCaller(caller, vPath);
+			file.v.getByteSink = vGetByteSink.makeCaller(caller, vPath);
+			file.v.updateXAttrs = vUpdateXAttrs.makeCaller(caller, vPath);
+			file.v.writeBytes = vWriteBytes.makeCaller(caller, vPath);
+			file.v.writeJSON = vWriteJSON.makeCaller(caller, vPath);
+			file.v.writeTxt = vWriteTxt.makeCaller(caller, vPath);
 		}
 	}
-	connector.registerClientDrop(file, fileMsg.impl);
+	caller.registerClientDrop(file, fileMsg.impl);
 	return file;
 }
 
 export function exposeFileService(
-	file: File, connector: ObjectsConnector
+	file: File, expServices: ExposedServices
 ): FileMsg {
 	const implExp = {
-		getByteSource: getByteSource.wrapService(file.getByteSource, connector),
+		getByteSource: getByteSource.wrapService(file.getByteSource, expServices),
 		getXAttr: getXAttr.wrapService(file.getXAttr),
 		listXAttrs: listXAttrs.wrapService(file.listXAttrs),
 		readBytes: readBytes.wrapService(file.readBytes),
@@ -99,9 +98,9 @@ export function exposeFileService(
 	} as ExposedObj<WritableFile>;
 	if (file.writable) {
 		implExp.copy = copy.wrapService(
-			(file as WritableFile).copy, connector);
+			(file as WritableFile).copy, expServices);
 		implExp.getByteSink = getByteSink.wrapService(
-			(file as WritableFile).getByteSink, connector);
+			(file as WritableFile).getByteSink, expServices);
 		implExp.updateXAttrs = updateXAttrs.wrapService(
 			(file as WritableFile).updateXAttrs);
 		implExp.writeBytes = writeBytes.wrapService(
@@ -113,7 +112,7 @@ export function exposeFileService(
 	if (file.v) {
 		implExp.v = {
 			getByteSource: vGetByteSource.wrapService(
-				file.v.getByteSource, connector),
+				file.v.getByteSource, expServices),
 			getXAttr: vGetXAttr.wrapService(file.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(file.v.listXAttrs),
 			readBytes: vReadBytes.wrapService(file.v.readBytes),
@@ -122,9 +121,9 @@ export function exposeFileService(
 		} as ExposedObj<WritableFileVersionedAPI>;
 		if (file.writable) {
 			implExp.copy = vCopy.wrapService(
-				(file.v as WritableFileVersionedAPI).copy, connector);
+				(file.v as WritableFileVersionedAPI).copy, expServices);
 			implExp.getByteSink = vGetByteSink.wrapService(
-				(file.v as WritableFileVersionedAPI).getByteSink, connector);
+				(file.v as WritableFileVersionedAPI).getByteSink, expServices);
 			implExp.updateXAttrs = vUpdateXAttrs.wrapService(
 				(file.v as WritableFileVersionedAPI).updateXAttrs);
 			implExp.writeBytes = vWriteBytes.wrapService(
@@ -135,8 +134,7 @@ export function exposeFileService(
 				(file.v as WritableFileVersionedAPI).writeTxt);
 		}
 	}
-	const impl = connector.exposedObjs.exposeDroppableService(
-		'FileImpl', implExp, file);
+	const impl = expServices.exposeDroppableService('FileImpl', implExp, file);
 	const fileMsg: FileMsg = {
 		impl,
 		isNew: file.isNew,
@@ -216,10 +214,10 @@ namespace stat {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['stat'] {
 		const path = objPath.concat('stat');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackStats);
 	}
@@ -276,10 +274,10 @@ namespace getXAttr {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['getXAttr'] {
 		const path = objPath.concat('getXAttr');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackXAttrValue);
 	}
@@ -299,10 +297,10 @@ namespace listXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['listXAttrs'] {
 		const path = objPath.concat('listXAttrs');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
 	}
@@ -344,10 +342,10 @@ export namespace readBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['readBytes'] {
 		const path = objPath.concat('readBytes');
-		return (start, end) => connector
+		return (start, end) => caller
 		.startPromiseCall(path, requestType.pack({
 			start: toOptVal(start), end: toOptVal(end)
 		}))
@@ -369,10 +367,10 @@ namespace readTxt {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['readTxt'] {
 		const path = objPath.concat('readTxt');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => (buf ? buf.toString('utf8') : ''));
 	}
@@ -406,10 +404,10 @@ namespace readJSON {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['readJSON'] {
 		const path = objPath.concat('readJSON');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackJSON);
 	}
@@ -421,12 +419,12 @@ Object.freeze(readJSON);
 namespace getByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFile['getByteSource'], connector: ObjectsConnector
+		fn: ReadonlyFile['getByteSource'], expServices: ExposedServices
 	): ExposedFn {
 		return () => {
 			const promise = fn()
 			.then(src => {
-				const ref = exposeSrcService(src, connector);
+				const ref = exposeSrcService(src, expServices);
 				return objRefType.pack(ref);
 			});
 			return { promise };
@@ -434,14 +432,14 @@ namespace getByteSource {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['getByteSource'] {
 		const path = objPath.concat('getByteSource');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const ref = objRefType.unpack(buf);
-			return makeSrcCaller(connector, ref);
+			return makeSrcCaller(caller, ref);
 		});
 	}
 
@@ -502,12 +500,12 @@ namespace watch {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFile['watch'] {
 		const path = objPath.concat('watch');
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
-			const unsub = connector.startObservableCall(path, undefined, s);
+			const unsub = caller.startObservableCall(path, undefined, s);
 			s.subscribe({
 				next: buf => {
 					if (obs.next) {
@@ -562,10 +560,10 @@ export namespace vGetXAttr {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['getXAttr'] {
 		const path = objPath.concat('getXAttr');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const { json, str, bytes, version: v } = replyType.unpack(buf);
@@ -604,10 +602,10 @@ export namespace vListXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['listXAttrs'] {
 		const path = objPath.concat('listXAttrs');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const { xaNames, version: v } = replyType.unpack(buf);
@@ -662,10 +660,10 @@ export namespace vReadBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readBytes'] {
 		const path = objPath.concat('readBytes');
-		return (start, end) => connector
+		return (start, end) => caller
 		.startPromiseCall(path, requestType.pack({
 			start: toOptVal(start), end: toOptVal(end)
 		}))
@@ -696,10 +694,10 @@ export namespace vReadTxt {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readTxt'] {
 		const path = objPath.concat('readTxt');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const { version: v, txt } = replyType.unpack(buf);
@@ -733,10 +731,10 @@ export namespace vReadJSON {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readJSON'] {
 		const path = objPath.concat('readJSON');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const { version: v, json } = replyType.unpack(buf);
@@ -763,12 +761,13 @@ export namespace vGetByteSource {
 		'VersionedGetByteSourceReplyBody');
 
 	export function wrapService(
-		fn: ReadonlyFileVersionedAPI['getByteSource'], connector: ObjectsConnector
+		fn: ReadonlyFileVersionedAPI['getByteSource'],
+		expServices: ExposedServices
 	): ExposedFn {
 		return () => {
 			const promise = fn()
 			.then(({ version, src }) => {
-				const ref = exposeSrcService(src, connector);
+				const ref = exposeSrcService(src, expServices);
 				return replyType.pack({ version, src: ref });
 			});
 			return { promise };
@@ -776,14 +775,14 @@ export namespace vGetByteSource {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['getByteSource'] {
 		const path = objPath.concat('getByteSource');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const { version: v, src: ref } = replyType.unpack(buf);
-			return { version: fixInt(v), src: makeSrcCaller(connector, ref) };
+			return { version: fixInt(v), src: makeSrcCaller(caller, ref) };
 		});
 	}
 
@@ -868,11 +867,11 @@ export namespace updateXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['updateXAttrs'] {
 		const path = objPath.concat('updateXAttrs');
 		return async changes => {
-			await connector.startPromiseCall(path, packXAttrsChanges(changes));
+			await caller.startPromiseCall(path, packXAttrsChanges(changes));
 		};
 	}
 
@@ -897,10 +896,10 @@ namespace writeBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['writeBytes'] {
 		const path = objPath.concat('writeBytes');
-		return bytes => connector
+		return bytes => caller
 		.startPromiseCall(path, requestType.pack({
 			bytes: bytes as Buffer
 		})) as Promise<void>;
@@ -927,10 +926,10 @@ namespace writeTxt {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['writeTxt'] {
 		const path = objPath.concat('writeTxt');
-		return txt => connector
+		return txt => caller
 		.startPromiseCall(path, requestType.pack({ txt })) as Promise<void>;
 	}
 
@@ -955,10 +954,10 @@ namespace writeJSON {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['writeJSON'] {
 		const path = objPath.concat('writeJSON');
-		return json => connector
+		return json => caller
 		.startPromiseCall(path, requestType.pack({
 			json: JSON.stringify(json)
 		})) as Promise<void>;
@@ -977,13 +976,13 @@ namespace getByteSink {
 	const requestType = makeFileType<Request>('GetByteSinkRequestBody');
 
 	export function wrapService(
-		fn: WritableFile['getByteSink'], connector: ObjectsConnector
+		fn: WritableFile['getByteSink'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { truncateFile } = requestType.unpack(buf);
 			const promise = fn(valOfOpt(truncateFile))
 			.then(sink => {
-				const ref = exposeSinkService(sink, connector);
+				const ref = exposeSinkService(sink, expServices);
 				return objRefType.pack(ref);
 			});
 			return { promise };
@@ -991,16 +990,16 @@ namespace getByteSink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['getByteSink'] {
 		const path = objPath.concat('getByteSink');
-		return truncateFile => connector
+		return truncateFile => caller
 		.startPromiseCall(path, requestType.pack({
 			truncateFile: toOptVal(truncateFile)
 		}))
 		.then(buf => {
 			const ref = objRefType.unpack(buf);
-			return makeSinkCaller(connector, ref);
+			return makeSinkCaller(caller, ref);
 		});
 	}
 
@@ -1017,23 +1016,23 @@ namespace copy {
 	export const requestType = makeFileType<Request>('CopyRequestBody');
 
 	export function wrapService(
-		fn: WritableFile['copy'], connector: ObjectsConnector
+		fn: WritableFile['copy'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { file: fRef } = requestType.unpack(buf);
-			const file = connector.exposedObjs.getOriginalObj<File>(fRef);
+			const file = expServices.getOriginalObj<File>(fRef);
 			const promise = fn(file);
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFile['copy'] {
 		const path = objPath.concat('copy');
 		return async file => {
-			const fRef = connector.srvRefOf(file);
-			await connector
+			const fRef = caller.srvRefOf(file);
+			await caller
 			.startPromiseCall(path, requestType.pack({ file: fRef }));
 		}
 	}
@@ -1044,11 +1043,11 @@ Object.freeze(copy);
 namespace vCopy {
 
 	export function wrapService(
-		fn: WritableFileVersionedAPI['copy'], connector: ObjectsConnector
+		fn: WritableFileVersionedAPI['copy'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { file: fRef } = copy.requestType.unpack(buf);
-			const file = connector.exposedObjs.getOriginalObj<File>(fRef);
+			const file = expServices.getOriginalObj<File>(fRef);
 			const promise = fn(file)
 			.then(packInt);
 			return { promise };
@@ -1056,12 +1055,12 @@ namespace vCopy {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['copy'] {
 		const path = objPath.concat('copy');
 		return file => {
-			const fRef = connector.srvRefOf(file);
-			return connector
+			const fRef = caller.srvRefOf(file);
+			return caller
 			.startPromiseCall(path, copy.requestType.pack({ file: fRef }))
 			.then(unpackInt);
 		}
@@ -1085,12 +1084,12 @@ namespace vUpdateXAttrs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['updateXAttrs'] {
 		const path = objPath.concat('updateXAttrs');
 		return changes => {
 			const reqBody = updateXAttrs.packXAttrsChanges(changes);
-			return connector.startPromiseCall(path, reqBody)
+			return caller.startPromiseCall(path, reqBody)
 			.then(unpackInt);
 		};
 	}
@@ -1119,10 +1118,10 @@ namespace vWriteBytes {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeBytes'] {
 		const path = objPath.concat('writeBytes');
-		return bytes => connector
+		return bytes => caller
 		.startPromiseCall(path, requestType.pack({ bytes: bytes as Buffer }))
 		.then(unpackInt);
 	}
@@ -1151,10 +1150,10 @@ namespace vWriteTxt {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeTxt'] {
 		const path = objPath.concat('writeTxt');
-		return txt => connector
+		return txt => caller
 		.startPromiseCall(path, requestType.pack({ txt }))
 		.then(unpackInt);
 	}
@@ -1183,10 +1182,10 @@ namespace vWriteJSON {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeJSON'] {
 		const path = objPath.concat('writeJSON');
-		return json => connector
+		return json => caller
 		.startPromiseCall(path, requestType.pack({ json: JSON.stringify(json) }))
 		.then(unpackInt);
 	}
@@ -1213,13 +1212,13 @@ export namespace vGetByteSink {
 		'VersionedGetByteSinkReplyBody');
 
 	export function wrapService(
-		fn: WritableFileVersionedAPI['getByteSink'], connector: ObjectsConnector
+		fn: WritableFileVersionedAPI['getByteSink'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { truncateFile, currentVersion } = requestType.unpack(buf);
 			const promise = fn(valOfOpt(truncateFile), valOfOptInt(currentVersion))
 			.then(({ sink, version }) => {
-				const ref = exposeSinkService(sink, connector);
+				const ref = exposeSinkService(sink, expServices);
 				return replyType.pack({ version, sink: ref });
 			});
 			return { promise };
@@ -1227,17 +1226,17 @@ export namespace vGetByteSink {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['getByteSink'] {
 		const path = objPath.concat('getByteSink');
-		return (truncateFile, currentVersion) => connector
+		return (truncateFile, currentVersion) => caller
 		.startPromiseCall(path, requestType.pack({
 			truncateFile: toOptVal(truncateFile),
 			currentVersion: toOptVal(currentVersion)
 		}))
 		.then(buf => {
 			const { version: v, sink: ref} = replyType.unpack(buf);
-			return { version: fixInt(v), sink: makeSinkCaller(connector, ref) };
+			return { version: fixInt(v), sink: makeSinkCaller(caller, ref) };
 		});
 	}
 

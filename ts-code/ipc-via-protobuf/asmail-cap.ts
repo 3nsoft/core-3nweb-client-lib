@@ -16,8 +16,7 @@
 */
 
 import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt } from './protobuf-msg';
-import { ExposedObj, ExposedFn, ObjectsConnector, makeIPCException, EnvelopeBody } from './connector';
-import { join, resolve } from 'path';
+import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from './fs';
@@ -32,7 +31,7 @@ type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 
 export function exposeASMailCAP(
-	cap: ASMailService, connector: ObjectsConnector
+	cap: ASMailService, expServices: ExposedServices
 ): ExposedObj<ASMailService> {
 	const out = cap.delivery;
 	const box = cap.inbox;
@@ -49,36 +48,36 @@ export function exposeASMailCAP(
 			rmMsg: rmMsg.wrapService(out.rmMsg)
 		},
 		inbox: {
-			getMsg: getMsg.wrapService(box.getMsg, connector),
+			getMsg: getMsg.wrapService(box.getMsg, expServices),
 			listMsgs: inboxListMsgs.wrapService(box.listMsgs),
 			removeMsg: removeMsg.wrapService(box.removeMsg),
-			subscribe: inboxSubscribe.wrapService(box.subscribe, connector)
+			subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
 		},
 	};
 }
 
 export function makeASMailCaller(
-	connector: ObjectsConnector, objPath: string[]
+	caller: Caller, objPath: string[]
 ): ASMailService {
 	const delivPath = objPath.concat('delivery');
 	const inboxPath = objPath.concat('inbox');
 	return {
-		getUserId: getUserId.makeCaller(connector, objPath),
+		getUserId: getUserId.makeCaller(caller, objPath),
 		delivery: {
-			addMsg: addMsg.makeCaller(connector, delivPath),
-			currentState: currentState.makeCaller(connector, delivPath),
-			listMsgs: delivListMsgs.makeCaller(connector, delivPath),
+			addMsg: addMsg.makeCaller(caller, delivPath),
+			currentState: currentState.makeCaller(caller, delivPath),
+			listMsgs: delivListMsgs.makeCaller(caller, delivPath),
 			observeAllDeliveries: observeAllDeliveries.makeCaller(
-				connector, delivPath),
-			observeDelivery: observeDelivery.makeCaller(connector, delivPath),
-			preFlight: preFlight.makeCaller(connector, delivPath),
-			rmMsg: rmMsg.makeCaller(connector, delivPath)
+				caller, delivPath),
+			observeDelivery: observeDelivery.makeCaller(caller, delivPath),
+			preFlight: preFlight.makeCaller(caller, delivPath),
+			rmMsg: rmMsg.makeCaller(caller, delivPath)
 		},
 		inbox: {
-			getMsg: getMsg.makeCaller(connector, inboxPath),
-			listMsgs: inboxListMsgs.makeCaller(connector, inboxPath),
-			removeMsg: removeMsg.makeCaller(connector, inboxPath),
-			subscribe: inboxSubscribe.makeCaller(connector, inboxPath)
+			getMsg: getMsg.makeCaller(caller, inboxPath),
+			listMsgs: inboxListMsgs.makeCaller(caller, inboxPath),
+			removeMsg: removeMsg.makeCaller(caller, inboxPath),
+			subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
 		}
 	};
 }
@@ -99,10 +98,10 @@ namespace getUserId {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): ASMailService['getUserId'] {
 		const path = objPath.concat('getUserId');
-		return () => connector.startPromiseCall(path, undefined)
+		return () => caller.startPromiseCall(path, undefined)
 		.then(buf => {
 			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
 			return buf.toString('utf8');
@@ -143,12 +142,12 @@ namespace inboxListMsgs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Inbox['listMsgs'] {
 		const path = objPath.concat('listMsgs');
 		return fromTS => {
 			const req: Request = (fromTS ? { fromTS: toVal(fromTS) } : {});
-			return connector
+			return caller
 			.startPromiseCall(path, requestType.pack(req))
 			.then(unpackMsgInfos);
 		};
@@ -175,11 +174,11 @@ namespace removeMsg {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Inbox['removeMsg'] {
 		const path = objPath.concat('removeMsg');
 		return async msgId => {
-			await connector.startPromiseCall(path, requestType.pack({ msgId }));
+			await caller.startPromiseCall(path, requestType.pack({ msgId }));
 		};
 	}
 
@@ -196,23 +195,23 @@ namespace getMsg {
 	const requestType = asmailType<Request>('GetMsgRequestBody');
 
 	export function wrapService(
-		fn: Inbox['getMsg'], connector: ObjectsConnector
+		fn: Inbox['getMsg'], expServices: ExposedServices
 	): ExposedFn {
 		return (reqBody: Buffer) => {
 			const { msgId } = requestType.unpack(reqBody);
 			const promise = fn(msgId)
-			.then(msg => packIncomingMessage(msg, connector));
+			.then(msg => packIncomingMessage(msg, expServices));
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Inbox['getMsg'] {
 		const path = objPath.concat('getMsg');
-		return msgId => connector
+		return msgId => caller
 		.startPromiseCall(path, requestType.pack({ msgId }))
-		.then(buf => unpackIncomingMessage(buf, connector));
+		.then(buf => unpackIncomingMessage(buf, caller));
 	}
 
 }
@@ -236,7 +235,7 @@ const incomingMessageType = asmailType<IncomingMessageMsg>(
 	'IncomingMessageMsg');
 
 function packIncomingMessage(
-	m: IncomingMessage, connector: ObjectsConnector
+	m: IncomingMessage, expServices: ExposedServices
 ): EnvelopeBody {
 	const ipcMsg: IncomingMessageMsg = {
 		msgType: m.msgType,
@@ -251,13 +250,13 @@ function packIncomingMessage(
 		carbonCopy: m.carbonCopy,
 		recipients: m.recipients,
 		attachments: (m.attachments ?
-			exposeFSService(m.attachments, connector) : undefined)
+			exposeFSService(m.attachments, expServices) : undefined)
 	};
 	return incomingMessageType.pack(ipcMsg);
 }
 
 function unpackIncomingMessage(
-	buf: EnvelopeBody, connector: ObjectsConnector
+	buf: EnvelopeBody, caller: Caller
 ): IncomingMessage {
 	const ipcMsg = incomingMessageType.unpack(buf);
 	const msg: IncomingMessage = {
@@ -273,7 +272,7 @@ function unpackIncomingMessage(
 		carbonCopy: ipcMsg.carbonCopy,
 		recipients: ipcMsg.recipients,
 		attachments: (ipcMsg.attachments ?
-			makeFSCaller(connector, ipcMsg.attachments) : undefined)
+			makeFSCaller(caller, ipcMsg.attachments) : undefined)
 	};
 	return msg;
 }
@@ -288,13 +287,13 @@ namespace inboxSubscribe {
 	const requestType = asmailType<Request>('SubscribeStartCallBody');
 
 	export function wrapService(
-		fn: Inbox['subscribe'], connector: ObjectsConnector
+		fn: Inbox['subscribe'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
 			const { event } = requestType.unpack(buf);
 			const s = new Subject<IncomingMessage>();
 			const obs = s.asObservable().pipe(
-				map(msg => packIncomingMessage(msg, connector))
+				map(msg => packIncomingMessage(msg, expServices))
 			);
 			const onCancel = fn(event as any, s);
 			return { obs, onCancel };
@@ -302,17 +301,17 @@ namespace inboxSubscribe {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Inbox['subscribe'] {
 		const path = objPath.concat('subscribe');
 		return (event, obs) => {
 			const s = new Subject<EnvelopeBody>();
-			const unsub = connector.startObservableCall(
+			const unsub = caller.startObservableCall(
 				path, requestType.pack({ event }), s);
 			s.subscribe({
 				next: buf => {
 					if (obs.next) {
-						obs.next(unpackIncomingMessage(buf, connector));
+						obs.next(unpackIncomingMessage(buf, caller));
 					}
 				},
 				complete: obs.complete,
@@ -344,10 +343,10 @@ namespace preFlight {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['preFlight'] {
 		const path = objPath.concat('preFlight');
-		return toAddress => connector
+		return toAddress => caller
 		.startPromiseCall(path, requestType.pack({ toAddress }))
 		.then(unpackInt);
 	}
@@ -441,7 +440,7 @@ namespace addMsg {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['addMsg'] {
 		const path = objPath.concat('addMsg');
 		return async (recipients, msg, id, opts) => {
@@ -450,7 +449,7 @@ namespace addMsg {
 				req.sendImmeditely = toOptVal(opts.sendImmeditely);
 				req.localMeta = toOptVal(opts.localMeta);
 			}
-			await connector.startPromiseCall(path, requestType.pack(req));
+			await caller.startPromiseCall(path, requestType.pack(req));
 		}
 	}
 
@@ -479,10 +478,10 @@ namespace delivListMsgs {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['listMsgs'] {
 		const path = objPath.concat('listMsgs');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
 			const msgs = fixArray(replyType.unpack(buf).msgs);
@@ -579,10 +578,10 @@ namespace currentState {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['currentState'] {
 		const path = objPath.concat('currentState');
-		return id => connector
+		return id => caller
 		.startPromiseCall(path, requestType.pack({ id }))
 		.then(buf => {
 			if (buf) {
@@ -614,10 +613,10 @@ namespace rmMsg {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['rmMsg'] {
 		const path = objPath.concat('rmMsg');
-		return (id, cancelSending) => connector
+		return (id, cancelSending) => caller
 		.startPromiseCall(path, requestType.pack({
 			id, cancelSending: toOptVal(cancelSending)
 		})) as Promise<void>;
@@ -653,12 +652,12 @@ namespace observeAllDeliveries {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['observeAllDeliveries'] {
 		const path = objPath.concat('observeAllDeliveries');
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
-			const unsub = connector.startObservableCall(path, undefined, s);
+			const unsub = caller.startObservableCall(path, undefined, s);
 			s.subscribe({
 				next: buf => {
 					if (obs.next) {
@@ -701,12 +700,12 @@ namespace observeDelivery {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): Delivery['observeDelivery'] {
 		const path = objPath.concat('observeDelivery');
 		return (id, obs) => {
 			const s = new Subject<EnvelopeBody>();
-			const unsub = connector.startObservableCall(
+			const unsub = caller.startObservableCall(
 				path, requestType.pack({ id }), s);
 			s.subscribe({
 				next: buf => {

@@ -15,20 +15,20 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectsConnector, ExposedObj, W3N_NAME } from "../ipc-via-protobuf/connector";
+import { ExposedObj, W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
 import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../ipc-via-protobuf/startup-cap";
 
 type W3N = web3n.startup.W3N;
 
-export function exposeStartupW3N(coreSide: ObjectsConnector, w3n: W3N): void {
+export function exposeStartupW3N(coreSide: ExposedServices, w3n: W3N): void {
 	const expW3N: ExposedObj<W3N> = {
 		signIn: wrapSignInCAP(w3n.signIn),
 		signUp: wrapSignUpCAP(w3n.signUp)
 	};
-	coreSide.exposedObjs.exposeW3NService(expW3N);
+	coreSide.exposeW3NService(expW3N);
 }
 
-export function makeStartupW3Nclient(clientSide: ObjectsConnector): W3N {
+export function makeStartupW3Nclient(clientSide: Caller): W3N {
 	const objPath = [ W3N_NAME ];
 	return {
 		signIn: makeSignInCaller(clientSide, objPath.concat('signIn')),

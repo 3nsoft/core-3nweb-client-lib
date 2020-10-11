@@ -15,8 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectsConnector, ExposedObj, ExposedFn, EnvelopeBody } from "./connector";
-import { join, resolve } from "path";
+import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
 import { ProtoType, strArrValType, boolValType, fixArray, packInt, unpackInt, toVal, Value, valOfOpt } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
@@ -37,15 +36,15 @@ export function wrapSignInCAP(cap: SignInService): ExposedObj<SignInService> {
 }
 
 export function makeSignInCaller(
-	connector: ObjectsConnector, objPath: string[]
+	caller: Caller, objPath: string[]
 ): SignInService {
 	return {
 		completeLoginAndLocalSetup: completeLoginAndLocalSetup.makeCaller(
-			connector, objPath),
-		getUsersOnDisk: getUsersOnDisk.makeCaller(connector, objPath),
+			caller, objPath),
+		getUsersOnDisk: getUsersOnDisk.makeCaller(caller, objPath),
 		startLoginToRemoteStorage: startLoginToRemoteStorage.makeCaller(
-			connector, objPath),
-		useExistingStorage: useExistingStorage.makeCaller(connector, objPath)
+			caller, objPath),
+		useExistingStorage: useExistingStorage.makeCaller(caller, objPath)
 	};
 }
 
@@ -60,14 +59,14 @@ export function wrapSignUpCAP(cap: SignUpService): ExposedObj<SignUpService> {
 }
 
 export function makeSignUpCaller(
-	connector: ObjectsConnector, objPath: string[]
+	caller: Caller, objPath: string[]
 ): SignUpService {
 	return {
 		getAvailableAddresses: getAvailableAddresses.makeCaller(
-			connector, objPath),
-		addUser: addUser.makeCaller(connector, objPath),
-		createUserParams: createUserParams.makeCaller(connector, objPath),
-		isActivated: isActivated.makeCaller(connector, objPath)
+			caller, objPath),
+		addUser: addUser.makeCaller(caller, objPath),
+		createUserParams: createUserParams.makeCaller(caller, objPath),
+		isActivated: isActivated.makeCaller(caller, objPath)
 	};
 }
 
@@ -96,10 +95,10 @@ namespace getAvailableAddresses {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignUpService['getAvailableAddresses'] {
 		const path = objPath.concat('getAvailableAddresses');
-		return name => connector
+		return name => caller
 		.startPromiseCall(path, requestType.pack({ name }))
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
 	}
@@ -126,10 +125,10 @@ namespace addUser {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignUpService['addUser'] {
 		const path = objPath.concat('addUser');
-		return userId => connector
+		return userId => caller
 		.startPromiseCall(path, requestType.pack({ userId }))
 		.then(buf => boolValType.unpack(buf).value);
 	}
@@ -156,10 +155,10 @@ namespace isActivated {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignUpService['isActivated'] {
 		const path = objPath.concat('isActivated');
-		return userId => connector
+		return userId => caller
 		.startPromiseCall(path, requestType.pack({ userId }))
 		.then(buf => boolValType.unpack(buf).value);
 	}
@@ -192,7 +191,7 @@ namespace createUserParams {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignUpService['createUserParams'] {
 		const path = objPath.concat('createUserParams');
 		return (pass, progressCB) => {
@@ -203,7 +202,7 @@ namespace createUserParams {
 				complete: () => completion.resolve(),
 				error: err => completion.reject(err)
 			});
-			connector.startObservableCall(path, reqWithPassType.pack({ pass }), s);
+			caller.startObservableCall(path, reqWithPassType.pack({ pass }), s);
 			return completion.promise;
 		}
 	}
@@ -223,10 +222,10 @@ namespace getUsersOnDisk {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignInService['getUsersOnDisk'] {
 		const path = objPath.concat('getUsersOnDisk');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
 	}
@@ -256,10 +255,10 @@ namespace startLoginToRemoteStorage {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignInService['startLoginToRemoteStorage'] {
 		const path = objPath.concat('startLoginToRemoteStorage');
-		return address => connector
+		return address => caller
 		.startPromiseCall(path, requestType.pack({ address }))
 		.then(buf => boolValType.unpack(buf).value);
 	}
@@ -298,7 +297,7 @@ namespace completeLoginAndLocalSetup {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignInService['completeLoginAndLocalSetup'] {
 		const path = objPath.concat('completeLoginAndLocalSetup');
 		return (pass, progressCB) => {
@@ -316,7 +315,7 @@ namespace completeLoginAndLocalSetup {
 				complete: () => completion.resolve(),
 				error: err => completion.reject(err)
 			});
-			connector.startObservableCall(path, reqWithPassType.pack({ pass }), s);
+			caller.startObservableCall(path, reqWithPassType.pack({ pass }), s);
 			return completion.promise;
 		}
 	}
@@ -355,7 +354,7 @@ namespace useExistingStorage {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): SignInService['useExistingStorage'] {
 		const path = objPath.concat('useExistingStorage');
 		return (address, pass, progressCB) => {
@@ -373,7 +372,7 @@ namespace useExistingStorage {
 				complete: () => completion.resolve(),
 				error: err => completion.reject(err)
 			});
-			connector.startObservableCall(
+			caller.startObservableCall(
 				path, requestType.pack({ address, pass }), s);
 			return completion.promise;
 		}

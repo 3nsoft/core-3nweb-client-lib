@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedFn, ObjectsConnector } from "../ipc-via-protobuf/connector";
+import { ExposedFn, ObjectsConnector, Caller } from "../ipc-via-protobuf/connector";
 import { join, resolve } from "path";
 import { ProtoType, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
 
@@ -42,15 +42,13 @@ export function exposeLogger(fn: Logger): ExposedFn {
 	};
 }
 
-export function makeLogCaller(
-	connector: ObjectsConnector, path: string[]
-): Logger {
+export function makeLogCaller(caller: Caller, path: string[]): Logger {
 	return (type, msg, err) => {
 		const req: LogRequest = { logType: type, msg };
 		if (err) {
 			req.err = errToMsg(err);
 		}
-		return connector.startPromiseCall(
+		return caller.startPromiseCall(
 			path, logReqType.pack(req)) as Promise<void>;
 	}
 }

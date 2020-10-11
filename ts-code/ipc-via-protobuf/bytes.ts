@@ -16,8 +16,7 @@
 */
 
 import { ProtoType, ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
-import { ExposedFn, ObjectsConnector, ExposedObj, checkRefObjTypeIs } from './connector';
-import { join, resolve } from 'path';
+import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from './connector';
 
 type FileByteSink = web3n.files.FileByteSink;
 type FileLayout = web3n.files.FileLayout;
@@ -25,23 +24,23 @@ type LayoutSection = web3n.files.LayoutSection;
 type FileByteSource = web3n.files.FileByteSource;
 
 export function makeSinkCaller(
-	connector: ObjectsConnector, ref: ObjectReference
+	caller: Caller, ref: ObjectReference
 ): FileByteSink {
 	checkRefObjTypeIs('FileByteSink', ref);
 	const objPath = ref.path;
 	const sink: FileByteSink = {
-		done: sinkDone.makeCaller(connector, objPath),
-		getSize: sinkGetSize.makeCaller(connector, objPath),
-		showLayout: sinkShowLayout.makeCaller(connector, objPath),
-		splice: sinkSplice.makeCaller(connector, objPath),
-		truncate: sinkTruncate.makeCaller(connector, objPath)
+		done: sinkDone.makeCaller(caller, objPath),
+		getSize: sinkGetSize.makeCaller(caller, objPath),
+		showLayout: sinkShowLayout.makeCaller(caller, objPath),
+		splice: sinkSplice.makeCaller(caller, objPath),
+		truncate: sinkTruncate.makeCaller(caller, objPath)
 	};
-	connector.registerClientDrop(sink, ref);
+	caller.registerClientDrop(sink, ref);
 	return sink;
 }
 
 export function exposeSinkService(
-	sink: FileByteSink, connector: ObjectsConnector
+	sink: FileByteSink, expServices: ExposedServices
 ): ObjectReference {
 	const wrap: ExposedObj<FileByteSink> = {
 		done: sinkDone.wrapService(sink.done),
@@ -50,28 +49,27 @@ export function exposeSinkService(
 		splice: sinkSplice.wrapService(sink.splice),
 		truncate: sinkTruncate.wrapService(sink.truncate)
 	};
-	const ref = connector.exposedObjs.exposeDroppableService(
-		'FileByteSink', wrap, sink);
+	const ref = expServices.exposeDroppableService('FileByteSink', wrap, sink);
 	return ref;
 }
 
 export function makeSrcCaller(
-	connector: ObjectsConnector, ref: ObjectReference
+	caller: Caller, ref: ObjectReference
 ): FileByteSource {
 	checkRefObjTypeIs('FileByteSource', ref);
 	const objPath = ref.path;
 	const src: FileByteSource = {
-		getPosition: srcGetPosition.makeCaller(connector, objPath),
-		getSize: srcGetSize.makeCaller(connector, objPath),
-		read: srcRead.makeCaller(connector, objPath),
-		seek: srcSeek.makeCaller(connector, objPath)
+		getPosition: srcGetPosition.makeCaller(caller, objPath),
+		getSize: srcGetSize.makeCaller(caller, objPath),
+		read: srcRead.makeCaller(caller, objPath),
+		seek: srcSeek.makeCaller(caller, objPath)
 	};
-	connector.registerClientDrop(src, ref);
+	caller.registerClientDrop(src, ref);
 	return src;
 }
 
 export function exposeSrcService(
-	src: FileByteSource, connector: ObjectsConnector
+	src: FileByteSource, expServices: ExposedServices
 ): ObjectReference {
 	const wrap: ExposedObj<FileByteSource> = {
 		getPosition: srcGetPosition.wrapService(src.getPosition),
@@ -79,8 +77,7 @@ export function exposeSrcService(
 		read: srcRead.wrapService(src.read),
 		seek: srcSeek.wrapService(src.seek)
 	};
-	const ref = connector.exposedObjs.exposeDroppableService(
-		'FileByteSource', wrap, src);
+	const ref = expServices.exposeDroppableService('FileByteSource', wrap, src);
 	return ref;
 }
 
@@ -100,10 +97,10 @@ namespace sinkGetSize {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSink['getSize'] {
 		const path = objPath.concat('getSize');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
 	}
@@ -131,11 +128,11 @@ namespace sinkSplice {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSink['splice'] {
 		const path = objPath.concat('splice');
 		return async (pos, del, bytes) => {
-			await connector
+			await caller
 			.startPromiseCall(path, requestType.pack({
 				pos, del, bytes: toOptVal(bytes as Buffer)
 			}));
@@ -163,11 +160,11 @@ namespace sinkTruncate {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSink['truncate'] {
 		const path = objPath.concat('truncate');
 		return async (size) => {
-			await connector
+			await caller
 			.startPromiseCall(path, requestType.pack({ size }));
 		}
 	}
@@ -209,10 +206,10 @@ namespace sinkShowLayout {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSink['showLayout'] {
 		const path = objPath.concat('showLayout');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => unpackLayout(replyType.unpack(buf)));
 	}
@@ -238,12 +235,12 @@ namespace sinkDone {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSink['done'] {
 		const path = objPath.concat('done');
 		return async (err) => {
 			const req: Request = (err ? { err: errToMsg(err) } : {});
-			await connector
+			await caller
 			.startPromiseCall(path, requestType.pack(req));
 		}
 	}
@@ -263,10 +260,10 @@ namespace srcGetSize {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSource['getSize'] {
 		const path = objPath.concat('getSize');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
 	}
@@ -286,10 +283,10 @@ namespace srcGetPosition {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSource['getPosition'] {
 		const path = objPath.concat('getPosition');
-		return () => connector
+		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
 	}
@@ -322,10 +319,10 @@ namespace srcRead {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSource['read'] {
 		const path = objPath.concat('read');
-		return len => connector
+		return len => caller
 		.startPromiseCall(path, requestType.pack({ len: toOptVal(len) }))
 		.then(buf => valOfOpt(replyType.unpack(buf).bytes));
 	}
@@ -351,11 +348,11 @@ namespace srcSeek {
 	}
 
 	export function makeCaller(
-		connector: ObjectsConnector, objPath: string[]
+		caller: Caller, objPath: string[]
 	): FileByteSource['seek'] {
 		const path = objPath.concat('seek');
 		return async offset => {
-			await connector
+			await caller
 			.startPromiseCall(path, requestType.pack({ offset }));
 		}
 	}
