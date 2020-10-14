@@ -124,17 +124,29 @@ export function fixArray<T>(arr: T[]): T[] {
 	return (arr ? arr : []);
 }
 
-type Long = { high: number; low: number; };
 const MAX_HIGH = 0b111111111111111111111;
 export function fixInt(uint64: number): number {
-	const { high, low } = uint64 as any as Long;
-	if (high > MAX_HIGH) {
-		throw makeIPCException({
-			invalidNumInBody: true,
-			message: 'Integer is greater than 2^53-1'
-		});
+	if (typeof uint64 === 'object') {
+		const { high, low } = uint64;
+		if (high > MAX_HIGH) {
+				throw makeIPCException({
+					invalidNumInBody: true,
+					message: 'Integer is greater than 2^53-1'
+				});
+		}
+		const fixedInt = (high * 0xffffffff + low);
+		if (isNaN(fixedInt)) {
+				throw new TypeError(`Can't construct integer from a given object`);
+		} else {
+				return fixedInt;
+		}
+	} else if (typeof uint64 === 'string') {
+		return Number.parseInt(uint64);
+	} else if (typeof uint64 === 'number') {
+		return uint64;
+	} else {
+		throw new TypeError(`Can't extract integer from ${typeof uint64}`);
 	}
-	return (high*0xffffffff + low);
 }
 export function valOfOptInt(uint64: Value<number>|undefined): number|undefined {
 	if (!uint64) { return; }

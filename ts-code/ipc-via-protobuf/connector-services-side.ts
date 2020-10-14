@@ -80,7 +80,6 @@ export class ServicesSideImpl implements ServicesSide {
 		}
 		try {
 			const fn = this.exposedObjs.findFn(path);
-			if (!fn) { return; }
 			const out = fn(body);
 			if (!out) {
 				return;
@@ -217,7 +216,7 @@ export class ExposedObjs {
 		return o;
 	}
 
-	findFn(path: string[]|undefined): ExposedFn|undefined {
+	findFn(path: string[]|undefined): ExposedFn {
 		const fn = this.find(path);
 		if (typeof fn === 'function') {
 			return fn;
