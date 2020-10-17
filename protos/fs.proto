@@ -79,7 +79,7 @@ message SymLinkTargetReplyBody {
 message FSEventMsg {
 	string type = 1;
 	string path = 2;
-	bool is_remote = 3;
+	common.BooleanValue is_remote = 3;
 	common.UInt64Value new_version = 4;
 	common.StringValue name = 10;
 	common.StringValue old_name = 11;

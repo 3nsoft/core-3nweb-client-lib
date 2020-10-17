@@ -239,6 +239,8 @@ export function packXAttrValue(val: any): EnvelopeBody {
 		return xattrValueType.pack({ bytes: toVal(val) });
 	} else if (typeof val === 'string') {
 		return xattrValueType.pack({ str: toVal(val) });
+	} else if (val === undefined) {
+		return xattrValueType.pack({});
 	} else {
 		return xattrValueType.pack({ json: toOptJson(val) });
 	}

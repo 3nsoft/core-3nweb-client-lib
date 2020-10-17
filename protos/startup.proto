@@ -27,6 +27,7 @@ message IsActivatedRequestBody {
 
 // --- signUp.createUserParams ---
 // Its an observable call, and initial request is PassOnlyRequestBody.
+// Intermediate values are ProgressValue.
 
 message PassOnlyRequestBody {
 	string pass = 1;
