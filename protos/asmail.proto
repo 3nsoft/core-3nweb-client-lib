@@ -103,7 +103,7 @@ message OutgoingMessageMsg {
 	common.StringValue plain_txt_body = 13;
 	common.StringValue html_txt_body = 14;
 	common.StringValue json_body = 15;
-	common.StringValue carbon_copy = 16;
+	repeated string carbon_copy = 16;
 	AttachmentsContainer attachments = 17;
 }
 
