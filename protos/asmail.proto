@@ -6,6 +6,10 @@ import "fs.proto";
 
 package asmail;
 
+// --- getUserId ---
+// Request body is empty
+// Reply body contains utf8 bytes of user id
+
 
 // ==== inbox capability ====
 
@@ -118,7 +122,7 @@ message DeliveryProgressMsg {
 		bool done = 1;
 		common.StringValue id_on_delivery = 2;
 		uint64 bytes_sent = 3;
-		common.StringValue err = 4;
+		common.ErrorValue err = 4;
 	}
 	message AddrAndDeliveryInfo {
 		string address = 1;

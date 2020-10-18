@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt } from './protobuf-msg';
+import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt, errToMsg, ErrorValue, errFromMsg } from './protobuf-msg';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -504,7 +504,7 @@ interface DeliveryProgressMsg {
 		info: {
 			done: boolean;
 			idOnDelivery?: Value<string>;
-			err?: Value<string>;
+			err?: ErrorValue;
 			bytesSent: number;
 		};
 	}[];
@@ -528,7 +528,7 @@ function packDeliveryProgress(p: DeliveryProgress): DeliveryProgressMsg {
 				done: info.done,
 				idOnDelivery: toOptVal(info.idOnDelivery),
 				bytesSent: info.bytesSent,
-				err: toOptJson(info.err)
+				err: (info.err ? errToMsg(info.err) : undefined)
 			}
 		});
 	}
@@ -548,7 +548,7 @@ function unpackDeliveryProgress(m: DeliveryProgressMsg): DeliveryProgress {
 			done: info.done,
 			idOnDelivery: valOfOpt(info.idOnDelivery),
 			bytesSent: info.bytesSent,
-			err: valOfOptJson(info.err)
+			err: (info.err ? errFromMsg(info.err) : undefined)
 		};
 	}
 	return p;

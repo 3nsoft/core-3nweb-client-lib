@@ -101,8 +101,7 @@ function commonType<T extends object>(type: string): ProtoType<T> {
 }
 
 export type ExposedObjType = 'FileByteSink' | 'FileByteSource' |
-	'UnsubscribeFn' | 'Observer' | 'FileImpl' | 'FSImpl' | 'SymLinkImpl' |
-	'FSCollection' | 'FSItemsIter';
+	'FileImpl' | 'FSImpl' | 'SymLinkImpl' | 'FSCollection' | 'FSItemsIter';
 
 export interface ObjectReference {
 	objType: ExposedObjType;

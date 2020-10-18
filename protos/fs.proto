@@ -143,9 +143,9 @@ message ReadBytesRequestBody {
 // Reply body is file.File
 
 // --- ReadonlyFS.select ---
-// There are two replies to the request
-// First interim reply body is common.ObjectReference to FSCollection
-// Second and final reply body is empty, indicating completion of process
+// Its an observable call.
+// First and only interim reply body is a common.ObjectReference to
+// FSCollection. Call completion indicates the end of a search process
 message SelectRequestBody {
 	message SelectCriteria {
 		common.StringValue exact_name = 1;

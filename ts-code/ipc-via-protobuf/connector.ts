@@ -190,8 +190,6 @@ export function ensureCorrectRefObjType(objType: ExposedObjType): void {
 	switch (objType) {
 		case 'FileByteSink':
 		case 'FileByteSource':
-		case 'UnsubscribeFn':
-		case 'Observer':
 		case 'FileImpl':
 		case 'FSImpl':
 		case 'SymLinkImpl':

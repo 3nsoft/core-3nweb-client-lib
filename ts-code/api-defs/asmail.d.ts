@@ -44,7 +44,7 @@ declare namespace web3n.asmail {
 			[address: string]: {
 				done: boolean;
 				idOnDelivery?: string;
-				err?: RuntimeException
+				err?: any;
 				bytesSent: number;
 			}
 		};
