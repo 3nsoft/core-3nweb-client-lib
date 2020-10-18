@@ -63,8 +63,7 @@ message SymLink {
 	bool readonly = 1;
 	common.BooleanValue is_file = 2;
 	common.BooleanValue is_folder = 3;
-	// target references function that returns either File or FS
-	common.ObjectReference target = 4;
+	common.ObjectReference impl = 4;
 }
 
 message SymLinkTargetReplyBody {
@@ -405,7 +404,7 @@ message VersionedFileFlags {
 	common.BooleanValue truncate = 1;
 	common.BooleanValue create = 2;
 	common.BooleanValue exclusive = 3;
-	uint64 current_version = 10;
+	common.UInt64Value current_version = 10;
 }
 
 // --- WritableFSVersionedAPI.writeTxtFile ---

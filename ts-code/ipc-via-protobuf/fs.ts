@@ -365,7 +365,7 @@ interface SymLinkMsg {
 	readonly: boolean;
 	isFile?: Value<boolean>;
 	isFolder?: Value<boolean>;
-	target: ObjectReference;
+	impl: ObjectReference;
 }
 const symLinkMsgType = makeFSType<SymLinkMsg>('SymLink');
 
@@ -402,7 +402,7 @@ function exposeSymLink(
 		readonly: link.readonly,
 		isFile: toOptVal(link.isFile),
 		isFolder: toOptVal(link.isFolder),
-		target: ref
+		impl: ref
 	};
 	return msg;
 }
@@ -410,10 +410,11 @@ function exposeSymLink(
 function makeSymLinkCaller(
 	caller: Caller, linkMsg: SymLinkMsg
 ): SymLink {
+	checkRefObjTypeIs('SymLinkImpl', linkMsg.impl);
 	const link: SymLink = {
 		readonly: linkMsg.readonly,
 		target: () => caller
-		.startPromiseCall(linkMsg.target.path, undefined)
+		.startPromiseCall(linkMsg.impl.path, undefined)
 		.then(buf => {
 			const { file, fs } = symLinkTargetType.unpack(buf);
 			if (file) {
