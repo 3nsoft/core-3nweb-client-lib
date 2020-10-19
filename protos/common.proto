@@ -20,7 +20,7 @@ message UInt64Value {
 }
 
 message UInt32Value {
-	uint64 value = 1;
+	uint32 value = 1;
 }
 
 message StringValue {
