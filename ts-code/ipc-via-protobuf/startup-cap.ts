@@ -180,11 +180,11 @@ namespace createUserParams {
 	): ExposedFn {
 		return buf => {
 			const { pass } = reqWithPassType.unpack(buf);
-			const s = new Subject<number>();
+			const s = new Subject<ProgressValue>();
 			const obs = s.asObservable().pipe(
-				map(packInt)
+				map(v => progressValueType.pack(v))
 			);
-			fn(pass, num => s.next(num))
+			fn(pass, p => s.next({ p }))
 			.then(() => s.complete(), err => s.error(err));
 			return { obs };
 		};
@@ -198,7 +198,10 @@ namespace createUserParams {
 			const s = new Subject<EnvelopeBody>();
 			const completion = defer<void>();
 			s.subscribe({
-				next: buf => progressCB(unpackInt(buf)),
+				next: buf => {
+					const { p } = progressValueType.unpack(buf);
+					progressCB(p)
+				},
 				complete: () => completion.resolve(),
 				error: err => completion.reject(err)
 			});
