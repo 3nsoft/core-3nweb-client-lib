@@ -77,10 +77,13 @@ it.func = async function(s) {
 	await sleep(500);
 	const u2_w3n = s.testAppCapsByUser(u2);
 	const msgs = await u2_w3n.mail!.inbox.listMsgs();
-	const msgInfo = msgs.find(m => (m.msgId === msgId));
-	expect(msgInfo).toBeTruthy(`message ${msgId} should be present in a list of all messages`);
+	const msgInfo = msgs.find(m => (m.msgId === msgId))!;
+	expect(msgInfo).not.toBeUndefined(`message ${msgId} should be present in a list of all messages`);
+	expect(msgInfo.msgType).toBe('mail');
 	const inMsg = await u2_w3n.mail!.inbox.getMsg(msgId);
 	expect(inMsg).toBeTruthy();
+	expect(inMsg.msgId).toBe(msgId);
+	expect(inMsg.msgType).toBe('mail');
 	expect(inMsg.plainTxtBody).toBe(txtBody);
 	expect(inMsg.jsonBody).toBeTruthy();
 	expect((inMsg.jsonBody as typeof jsonBody).field1).toBe(jsonBody.field1);

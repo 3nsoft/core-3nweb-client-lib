@@ -83,16 +83,12 @@ message AddMsgRequestBody {
 
 message OutgoingMessageMsg {
 	message AttachmentsContainer {
-		repeated NamedFile files = 1;
-		repeated NamedFolder folders = 2;
+		repeated NamedFSItem files = 1;
+		repeated NamedFSItem folders = 2;
 	}
-	message NamedFile {
+	message NamedFSItem {
 		string name = 1;
-		file.File file = 2;
-	}
-	message NamedFolder {
-		string name = 1;
-		fs.FS folder = 2;
+		common.ObjectReference item = 2;
 	}
 
 	common.StringValue msg_id = 1;

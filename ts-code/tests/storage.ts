@@ -24,9 +24,9 @@ import { reverseDomain } from '../core';
 import { testApp } from './libs-for-tests/core-runner';
 import { clearFS, SetupWithTestFS, SetupWithTwoFSs } from './fs-checks/test-utils';
 import { StorageException } from '../core/storage';
-import { wrapCommonW3N } from './libs-for-tests/caps-ipc-wrap';
 
 type AppFSSetting = web3n.caps.common.AppFSSetting;
+type commonW3N = web3n.caps.common.W3N;
 
 const allowedAppFS = (testApp.capsRequested.storage!.appFS as AppFSSetting[])
 .map(s => reverseDomain(s.domain));
@@ -34,17 +34,11 @@ const allowedAppFS = (testApp.capsRequested.storage!.appFS as AppFSSetting[])
 describe('3NStorage', () => {
 
 	const s = setupWithUsers(true);
-	let w3n: web3n.caps.common.W3N;
-	let closeIPC: () => void;
+	let w3n: commonW3N;
 
 	beforeAllAsync(async () => {
 		if (!s.isUp) { return; }
-		({ clientW3N: w3n, close: closeIPC } = await wrapCommonW3N(
-			s.testAppCapsByUserIndex(0)));
-	});
-
-	afterAllAsync(async () => {
-		closeIPC();
+		w3n = s.testAppCapsByUserIndex(0);
 	});
 
 	itAsync('storage capability is present in test app', async () => {

@@ -23,6 +23,7 @@ import { errWithCause, stringifyErr } from "../../lib-common/exceptions/error";
 
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
+type commonW3N = web3n.caps.common.W3N;
 
 /**
  * This function to be run in renderer's context via execExpects
@@ -30,7 +31,7 @@ type OutgoingMessage = web3n.asmail.OutgoingMessage;
  * @param txtBody 
  */
 export async function sendTxtMsg(
-	w3n: CoreRunner['testAppCaps'], recipient: string, txtBody: string
+	w3n: commonW3N, recipient: string, txtBody: string
 ): Promise<string> {
 	const msg: OutgoingMessage = {
 		msgType: 'mail',

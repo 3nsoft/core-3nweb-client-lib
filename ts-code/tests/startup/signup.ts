@@ -19,7 +19,6 @@ import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-
 import { minimalSetup } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { testApp } from '../libs-for-tests/core-runner';
-import { wrapStartupW3N } from '../libs-for-tests/caps-ipc-wrap';
 
 // NOTE: it-specs inside signUp process expect to run in a given order -- they
 //		change app's state, expected by following specs in this describe.
@@ -32,10 +31,7 @@ describe('signUp process', () => {
 
 	beforeAllAsync(async () => {
 		if (!s.isUp) { return; }
-		// ({ capsForStartup: w3n, coreInit } = s.runner.core.start());
-		const { capsForStartup, coreInit: init } = s.runner.core.start();
-		coreInit = init;
-		({ clientW3N: w3n, close: closeIPC } = wrapStartupW3N(capsForStartup));
+		({ closeIPC, coreInit, w3n } = s.runner.startCore());
 	});
 
 	afterAllAsync(async () => {

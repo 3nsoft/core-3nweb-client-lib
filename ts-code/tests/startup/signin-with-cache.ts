@@ -19,7 +19,6 @@ import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { User, testApp } from '../libs-for-tests/core-runner';
-import { wrapStartupW3N } from '../libs-for-tests/caps-ipc-wrap';
 
 // NOTE: it-specs inside signIn process expect to run in a given order -- they
 //		change app's state, expected by following specs in this describe.
@@ -36,9 +35,7 @@ describe('signIn process (with cache)', () => {
 		user = s.users[0];
 		const runner = s.runners.get(user.userId)!;
 		await runner.restart(false, false);
-		const { capsForStartup, coreInit: init } = runner.core.start();
-		coreInit = init;
-		({ clientW3N: w3n, close: closeIPC } = wrapStartupW3N(capsForStartup));
+		({ closeIPC, coreInit, w3n } = runner.startCore());
 	}, 30000);
 
 	afterAllAsync(async () => {

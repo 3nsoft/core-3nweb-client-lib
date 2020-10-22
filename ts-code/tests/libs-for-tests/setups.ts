@@ -68,7 +68,7 @@ function makeSetupObject(
 		isUp = false;
 		isStopped = true;
 		try {
-			await runner.core.close();
+			await runner.close();
 		} finally {
 			await runner.cleanup(true);
 			await server.stop(true);
@@ -105,12 +105,14 @@ export function minimalSetup(
 	return s;
 }
 
+type commonW3N = web3n.caps.common.W3N;
+
 export  interface MultiUserSetup {
 
 	users: User[];
 	runners: Map<string, CoreRunner>;
-	testAppCapsByUserIndex(i: number): CoreRunner['testAppCaps'];
-	testAppCapsByUser(u: User): CoreRunner['testAppCaps'];
+	testAppCapsByUserIndex(i: number, viaIPC?: boolean): commonW3N;
+	testAppCapsByUser(u: User, viaIPC?: boolean): commonW3N;
 
 	isUp: boolean;
 
@@ -118,8 +120,11 @@ export  interface MultiUserSetup {
 
 function makeMultiUserSetupObject(
 	signupDomains: string[]
-): { s: MultiUserSetup;
-	setUp: (users: string[]) => Promise<void>; setDown: () => Promise<void>; } {
+): {
+	s: MultiUserSetup;
+	setUp: (users: string[]) => Promise<void>;
+	setDown: () => Promise<void>;
+} {
 	
 	const runners = new Map<string, CoreRunner>();
 	const server = new ServicesRunner(SERVICE_PORT, signupDomains);
@@ -127,15 +132,13 @@ function makeMultiUserSetupObject(
 	let isUp = false;
 	let isStopped = false;
 
-	function testAppCapsByUser(u: User): CoreRunner['testAppCaps'] {
-		const r = runners.get(u.userId);
+	function testAppCapsByUser(u: User, viaIPC = true): commonW3N {
+		const r = runners.get(u.userId)!;
 		assert(!!r, `Core runner is missing for user ${u.userId}`);
-		const w3n = r!.testAppCaps;
-		assert(!!w3n, `Tet app CAP object is not set for user ${u.userId}`);
-		return w3n;
+		return r.appCapsViaIPC;
 	}
 
-	function testAppCapsByUserIndex(i: number): CoreRunner['testAppCaps'] {
+	function testAppCapsByUserIndex(i: number, viaIPC = true): commonW3N {
 		const u = users[i];
 		assert(!!u, `Given index ${i} is not pointing to existing user`);
 		return testAppCapsByUser(u);
@@ -179,7 +182,7 @@ function makeMultiUserSetupObject(
 		isStopped = true;
 		for (const runner of runners.values()) {
 			try {
-				await runner.core.close();
+				await runner.close();
 			} finally {
 				await runner.cleanup(true);
 			}
@@ -211,7 +214,7 @@ export function setupWithUsers(
 		await setUp(users);
 		if (setupTestAppCaps) {
 			for (const runner of s.runners.values()) {
-				runner.setupTestAppCaps();
+				await runner.setupTestAppCaps();
 			}
 		}
 	}, users.length*7000);

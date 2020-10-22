@@ -15,12 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt, errToMsg, ErrorValue, errFromMsg } from './protobuf-msg';
+import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt, errToMsg, ErrorValue, errFromMsg, ObjectReference } from './protobuf-msg';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from './fs';
-import { FileMsg } from './file';
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -38,7 +37,7 @@ export function exposeASMailCAP(
 	return {
 		getUserId: getUserId.wrapService(cap.getUserId),
 		delivery: {
-			addMsg: addMsg.wrapService(out.addMsg),
+			addMsg: addMsg.wrapService(out.addMsg, expServices),
 			currentState: currentState.wrapService(out.currentState),
 			listMsgs: delivListMsgs.wrapService(out.listMsgs),
 			observeAllDeliveries: observeAllDeliveries.wrapService(
@@ -239,7 +238,7 @@ function packIncomingMessage(
 ): EnvelopeBody {
 	const ipcMsg: IncomingMessageMsg = {
 		msgType: m.msgType,
-		msgId: m.msgType,
+		msgId: m.msgId,
 		deliveryTS: m.deliveryTS,
 		sender: m.sender,
 		establishedSenderKeyChain: m.establishedSenderKeyChain,
@@ -369,12 +368,12 @@ namespace addMsg {
 		attachments?: {
 			files?: {
 				name: string;
-				file: FileMsg;
-			};
+				item: ObjectReference;
+			}[];
 			folders?: {
 				name: string;
-				folder: FSMsg;
-			};
+				item: ObjectReference;
+			}[];
 		};
 	}
 	
@@ -388,7 +387,7 @@ namespace addMsg {
 
 	const requestType = asmailType<Request>('AddMsgRequestBody');
 
-	function packMsg(m: OutgoingMessage): OutgoingMessageMsg {
+	function packMsg(m: OutgoingMessage, caller: Caller): OutgoingMessageMsg {
 		const ipcMsg: OutgoingMessageMsg = {
 			msgType: m.msgType,
 			htmlTxtBody: toOptVal(m.htmlTxtBody),
@@ -400,14 +399,37 @@ namespace addMsg {
 			subject: toOptVal(m.subject)
 		};
 		if (m.attachments) {
-			ipcMsg.attachments = {};
-			if (m.attachments.files) {}
-			if (m.attachments.folders) {}
+			const attachments: NonNullable<typeof ipcMsg.attachments> = {};
+			if (m.attachments.files) {
+				const pairs = Object.entries(m.attachments.files)
+				.map(([ name, f ]) => ({
+					name,
+					item: caller.srvRefOf(f)
+				}));
+				if (pairs.length > 0) {
+					attachments.files = pairs;
+				}
+			}
+			if (m.attachments.folders) {
+				const pairs = Object.entries(m.attachments.folders)
+				.map(([ name, f ]) => ({
+					name,
+					item: caller.srvRefOf(f)
+				}));
+				if (pairs.length > 0) {
+					attachments.folders = pairs;
+				}
+			}
+			if (attachments.files || attachments.folders) {
+				ipcMsg.attachments = attachments;
+			}
 		}
 		return ipcMsg;
 	}
 
-	function unpackMsg(ipcMsg: OutgoingMessageMsg): OutgoingMessage {
+	function unpackMsg(
+		ipcMsg: OutgoingMessageMsg, expServices: ExposedServices
+	): OutgoingMessage {
 		const msg: OutgoingMessage = {
 			msgType: ipcMsg.msgType,
 			htmlTxtBody: valOfOpt(ipcMsg.htmlTxtBody),
@@ -419,19 +441,38 @@ namespace addMsg {
 			subject: valOfOpt(ipcMsg.subject)
 		};
 		if (ipcMsg.attachments) {
-			msg.attachments = {};
-			if (ipcMsg.attachments.files) {}
-			if (ipcMsg.attachments.folders) {}
+			const attachments: NonNullable<typeof msg.attachments> = {};
+			if (ipcMsg.attachments.files
+			&& (ipcMsg.attachments.files.length > 0)) {
+				attachments.files = {};
+				for (const { name, item } of ipcMsg.attachments.files) {
+					attachments.files[name] = expServices.getOriginalObj(item);
+				}
+			}
+			if (ipcMsg.attachments.folders
+			&& (ipcMsg.attachments.folders.length > 0)) {
+				attachments.folders = {};
+				for (const { name, item } of ipcMsg.attachments.folders) {
+					attachments.folders[name] = expServices.getOriginalObj(item);
+				}
+			}
+			if (attachments.files || attachments.folders) {
+				msg.attachments = attachments;
+			}
 		}
 		return msg;
 	}
 
-	export function wrapService(fn: Delivery['addMsg']): ExposedFn {
+	export function wrapService(
+		fn: Delivery['addMsg'], expServices: ExposedServices
+	): ExposedFn {
 		return (reqBody: Buffer) => {
-			const { id, recipients, msg,
-				localMeta, sendImmeditely } = requestType.unpack(reqBody);
+			const {
+				id, recipients, msg, localMeta, sendImmeditely
+			} = requestType.unpack(reqBody);
 			const promise = fn(
-				fixArray(recipients), unpackMsg(msg), id, {
+				fixArray(recipients), unpackMsg(msg, expServices), id,
+				{
 					localMeta: valOfOpt(localMeta),
 					sendImmeditely: valOfOpt(sendImmeditely)
 				});
@@ -444,7 +485,7 @@ namespace addMsg {
 	): Delivery['addMsg'] {
 		const path = objPath.concat('addMsg');
 		return async (recipients, msg, id, opts) => {
-			const req: Request = { id, msg: packMsg(msg), recipients };
+			const req: Request = { id, msg: packMsg(msg, caller), recipients };
 			if (opts) {
 				req.sendImmeditely = toOptVal(opts.sendImmeditely);
 				req.localMeta = toOptVal(opts.localMeta);

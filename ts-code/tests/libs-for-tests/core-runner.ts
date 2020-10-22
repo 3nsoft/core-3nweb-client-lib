@@ -23,6 +23,8 @@ import { UTIL_DIR } from "../../lib-client/local-files/app-files";
 import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
 import { assert } from "../../lib-common/assert";
+import { type } from "os";
+import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 
 export const testApp: web3n.caps.common.AppManifest = {
 	appDomain: 'test.3nweb.computer',
@@ -58,12 +60,19 @@ export interface User {
 
 const DATA_FOLDER = resolve(__dirname, `../../../../test-data`);
 
+type CommonW3N = web3n.caps.common.W3N;
+type StartupW3N = web3n.startup.W3N;
+
 
 export class CoreRunner {
 
 	user: User = (undefined as any);
 	core: Core;
-	testAppCaps: web3n.caps.common.W3N = (undefined as any);
+	private appCaps: {
+		raw: CommonW3N;
+		ipc: CommonW3N;
+		close: () => void;
+	}|undefined = undefined;
 	private coreNum: number;
 	public readonly dataFolder: string;
 
@@ -78,10 +87,21 @@ export class CoreRunner {
 	}
 
 	private setNewCore(): void {
-		this.testAppCaps = (undefined as any);
+		if (this.appCaps) {
+			this.appCaps.close();
+		}
+		this.appCaps = undefined;
 		this.core = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
 			() => makeNetClient(), {});
+	}
+
+	async close(): Promise<void> {
+		if (this.appCaps) {
+			this.appCaps.close();
+			await this.core.close();
+			this.appCaps = undefined;
+		}
 	}
 
 	async cleanup(showLogs: boolean): Promise<void> {
@@ -99,7 +119,7 @@ export class CoreRunner {
 	}
 
 	async restart(rmCache: boolean, loginUser: boolean): Promise<void> {
-		await this.core.close();
+		await this.close();
 		if (rmCache) {
 			await this.cleanup(false);
 		}
@@ -143,9 +163,43 @@ export class CoreRunner {
 		return this.user;
 	}
 
-	setupTestAppCaps(): void {
-		const { caps } = this.core.makeCAPsForApp(testApp.appDomain, testApp);
-		this.testAppCaps = caps;
+	startCore(capsViaIPC = true): {
+		w3n: StartupW3N;
+		coreInit: Promise<string>;
+		closeIPC: () => void
+	} {
+		const { capsForStartup: rawW3N, coreInit } = this.core.start();
+		if (capsViaIPC) {
+			const { clientW3N: w3n, close: closeIPC } = wrapStartupW3N(rawW3N);
+			return { w3n, coreInit, closeIPC };
+		} else {
+			return { w3n: rawW3N, coreInit, closeIPC: () => {} };
+		}
+	}
+
+	async setupTestAppCaps(): Promise<void> {
+		if (this.appCaps) { throw new Error(`App CAPs have already been set.`); }
+		const { caps, close: closeCAPs } = this.core.makeCAPsForApp(
+			testApp.appDomain, testApp);
+		const { clientW3N, close } = await wrapCommonW3N(caps);
+		this.appCaps = {
+			raw: caps,
+			ipc: clientW3N,
+			close: () => {
+				closeCAPs();
+				close();
+			}
+		};
+	}
+
+	get rawAppCaps(): CommonW3N {
+		if (!this.appCaps) { throw new Error(`App CAPs are not set.`); }
+		return this.appCaps.raw;
+	}
+
+	get appCapsViaIPC(): CommonW3N {
+		if (!this.appCaps) { throw new Error(`App CAPs are not set.`); }
+		return this.appCaps.ipc;
 	}
 
 }
