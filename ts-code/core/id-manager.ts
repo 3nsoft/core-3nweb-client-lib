@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,19 +12,20 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { box } from 'ecma-nacl';
 import { MailerIdProvisioner } from '../lib-client/mailer-id/provisioner';
 import { user as mid } from '../lib-common/mid-sigs-NaCl-Ed';
-import { JsonKey, keyFromJson, use as keyUse }
-	from '../lib-common/jwkeys';
+import { JsonKey, keyFromJson, use as keyUse } from '../lib-common/jwkeys';
 import { getMailerIdServiceFor } from '../lib-client/service-locator';
 import { PKLoginException } from '../lib-client/user-with-pkl-session';
 import { SingleProc } from '../lib-common/processes';
 import { GenerateKey } from './sign-in';
 import { LogError, LogWarning } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';
+import { startMidSession, authenticateMidSession } from '../lib-client/mailer-id/login';
 
 type WritableFS = web3n.files.WritableFS;
 
@@ -56,7 +57,7 @@ interface LoginKeysJSON {
 }
 
 export class IdManager {
-	
+
 	private signer: mid.MailerIdSigner = (undefined as any);
 	private localFS: WritableFS|undefined = undefined;
 	private syncedFS: WritableFS|undefined = undefined;
@@ -155,7 +156,7 @@ export class IdManager {
 		}
 		return;
 	}
-	
+
 	async setStorages(
 		localFS: WritableFS|undefined, syncedFS: WritableFS,
 		keysToSave?: JsonKey[]
@@ -181,7 +182,7 @@ export class IdManager {
 			await this.ensureLocalCacheOfKeys();
 		}
 	}
-	
+
 	private async provisionWithGivenKey(
 		address: string
 	): Promise<CompleteProvisioning|undefined> {
@@ -221,7 +222,7 @@ export class IdManager {
 			}
 		}
 	}
-	
+
 	private async provisionUsingSavedKey(): Promise<mid.MailerIdSigner> {
 		let proc = this.provisioningProc.getP<mid.MailerIdSigner>();
 		if (proc) { return proc; }
@@ -245,11 +246,11 @@ export class IdManager {
 		});
 		return proc;
 	}
-		
+
 	getId(): string {
 		return this.address;
 	}
-	
+
 	getSigner: GetSigner = async () => {
 		if (!this.address) { throw new Error(
 			'Address is not set in id manager'); }
@@ -258,7 +259,7 @@ export class IdManager {
 		}
 		return this.signer;
 	};
-	
+
 	isProvisionedAndValid(): boolean {
 		if (!this.signer) { return false; }
 		if (this.signer.certExpiresAt >=
@@ -270,7 +271,20 @@ export class IdManager {
 		}
 	}
 
+	makeMailerIdCAP(): Service {
+		const w: Service = {
+			getUserId: async () => this.getId(),
+			login: async serviceUrl => {
+				const signer = await this.getSigner();
+				return doMidLogin(serviceUrl, this.getId(), this.makeNet(), signer);
+			}
+		};
+		return Object.freeze(w);
+	}
+
 }
+
+type Service = web3n.mailerid.Service;
 
 type FileException = web3n.files.FileException;
 
@@ -281,5 +295,17 @@ type FileException = web3n.files.FileException;
 function notFoundOrReThrow(exc: FileException): void {
 	if (!exc.notFound) { throw exc; }
 }
+
+async function doMidLogin(
+	loginUrl: string, userId: string, net: NetClient, signer: mid.MailerIdSigner
+): Promise<string> {
+	const { sessionId, redirect } = await startMidSession(userId, net, loginUrl);
+	if (!sessionId) {
+		throw Error(`Unexpected redirect of MailerId login from ${loginUrl} to ${redirect}`);
+	}
+	await authenticateMidSession(sessionId, signer, net, loginUrl);
+	return sessionId;
+}
+
 
 Object.freeze(exports);

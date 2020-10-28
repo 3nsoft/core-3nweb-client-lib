@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This defines interfaces for public key login routes.
@@ -25,8 +26,10 @@ export const ERR_SC = {
 Object.freeze(ERR_SC);
 
 export namespace start {
-	
+
 	export const URL_END = 'start-login-exchange';
+
+	export const method = 'POST';
 
 	export interface Request {
 		userId: string;
@@ -55,15 +58,17 @@ export namespace start {
 Object.freeze(start);
 
 export namespace complete {
-	
+
 	export const URL_END = 'complete-login-exchange';
+
+	export const method = 'POST';
 
 	export const SC = {
 		authFailed: 403,
 		ok: 200
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(complete);
 

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2016 3NSoft Inc.
+ Copyright (C) 2015 - 2016, 2020 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,10 +12,12 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
- * This defines interfaces for signup to 3NWeb.com's services.
+ * This defines interface for signup to 3NWeb services, but it is not part of
+ * 3NWeb utility protocols, like ASMail.
  */
 
 import { JsonKey } from '../jwkeys';
@@ -26,36 +28,22 @@ export const ERR_SC = {
 };
 Object.freeze(ERR_SC);
 
-export namespace isAvailable {
-	
-	export const URL_END = 'is-available';
-	
-	export interface Request {
-		userId: string;
-	}
-	
-	export const SC = {
-		ok: 200,
-		userAlreadyExists: 473
-	};
-	Object.freeze(SC);
-	
-}
-Object.freeze(isAvailable);
-
 export namespace availableAddressesForName {
-	
+
 	export const URL_END = 'available-addresses-for-name';
-	
+
+	export const method = 'POST';
+
 	export interface Request {
 		name: string;
+		signupToken?: string;
 	}
-	
+
 	export const SC = {
 		ok: 200
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(availableAddressesForName);
 
@@ -72,33 +60,45 @@ export interface UserStorageParams {
 }
 
 export namespace addUser {
-	
+
 	export const URL_END = 'add';
-	
+
+	export const method = 'POST';
+
 	export interface Request {
 		userId: string;
 		mailerId: UserMidParams;
 		storage: UserStorageParams;
+		signupToken?: string;
 	}
-	
-	export const SC = isAvailable.SC;
-	
+
+	export const SC = {
+		ok: 200,
+		userAlreadyExists: 473,
+		unauthorized: 403
+	};
+	Object.freeze(SC);
+
 }
 Object.freeze(addUser);
 
 export namespace isActivated {
-	
+
 	export const URL_END = 'is-active';
-	
-	export interface Request extends isAvailable.Request { }
-	
+
+	export const method = 'POST';
+
+	export interface Request {
+		userId: string;
+	}
+
 	export const SC = {
 		ok: 200,
 		notActive: 274,
-		userUnkown: 474
+		userUnknown: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(isActivated);
 

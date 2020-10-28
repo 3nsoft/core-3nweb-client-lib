@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This defines a base class for some service's client that logs in with
@@ -20,21 +21,16 @@
  */
 
 import { makeException, Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
-import { HTTPException } from '../lib-common/exceptions/http';
 import { user as mid } from '../lib-common/mid-sigs-NaCl-Ed';
 import * as api from '../lib-common/service-api/mailer-id/login';
 import * as WebSocket from 'ws';
 import { openSocket } from './ws-utils';
 import { parse as parseUrl } from 'url';
+import { startMidSession, authenticateMidSession } from './mailer-id/login';
+import { assert } from '../lib-common/assert';
 
-export interface LoginException extends HTTPException {
-	loginFailed?: boolean;
-	unknownUser?: boolean;
-}
+export type IGetMailerIdSigner = () => Promise<mid.MailerIdSigner>;
 
-export interface IGetMailerIdSigner {
-	(): Promise<mid.MailerIdSigner>;
-}
 
 export abstract class ServiceUser {
 	
@@ -55,12 +51,14 @@ export abstract class ServiceUser {
 			this.uri += '/';
 		}
 	}
-	private get serviceDomain(): string {
-		return parseUrl(this.uri).hostname!;
-	}
 	
 	private loginUrlPart: string;
 	private logoutUrlEnd: string;
+
+	private get loginUrl(): string {
+		return `${this.serviceURI}${this.loginUrlPart}`;
+	}
+
 	private redirectedFrom: string = (undefined as any);
 	private canBeRedirected: boolean;
 
@@ -104,72 +102,36 @@ export abstract class ServiceUser {
 	
 	private async startSession(): Promise<string> {
 		this.throwOnBadServiceURI();
-		const reqData: api.startSession.Request = {
-			userId: this.userId
-		};
-		const rep = await this.net.doJsonRequest<
-				api.startSession.Reply|api.startSession.RedirectReply>({
-			url: `${this.serviceURI}${this.loginUrlPart}${api.startSession.URL_END}`,
-			method: 'POST',
-			responseType: 'json'
-		}, reqData);
-		if (rep.status === api.startSession.SC.ok) {
-			const r = <api.startSession.Reply> rep.data;
-			if (!r || (typeof r.sessionId !== 'string')) {
-				throw makeException(rep,
-					'Malformed reply to starting session');
-			}
-			return r.sessionId;
-		} else if ((rep.status === api.startSession.SC.redirect) &&
-				this.canBeRedirected) {
-			const rd = <api.startSession.RedirectReply> rep.data;
-			if (!rd || ('string' !== typeof rd.redirect)) {
-				throw makeException(rep,
-					'Malformed redirect reply to starting session');
-			}
-			// refuse second redirect
-			if (this.redirectedFrom !== undefined) {
-				throw makeException(rep,
-					`Redirected too many times. First redirect was from ${this.redirectedFrom} to ${this.serviceURI}. Second and forbidden redirect is to ${rd.redirect}`);
-			}
-			// set params
-			this.redirectedFrom = this.serviceURI;
-			this.serviceURI = rd.redirect;
-			// start redirect call
-			return await this.startSession();
-		} else if (rep.status === api.startSession.SC.unknownUser) {
-			const exc = <LoginException> makeException(rep);
-			exc.unknownUser = true;
-			throw exc;
+		// make first call
+		const fstReply = await startMidSession(
+			this.userId, this.net, this.loginUrl
+		);
+		if (fstReply.sessionId) {
+			return fstReply.sessionId;
+		} else if (!this.canBeRedirected) {
+			throw new Error(`Service ${this.serviceURI} redirects on MailerId login, while redirect is not allowed`);
+		}
+		// following redirect
+		assert(!!fstReply.redirect);
+		this.redirectedFrom = this.serviceURI;
+		this.serviceURI = fstReply.redirect!;
+		const sndReply = await startMidSession(
+			this.userId, this.net, this.loginUrl
+		);
+		if (sndReply.sessionId) {
+			return sndReply.sessionId;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw new Error(`Redirected too many times. First redirect was from ${this.redirectedFrom} to ${this.serviceURI}. Second and forbidden redirect is to ${sndReply.redirect}`);
 		}
 	}
 	
-	private async authenticateSession(sessionId: string,
-			midSigner: mid.MailerIdSigner): Promise<void> {
+	private async authenticateSession(
+		sessionId: string, midSigner: mid.MailerIdSigner
+	): Promise<void> {
 		this.throwOnBadServiceURI();
-		const reqData: api.authSession.Request = {
-			assertion: midSigner.generateAssertionFor(
-				this.serviceDomain, sessionId),
-			userCert: midSigner.userCert,
-			provCert: midSigner.providerCert
-		};
-		const rep = await this.net.doJsonRequest<void>({
-			url: `${this.serviceURI}${this.loginUrlPart}${api.authSession.URL_END}`,
-			method: 'POST',
-			sessionId
-		}, reqData);
-		if (rep.status === api.authSession.SC.ok) {
-			return;
-		}
-		if (rep.status === api.authSession.SC.authFailed) {
-			const exc = <LoginException> makeException(rep);
-			exc.loginFailed = true;
-			throw exc;
-		} else {
-			throw makeException(rep, 'Unexpected status');
-		}
+		await authenticateMidSession(
+			sessionId, midSigner, this.net, this.loginUrl
+		);
 	}
 
 	/**
@@ -195,7 +157,7 @@ export abstract class ServiceUser {
 		})();
 		return this.loginProc;
 	}
-	
+
 	/**
 	 * This method closes current session.
 	 * @return a promise for request completion.
@@ -214,9 +176,10 @@ export abstract class ServiceUser {
 			throw makeException(rep, 'Unexpected status');
 		}
 	}
-	
-	private async callEnsuringLogin<T>(func: () => Promise<Reply<T>>):
-			Promise<Reply<T>> {
+
+	private async callEnsuringLogin<T>(
+		func: () => Promise<Reply<T>>
+	): Promise<Reply<T>> {
 		if (this.loginProc || !this.sessionId) {
 			await this.login();
 			return func();
@@ -246,14 +209,14 @@ export abstract class ServiceUser {
 				`Missing both appPath and ready url in request options.`);
 		}
 	}
-	
+
 	protected doBodylessSessionRequest<T>(opts: RequestOpts): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
 			this.prepCallOpts(opts);
 			return this.net.doBodylessRequest(opts);
 		});
 	}
-	
+
 	protected doJsonSessionRequest<T>(opts: RequestOpts, json: any):
 			Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
@@ -261,7 +224,7 @@ export abstract class ServiceUser {
 			return this.net.doJsonRequest(opts, json);
 		});
 	}
-	
+
 	protected doBinarySessionRequest<T>(opts: RequestOpts,
 			bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
@@ -280,9 +243,10 @@ export abstract class ServiceUser {
 			return openSocket(opts.url!, opts.sessionId!);
 		});
 	}
-	
+
 }
 Object.freeze(ServiceUser.prototype);
 Object.freeze(ServiceUser);
+
 
 Object.freeze(exports);

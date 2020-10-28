@@ -50,7 +50,7 @@ describe('signUp process', () => {
 		}
 	});
 
-	itAsync('creates User parameters', async () => {
+	itAsync('creates user parameters', async () => {
 		const notifications: number[] = [];
 		const notifier = (p: number) => { notifications.push(p); }
 		await w3n.signUp.createUserParams(pass, notifier);

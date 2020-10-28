@@ -12,20 +12,18 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { makeException, NetClient } from '../request-utils';
 import { mailerIdInfoAt } from '../service-locator';
-import { ServiceUser, ICalcDHSharedKey, LoginCompletion }
-	from '../user-with-pkl-session';
-import { SignedLoad, JsonKey, keyToJson, getKeyCert }
-	from '../../lib-common/jwkeys';
+import { ServiceUser, ICalcDHSharedKey, LoginCompletion } from '../user-with-pkl-session';
+import { SignedLoad, JsonKey, keyToJson, getKeyCert } from '../../lib-common/jwkeys';
 import { deepEqual } from '../../lib-common/json-utils';
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import * as mid from '../../lib-common/mid-sigs-NaCl-Ed';
 import * as random from '../../lib-common/random-node';
-import * as certProvApi from 
-	'../../lib-common/service-api/mailer-id/provisioning';
+import * as certProvApi from  '../../lib-common/service-api/mailer-id/provisioning';
 import { parse as parseUrl } from 'url';
 
 const DEFAULT_ASSERTION_VALIDITY = 20*60;
@@ -90,7 +88,7 @@ export class MailerIdProvisioner extends ServiceUser {
 		};
 		const rep = await this.net.doBinaryRequest<Uint8Array>({
 			url: this.serviceURI + certProvApi.certify.URL_END,
-			method: 'POST',
+			method: certProvApi.certify.method,
 			sessionId: this.sessionId,
 			responseType: 'arraybuffer'
 		}, this.encryptor.packJSON(plainReqData));

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 
 declare namespace web3n.startup {
@@ -25,19 +26,23 @@ declare namespace web3n.startup {
 		
 		/**
 		 * @param name is a part of address that comes before @domain
+		 * @param signupToken
 		 * @return a promise, resolvable to an array of available 3NWeb addresses
 		 * with a given name part of the address.
 		 * Array will be empty, when there are no available addresses for a given
 		 * name.
 		 */
-		getAvailableAddresses(name: string): Promise<string[]>;
+		getAvailableAddresses(
+			name: string, signupToken?: string
+		): Promise<string[]>;
 		
 		/**
 		 * @param userId
+		 * @param signupToken
 		 * @return a promise, resolvable to flag that indicates whether an account
 		 * for given user has been created (true value), or not (false value).
 		 */
-		addUser(userId: string): Promise<boolean>;
+		addUser(userId: string, signupToken?: string): Promise<boolean>;
 		
 		/**
 		 * @param userId
@@ -52,8 +57,10 @@ declare namespace web3n.startup {
 		 * @param pass
 		 * @param progressCB is a callback for progress notification
 		 */
-		createUserParams(pass: string,
-			progressCB: (progress: number) => void): Promise<void>;
+		createUserParams(
+			pass: string,
+			progressCB: (progress: number) => void
+		): Promise<void>;
 		
 	}
 	
@@ -86,8 +93,10 @@ declare namespace web3n.startup {
 		 * @param pass is a MailerId login password
 		 * @param progressCB is a callback for progress notification
 		 */
-		completeLoginAndLocalSetup(pass: string,
-			progressCB: (progress: number) => void): Promise<boolean>;
+		completeLoginAndLocalSetup(
+			pass: string,
+			progressCB: (progress: number) => void
+		): Promise<boolean>;
 		
 		/**
 		 * This method initializes core to run from an existing on a disk storage.
@@ -97,8 +106,10 @@ declare namespace web3n.startup {
 		 * @param pass is user's password.
 		 * @param progressCB is a callback for progress notification
 		 */
-		useExistingStorage(address: string, pass: string,
-			progressCB: (progress: number) => void): Promise<boolean>;
+		useExistingStorage(
+			address: string, pass: string,
+			progressCB: (progress: number) => void
+		): Promise<boolean>;
 		
 	}
 

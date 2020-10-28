@@ -28,6 +28,7 @@ for (let i=2; i<process.argv.length; i+=1) {
 const ALL_SPECS = [
 	'units/*.js',
 	'startup/*.js',
+	'mailerid.js',
 	'storage.js',
 	'asmail.js'
 ];

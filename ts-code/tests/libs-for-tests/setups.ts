@@ -20,6 +20,9 @@ import { beforeAllAsync, afterAllAsync } from "./async-jasmine";
 import { callWithTimeout } from "../../lib-common/processes";
 import { ServicesRunner } from "./services-runner";
 import { assert } from "../../lib-common/assert";
+import { parse as parseUrl } from 'url';
+import { makeNetClient } from "../../lib-client/request-utils";
+import { listMsgs as listMsgsAPI } from '../../lib-common/service-api/asmail/retrieval';
 
 
 export interface Setup {
@@ -30,26 +33,37 @@ export interface Setup {
 
 	isUp: boolean;
 
+	server: {
+		createSingleUserSignupCtx(userId: string): Promise<string>;
+	};
+
 }
 
 const SERVICE_PORT = 8088;
 const SIGNUP_URL = `https://localhost:${SERVICE_PORT}/signup/`;
 
 function makeSetupObject(
-	signupDomains: string[]
+	domains: { noTokenSignup: string[]; other: string[]; }
 ): { s: Setup; setUp: () => Promise<void>; setDown: () => Promise<void>; } {
 	
 	const runner = new CoreRunner(SIGNUP_URL);
-	const server = new ServicesRunner(SERVICE_PORT, signupDomains);
+	const server = new ServicesRunner(SERVICE_PORT, domains);
 	let isUp = false;
 	let isStopped = false;
 
 	const s: Setup = {
 		get runner() { return runner; },
 
-		get signupDomains() { return signupDomains; },
+		get signupDomains() { return domains.noTokenSignup; },
 
 		get isUp() { return isUp; },
+
+		get server() {
+			return {
+				createSingleUserSignupCtx:
+					(userId: string) => server.createSingleUserSignupCtx(userId)
+			};
+		}
 
 	};
 
@@ -81,11 +95,15 @@ function makeSetupObject(
 /**
  * This creates a minimal working setup of core and server, and calls simple
  * before and after methods, that do start and stop of everything.
- * @param signupDomains are domains, for which server will create users.
+ * @param signupDomains are domains, for which server will create users without
+ * token and other.
  * @return a setup object, for access to core, for restarting mid-test, etc.
  */
 export function minimalSetup(
-	signupDomains = [ 'company.inc', 'personal.net' ]
+	signupDomains = {
+		noTokenSignup: [ 'company.inc', 'personal.net' ],
+		other: [] as string[]
+	}
 ): Setup {
 
 	const { s, setDown, setUp } = makeSetupObject(signupDomains);
@@ -105,21 +123,21 @@ export function minimalSetup(
 	return s;
 }
 
-type commonW3N = web3n.caps.common.W3N;
+type CommonW3N = web3n.caps.common.W3N;
 
 export  interface MultiUserSetup {
 
 	users: User[];
 	runners: Map<string, CoreRunner>;
-	testAppCapsByUserIndex(i: number, viaIPC?: boolean): commonW3N;
-	testAppCapsByUser(u: User, viaIPC?: boolean): commonW3N;
+	testAppCapsByUserIndex(i: number, viaIPC?: boolean): CommonW3N;
+	testAppCapsByUser(u: User, viaIPC?: boolean): CommonW3N;
 
 	isUp: boolean;
 
 }
 
 function makeMultiUserSetupObject(
-	signupDomains: string[]
+	domains: { noTokenSignup: string[]; other: string[]; }
 ): {
 	s: MultiUserSetup;
 	setUp: (users: string[]) => Promise<void>;
@@ -127,18 +145,18 @@ function makeMultiUserSetupObject(
 } {
 	
 	const runners = new Map<string, CoreRunner>();
-	const server = new ServicesRunner(SERVICE_PORT, signupDomains);
+	const server = new ServicesRunner(SERVICE_PORT, domains);
 	const users: User[] = [];
 	let isUp = false;
 	let isStopped = false;
 
-	function testAppCapsByUser(u: User, viaIPC = true): commonW3N {
+	function testAppCapsByUser(u: User, viaIPC = true): CommonW3N {
 		const r = runners.get(u.userId)!;
 		assert(!!r, `Core runner is missing for user ${u.userId}`);
 		return r.appCapsViaIPC;
 	}
 
-	function testAppCapsByUserIndex(i: number, viaIPC = true): commonW3N {
+	function testAppCapsByUserIndex(i: number, viaIPC = true): CommonW3N {
 		const u = users[i];
 		assert(!!u, `Given index ${i} is not pointing to existing user`);
 		return testAppCapsByUser(u);
@@ -206,9 +224,10 @@ export function setupWithUsers(
 ): MultiUserSetup {
 	if (users.length === 0) { throw new Error('No user given to setup.'); }
 
-	const signupDomains = users.map(domainFromUserId);
-
-	const { s, setDown, setUp } = makeMultiUserSetupObject(signupDomains);
+	const { s, setDown, setUp } = makeMultiUserSetupObject({
+		noTokenSignup: users.map(domainFromUserId),
+		other: []
+	});
 
 	beforeAllAsync(async () => {
 		await setUp(users);
@@ -239,6 +258,31 @@ function domainFromUserId(userId: string): string {
 	} else {
 		return userId.substring(indAt+1);
 	}
+}
+
+export function serviceWithMailerIdLogin(): {
+	serviceUrl: string,
+	isSessionValid: (sessionId: string) => Promise<boolean>
+} {
+	const testSrv = parseUrl(SIGNUP_URL).host;
+	const serviceUrl = `https://${testSrv}/asmail/retrieval/login/mailerid`;
+	const net = makeNetClient();
+	async function isSessionValid(sessionId: string) {
+		const rep = await net.doBodylessRequest<listMsgsAPI.Reply>({
+			url: `https://${testSrv}/asmail/retrieval/${listMsgsAPI.URL_END}`,
+			method: 'GET',
+			responseType: 'json',
+			sessionId
+		});
+		if (rep.status === listMsgsAPI.SC.ok) {
+			return true;
+		} else if (rep.status === 403) {
+			return false;
+		} else {
+			throw Error(`Got ${rep.status} from service`);
+		}
+	}
+	return { serviceUrl, isSessionValid };
 }
 
 

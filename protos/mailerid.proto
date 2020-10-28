@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+import "common.proto";
+
+package mailerid;
+
+// --- getUserId ---
+// Request body is empty
+// Reply body contains utf8 bytes of user id
+
+// --- login ---
+// Reply is status only and body is empty
+message LoginRequestBody {
+	string service_url = 1;
+}
+message LoginReplyBody {
+	string session_id = 1;
+}

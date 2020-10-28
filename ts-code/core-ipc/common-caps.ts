@@ -19,6 +19,7 @@ import { ExposedObj, W3N_NAME, Caller, ExposedServices } from "../ipc-via-protob
 import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
 import { exposeStorageCAP, makeStorageCaller } from "../ipc-via-protobuf/storage-cap";
+import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
 
 type W3N = web3n.caps.common.W3N;
 
@@ -26,6 +27,9 @@ export function exposeW3N(coreSide: ExposedServices, w3n: W3N): void {
 	const expW3N: ExposedObj<W3N> = {};
 	if (w3n.log) {
 		expW3N.log = exposeLogger(w3n.log);
+	}
+	if (w3n.mailerid) {
+		expW3N.mailerid = exposeMailerIdCAP(w3n.mailerid);
 	}
 	if (w3n.mail) {
 		expW3N.mail = exposeASMailCAP(w3n.mail, coreSide);
@@ -42,11 +46,13 @@ export async function makeW3Nclient(clientSide: Caller): Promise<W3N> {
 	const w3n: W3N = {};
 	for (const cap of lstOfCAPs) {
 		if (cap === 'log') {
-			w3n.log = makeLogCaller(clientSide, objPath.concat('log'));
+			w3n.log = makeLogCaller(clientSide, objPath.concat(cap));
+		} else if (cap === 'mailerid') {
+			w3n.mailerid = makeMailerIdCaller(clientSide, objPath.concat(cap));
 		} else if (cap === 'mail') {
-			w3n.mail = makeASMailCaller(clientSide, objPath.concat('mail'));
+			w3n.mail = makeASMailCaller(clientSide, objPath.concat(cap));
 		} else if (cap === 'storage') {
-			const storePath = objPath.concat('storage');
+			const storePath = objPath.concat(cap);
 			const lstStorageCAP = await clientSide.listObj(
 				storePath) as (keyof NonNullable<W3N['storage']>)[];
 			const sysFS = lstStorageCAP.includes('getSysFS');

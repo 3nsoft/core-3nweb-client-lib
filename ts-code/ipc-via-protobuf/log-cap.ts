@@ -15,8 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedFn, ObjectsConnector, Caller } from "../ipc-via-protobuf/connector";
-import { join, resolve } from "path";
+import { ExposedFn, Caller } from "../ipc-via-protobuf/connector";
 import { ProtoType, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
 
 type Logger = web3n.caps.common.Logger;

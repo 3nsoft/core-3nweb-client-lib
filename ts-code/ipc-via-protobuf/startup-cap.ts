@@ -16,7 +16,7 @@
 */
 
 import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
-import { ProtoType, strArrValType, boolValType, fixArray, packInt, unpackInt, toVal, Value, valOfOpt } from "./protobuf-msg";
+import { ProtoType, strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { defer } from "../lib-common/processes";
@@ -79,6 +79,7 @@ namespace getAvailableAddresses {
 
 	interface Request {
 		name: string;
+		token?: Value<string>;
 	}
 
 	const requestType = startupType<Request>('GetAvailableAddressesRequestBody');
@@ -87,8 +88,8 @@ namespace getAvailableAddresses {
 		fn: SignUpService['getAvailableAddresses']
 	): ExposedFn {
 		return buf => {
-			const { name } = requestType.unpack(buf);
-			const promise = fn(name)
+			const { name, token } = requestType.unpack(buf);
+			const promise = fn(name, valOfOpt(token))
 			.then(addresses => strArrValType.pack({ values: addresses }));
 			return { promise };
 		};
@@ -98,8 +99,9 @@ namespace getAvailableAddresses {
 		caller: Caller, objPath: string[]
 	): SignUpService['getAvailableAddresses'] {
 		const path = objPath.concat('getAvailableAddresses');
-		return name => caller
-		.startPromiseCall(path, requestType.pack({ name }))
+		return (name, token) => caller
+		.startPromiseCall(path, requestType.pack(
+			{ name, token: toOptVal(token) }))
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
 	}
 
@@ -111,14 +113,15 @@ namespace addUser {
 
 	interface Request {
 		userId: string;
+		token?: Value<string>;
 	}
 
 	const requestType = startupType<Request>('AddUserRequestBody');
 
 	export function wrapService(fn: SignUpService['addUser']): ExposedFn {
 		return buf => {
-			const { userId } = requestType.unpack(buf);
-			const promise = fn(userId)
+			const { userId, token } = requestType.unpack(buf);
+			const promise = fn(userId, valOfOpt(token))
 			.then(wasAdded => boolValType.pack(toVal(wasAdded)));
 			return { promise };
 		};
@@ -128,8 +131,9 @@ namespace addUser {
 		caller: Caller, objPath: string[]
 	): SignUpService['addUser'] {
 		const path = objPath.concat('addUser');
-		return userId => caller
-		.startPromiseCall(path, requestType.pack({ userId }))
+		return (userId, token) => caller
+		.startPromiseCall(path, requestType.pack(
+			{ userId, token: toOptVal(token) }))
 		.then(buf => boolValType.unpack(buf).value);
 	}
 

@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This library handles signing and verification of signatures, used
@@ -20,8 +21,7 @@
  */
 
 import { signing, GetRandom, arrays, compareVectors } from "ecma-nacl";
-import { JsonKey, Key, SignedLoad, keyToJson, keyFromJson, KeyCert, getKeyCert }
-	from "./jwkeys";
+import { JsonKey, Key, SignedLoad, keyToJson, keyFromJson, KeyCert, getKeyCert } from "./jwkeys";
 import { utf8, base64 } from "./buffer-utils";
 
 /**
@@ -158,7 +158,7 @@ export module idProvider {
 	export const KID_BYTES_LENGTH = 9;
 
 	export const MAX_USER_CERT_VALIDITY = 24*60*60;
-	
+
 	export function makeSelfSignedCert(address: string, validityPeriod: number,
 			sjkey: JsonKey, arrFactory?: arrays.Factory):
 			SignedLoad {
@@ -174,7 +174,7 @@ export module idProvider {
 		return makeCert(pkey, address, address,
 			now, now+validityPeriod, skey, arrFactory);
 	}
-	
+
 	/**
 	 * One should keep MailerId root key offline, as this key is used only to
 	 * sign provider keys, which have to work online.
@@ -197,7 +197,7 @@ export module idProvider {
 				now, now+validityPeriod, rootPair.skey, arrFactory);
 		return { cert: rootCert, skey: keyToJson(rootPair.skey) };
 	}
-	
+
 	/**
 	 * @param address is an address of an issuer
 	 * @param validityPeriod validity period of a generated self-signed
@@ -293,7 +293,7 @@ export module idProvider {
 			}
 		};
 	}
-	
+
 }
 Object.freeze(idProvider);
 
@@ -347,7 +347,7 @@ export module relyingParty {
 		if (!certOK) { throw makeSigVerifException(`Certificate ${use} failed validation.`); }
 		return { pkey: pkey, address: cert.cert.principal.address };
 	}
-	
+
 	/**
 	 * @param certs is a chain of certificate to be verified.
 	 * @param rootAddr is MailerId service's domain.
@@ -392,13 +392,13 @@ export module relyingParty {
 		return verifyCertAndGetPubKey(certs.user, KEY_USE.SIGN,
 				validAt, arrFactory, provider.address, provider.pkey);
 	}
-	
+
 	export interface AssertionInfo {
 		relyingPartyDomain: string;
 		sessionId: string;
 		user: string;
 	}
-	
+
 	export function verifyAssertion(midAssertion: SignedLoad,
 			certChain: CertsChain, rootAddr: string,
 			validAt: number, arrFactory?: arrays.Factory): AssertionInfo {
@@ -436,7 +436,7 @@ export module relyingParty {
 			user: userInfo.address
 		};
 	}
-	
+
 	/**
 	 * This function does verification of a single certificate with known
 	 * signing key.
@@ -490,7 +490,7 @@ export module relyingParty {
 		}
 		return cert.cert.publicKey;
 	}
-	
+
 	/**
 	 * @param pubKeyCert certificate with a public key, that needs to be
 	 * verified.
@@ -522,7 +522,7 @@ export module relyingParty {
 		return verifyKeyCert(pubKeyCert, principalAddress,
 			principalInfo.pkey, validAt, arrFactory);
 	}
-	
+
 }
 Object.freeze(relyingParty);
 
@@ -530,10 +530,10 @@ Object.freeze(relyingParty);
 function correlateSKeyWithItsCert(skey: Key, cert: KeyCert): void {
 	const pkey = keyFromJson(cert.cert.publicKey, skey.use,
 			signing.JWK_ALG_NAME, signing.PUBLIC_KEY_LENGTH);
-	if ( ! ((pkey.kid === skey.kid) &&
-			(pkey.use === skey.use) &&
-			(pkey.alg === skey.alg) &&
-			compareVectors(signing.extract_pkey(skey.k), pkey.k))) {
+	if ( ! ((pkey.kid === skey.kid)
+	&& (pkey.use === skey.use)
+	&& (pkey.alg === skey.alg)
+	&& compareVectors(signing.extract_pkey(skey.k), pkey.k))) {
 		throw new Error("Key does not correspond to certificate.");
 	}
 }
@@ -552,13 +552,15 @@ export module user {
 		certExpiresAt: number;
 		validityPeriod: number;
 		/**
-		 * @param rpDomain
+		 * @param rpDomain relying party domain. If there is an explicit port,
+		 * this should domain:port, which is a hostname part of url parsing.
 		 * @param sessionId
 		 * @param validFor (optional)
 		 * @return signed assertion with a given sessionId string.
 		 */
-		generateAssertionFor(rpDomain: string, sessionId: string,
-				validFor?: number): SignedLoad;
+		generateAssertionFor(
+			rpDomain: string, sessionId: string, validFor?: number
+		): SignedLoad;
 		/**
 		 * @param pkey
 		 * @param validFor
@@ -574,13 +576,13 @@ export module user {
 	export const KID_BYTES_LENGTH = 9;
 
 	export const MAX_SIG_VALIDITY = 30*60;
-	
+
 	export function generateSigningKeyPair(random: GetRandom,
 			arrFactory?: arrays.Factory): Keypair {
 		return genSignKeyPair(KEY_USE.SIGN, KID_BYTES_LENGTH,
 				random, arrFactory);
 	}
-	
+
 	/**
 	 * @param signKey which will be used to sign assertions/keys. Note that
 	 * this key shall be wiped, when signer is destroyed, as key is neither
@@ -614,8 +616,9 @@ export module user {
 			issuer: certificate.issuer,
 			certExpiresAt: certificate.expiresAt,
 			validityPeriod: assertionValidity,
-			generateAssertionFor: (rpDomain: string, sessionId: string,
-					validFor?: number): SignedLoad => {
+			generateAssertionFor: (
+				rpDomain: string, sessionId: string, validFor?: number
+			): SignedLoad => {
 				if (!signKey) { throw new Error("Signer is already destroyed."); }
 				if ('number' === typeof validFor) {
 					if (validFor > assertionValidity) {
@@ -640,7 +643,8 @@ export module user {
 				}
 				const assertionBytes = utf8.pack(JSON.stringify(assertion));
 				const sigBytes = signing.signature(
-						assertionBytes, signKey.k, arrFactory);
+					assertionBytes, signKey.k, arrFactory
+				);
 				return {
 					alg: signKey.alg,
 					kid: signKey.kid,
@@ -654,9 +658,11 @@ export module user {
 				if (validFor < 0) { new Error(`Given certificate validity is illegal: ${validFor}`); }
 				const now = Math.floor(Date.now()/1000);
 				if (now >= certificate.expiresAt) { throw new Error(`Signing key has already expiried at ${certificate.expiresAt} and now is ${now}`); }
-				return makeCert(pkey, certificate.cert.principal.address,
-							certificate.cert.principal.address,
-							now, now+validFor, signKey, arrFactory);
+				return makeCert(
+					pkey, certificate.cert.principal.address,
+					certificate.cert.principal.address,
+					now, now+validFor, signKey, arrFactory
+				);
 			},
 			destroy: (): void => {
 				if (!signKey) { return; }
@@ -669,7 +675,7 @@ export module user {
 		Object.freeze(signer);
 		return signer;
 	}
-	
+
 }
 Object.freeze(user);
 

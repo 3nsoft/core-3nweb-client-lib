@@ -53,6 +53,7 @@ export class Core {
 	private cryptor: ReturnType<typeof makeCryptor>;
 	private storages: Storages;
 	private asmail: ASMail;
+	private idManager: IdManager|undefined = undefined;
 	private isInitialized = false;
 	private isClosed = false;
 	private readonly capFactories = new Map<string, CapFactory<any>>();
@@ -113,6 +114,15 @@ export class Core {
 				const cap: AppLog = (type, msg, e) => this.logger.appLog(
 					type, m.appDomain, msg, e);
 				return { cap };
+			},
+
+			mailerid: m => {
+				if (m.capsRequested.mailerid === true) {
+					const cap = this.idManager!.makeMailerIdCAP();
+					return { cap };
+				} else {
+					return undefined;
+				}
 			}
 
 		});
@@ -281,15 +291,17 @@ export class Core {
 
 	private async initCore(idManager: IdManager): Promise<string> {
 		try {
+			this.idManager = idManager;
 			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
 				ASMAIL_APP_NAME);
 			const inboxLocalFS = await this.storages.makeLocalFSForApp(
 				ASMAIL_APP_NAME);
-			await this.asmail.init(idManager.getId(),
-				idManager.getSigner, inboxSyncedFS, inboxLocalFS,
-				this.storages.storageGetterForASMail());
+			await this.asmail.init(
+				this.idManager.getId(), this.idManager.getSigner,
+				inboxSyncedFS, inboxLocalFS, this.storages.storageGetterForASMail()
+			);
 			this.isInitialized = true;
-			return idManager.getId();
+			return this.idManager.getId();
 		} catch (err) {
 			throw errWithCause(err, 'Failed to initialize core');
 		}

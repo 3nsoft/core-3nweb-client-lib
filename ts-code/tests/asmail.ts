@@ -25,7 +25,12 @@ import { assert } from '../lib-common/assert';
 describe('ASMail', () => {
 
 	const s = setupWithUsers(
-		true, [ 'Bob Perkins @company.inc', 'John Morrison @bank.com' ]);
+		true, [ 'Bob Perkins @company.inc', 'John Morrison @bank.com' ]
+	);
+
+	beforeAll(() => {
+		assert(s.users.length >= 2, `at least two users should be set up`);
+	});
 
 	itAsync('mail is present in common CAPs', async () => {
 		assert(s.users.length > 0);

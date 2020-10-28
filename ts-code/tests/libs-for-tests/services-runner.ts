@@ -21,7 +21,7 @@ import { rmDirWithContent, FileException, existsFolderSync } from "../../lib-com
 
 let numOfRunningServers = 0;
 
-const DATA_FOLDER = resolve(__dirname, `../../../../test-server-data`);
+const DATA_FOLDER = resolve(__dirname, `../../../test-server-data`);
 
 const serverMod = (() => {
 	let serverDir: string;
@@ -32,7 +32,7 @@ const serverMod = (() => {
 	} else {
 		throw new Error(`Spec server directory is not found. You may need to download spec server from https://github.com/3nsoft/spec-server , build and place it near this project's main folder.`);
 	}
-	return require(serverDir+'/build/mock/run-in-proc');
+	return require(serverDir+'/build/lib');
 })();
 
 
@@ -44,7 +44,7 @@ export class ServicesRunner {
 
 	constructor(
 		public readonly port: number,
-		public readonly signupDomains: string[]
+		public readonly domains: { noTokenSignup: string[]; other: string[]; }
 	) {
 		numOfRunningServers += 1;
 		this.serverNum = numOfRunningServers;
@@ -53,8 +53,8 @@ export class ServicesRunner {
 	}
 
 	async start(): Promise<void> {
-		const { stop } = await serverMod.startOnLocalhost(
-			this.dataFolder, this.port, this.signupDomains);
+		const { stop } = await serverMod.mock.startOnLocalhost(
+			this.dataFolder, this.port, this.domains);
 		this.stopFn = stop;
 	}
 
@@ -72,6 +72,10 @@ export class ServicesRunner {
 		await rmDirWithContent(this.dataFolder).catch((exc: FileException) => {
 			if (!exc.notFound) { throw exc; }
 		});
+	}
+
+	createSingleUserSignupCtx(userId: string): Promise<string> {
+		return serverMod.confs.addSingleUserSignup(this.dataFolder, userId);
 	}
 
 }

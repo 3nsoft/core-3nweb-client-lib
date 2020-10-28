@@ -256,8 +256,9 @@ export class Storages implements FactoryOfAppFSs {
 		Object.seal(this);
 	}
 
-	makeStorageCAP: StorageCAPMaker =
-		policy => (new PerWinStorage(this, policy)).wrap();
+	makeStorageCAP(policy: StoragePolicy): { cap: Service; close: () => void; } {
+		return (new PerWinStorage(this, policy)).wrap();
+	}
 
 	addPreCloseWait(wait: Promise<void>): void {
 		const detachWait = () => {
@@ -433,7 +434,7 @@ export class Storages implements FactoryOfAppFSs {
 Object.freeze(Storages.prototype);
 Object.freeze(Storages);
 
-export async function userFilesOnDevice(): Promise<WritableFS> {
+async function userFilesOnDevice(): Promise<WritableFS> {
 	if (process.platform === 'win32') {
 		return DeviceFS.makeWritable(process.env.USERPROFILE!);
 	} else {
@@ -442,7 +443,7 @@ export async function userFilesOnDevice(): Promise<WritableFS> {
 }
 
 
-export async function sysFilesOnDevice(): Promise<FSItem> {
+async function sysFilesOnDevice(): Promise<FSItem> {
 	const c = makeFSCollection();
 	if (process.platform === 'win32') {
 		const sysDrive = process.env.SystemDrive!;
@@ -459,7 +460,7 @@ export async function sysFilesOnDevice(): Promise<FSItem> {
 	return { isCollection: true, item: c };
 }
 
-export interface FactoryOfAppFSs {
+interface FactoryOfAppFSs {
 	makeSyncedFSForApp(appFolder: string): Promise<WritableFS>;
 	makeLocalFSForApp(appFolder: string): Promise<WritableFS>;
 	addPreCloseWait(wait: Promise<void>): void;
@@ -470,10 +471,8 @@ export interface FactoryOfAppFSs {
 type Service = web3n.storage.Service;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
 
-export type StorageCAPMaker =
-	(policy: StoragePolicy) => { cap: Service; close: () => void; };
 
-export class PerWinStorage {
+class PerWinStorage {
 
 	private appFSs = new Map<string, WritableFS>();
 
@@ -484,7 +483,7 @@ export class PerWinStorage {
 		Object.seal(this);
 	}
 
-	wrap(): ReturnType<StorageCAPMaker> {
+	wrap(): ReturnType<Storages['makeStorageCAP']> {
 		const cap: Service = {
 			getAppLocalFS: this.getAppLocalFS.bind(this),
 			getAppSyncedFS: this.getAppSyncedFS.bind(this)

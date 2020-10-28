@@ -147,7 +147,7 @@ export class ASMail {
 		});
 	}
 
-	makeASMailCAP: MailCAPMaker = () => {
+	makeASMailCAP(): Service {
 		const w: Service = {
 			getUserId: async () => this.address,
 			delivery: this.delivery.wrap(),

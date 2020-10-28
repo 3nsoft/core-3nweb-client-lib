@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { checkAvailableAddressesForName, addUser } from '../lib-client/3nweb-signup';
 import { NetClient } from '../lib-client/request-utils';
@@ -71,8 +72,9 @@ function makeLabeledMidLoginKey(): { skey: JsonKey; pkey: JsonKey } {
 
 type SignUpService = web3n.startup.SignUpService;
 
+
 export class SignUp {
-	
+
 	private mid: {
 		defaultSKey: Uint8Array;
 		labeledSKey: JsonKey;
@@ -91,7 +93,7 @@ export class SignUp {
 		}
 		return this.netLazyInit;
 	}
-	
+
 	constructor(
 		serviceURL: string,
 		private cryptor: Cryptor,
@@ -102,7 +104,7 @@ export class SignUp {
 		this.setServiceURL(serviceURL);
 		Object.seal(this);
 	}
-	
+
 	private setServiceURL(serviceURL: string): void {
 		const url = parseUrl(serviceURL);
 		if (url.protocol !== 'https:') {
@@ -123,14 +125,14 @@ export class SignUp {
 		};
 		return Object.freeze(service);
 	}
-	
+
 	private getAvailableAddresses: SignUpService[
-			'getAvailableAddresses'] = async (name) => {
+			'getAvailableAddresses'] = async (name, signupToken) => {
 		const addresses = await checkAvailableAddressesForName(
-			this.net, this.serviceURL, name);
+			this.net, this.serviceURL, name, signupToken);
 		return addresses;
 	};
-	
+
 	private createUserParams: SignUpService[
 			'createUserParams'] = async (pass, progressCB) => {
 		await this.genMidParams(pass, 0, 50, progressCB);
@@ -184,8 +186,8 @@ export class SignUp {
 			}
 		};
 	}
-	
-	private addUser: SignUpService['addUser'] = async (address) => {
+
+	private addUser: SignUpService['addUser'] = async (address, signupToken) => {
 		for (const user of await this.getUsersOnDisk()) {
 			if (areAddressesEqual(address, user)) { throw new Error(
 				`Account ${user} already exists on a disk.`); }
@@ -193,7 +195,8 @@ export class SignUp {
 		const accountCreated = await addUser(this.net, this.serviceURL, {
 			userId: address,
 			mailerId: this.mid.params,
-			storage: this.store.params
+			storage: this.store.params,
+			signupToken
 		}).catch (async err => {
 			await this.logError(err, `Failed to create user account ${address}.`);
 			throw err;
@@ -219,10 +222,11 @@ export class SignUp {
 	private doneBroadcast = new Subject<CreatedUser>();
 
 	newUser$ = this.doneBroadcast.asObservable();
-	
+
 }
 Object.freeze(SignUp.prototype);
 Object.freeze(SignUp);
+
 
 export interface CreatedUser {
 	address: string;

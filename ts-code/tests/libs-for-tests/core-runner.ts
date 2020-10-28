@@ -23,7 +23,6 @@ import { UTIL_DIR } from "../../lib-client/local-files/app-files";
 import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
 import { assert } from "../../lib-common/assert";
-import { type } from "os";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 
 export const testApp: web3n.caps.common.AppManifest = {
@@ -47,7 +46,8 @@ export const testApp: web3n.caps.common.AppManifest = {
 					storage: "synced-n-local"
 				}
 			]
-		}
+		},
+		mailerid: true
 	}
 };
 
@@ -58,7 +58,7 @@ export interface User {
 	pass: string;
 }
 
-const DATA_FOLDER = resolve(__dirname, `../../../../test-data`);
+const DATA_FOLDER = resolve(__dirname, `../../../test-data`);
 
 type CommonW3N = web3n.caps.common.W3N;
 type StartupW3N = web3n.startup.W3N;

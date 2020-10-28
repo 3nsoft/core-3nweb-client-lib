@@ -31,6 +31,8 @@ export namespace startSession {
 	
 	export const URL_END = 'start-session';
 
+	export const method = 'POST';
+
 	export interface Request {
 		userId: string;
 	}
@@ -56,6 +58,8 @@ Object.freeze(startSession);
 export namespace authSession {
 	
 	export const URL_END = 'authorize-session';
+
+	export const method = 'POST';
 
 	export interface Request {
 		assertion: jwk.SignedLoad;

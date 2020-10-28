@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This defines a base class for some service's client that logs in with
@@ -104,7 +105,7 @@ export abstract class ServiceUser {
 		}
 		const rep = await this.net.doJsonRequest<loginApi.start.Reply>({
 			url: `${this.serviceURI}${this.loginUrlPart}${loginApi.start.URL_END}`,
-			method: 'POST',
+			method: loginApi.start.method,
 			responseType: 'json'
 		}, reqData);
 		if (rep.status == loginApi.start.SC.ok) {
@@ -205,7 +206,7 @@ export abstract class ServiceUser {
 	private async completeLoginExchange(): Promise<void> {
 		const rep = await this.net.doBinaryRequest<Uint8Array>({
 			url: `${this.serviceURI}${this.loginUrlPart}${loginApi.complete.URL_END}`,
-			method: 'POST',
+			method: loginApi.complete.method,
 			sessionId: this.sessionId,
 			responseType: 'arraybuffer'
 		}, this.encChallenge);

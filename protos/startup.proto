@@ -11,12 +11,14 @@ package startup;
 // Reply body is common.StringArrayValue
 message GetAvailableAddressesRequestBody {
 	string name = 1;
+	common.StringValue token = 2;
 }
 
 // --- signUp.addUser ---
 // Reply body is common.BooleanValue
 message AddUserRequestBody {
 	string user_id = 1;
+	common.StringValue token = 2;
 }
 
 // --- signUp.isActivated ---
