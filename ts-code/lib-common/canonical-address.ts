@@ -41,7 +41,9 @@ const whiteSpace = /\s/g;
 const invalidInDomain = /[^a-zA-Z0-9\-\.]/;
 
 function checkDomainString(d: string, addrForErrMsg: string): void {
-	if (d.length === 0) { throw makeParseExc(addrForErrMsg); }
+	if (d.length === 0) { throw makeParseExc(addrForErrMsg, `Domain is empty`); }
+	if (d.startsWith('xn--')) { throw makeParseExc(addrForErrMsg,
+		`Domain can't be in puny code`); }
 	let ascii: string;
 	try {
 		ascii = toASCII(d);
@@ -69,8 +71,11 @@ export interface UserIdParseException extends web3n.RuntimeException {
 }
 
 export function areAddressesEqual(a: string, b: string): boolean {
-	if (!a || !b) { return false; }
-	return (toCanonicalAddress(a) === toCanonicalAddress(b));
+	const canonicalA = toCanonicalAddress(a);
+	if (!canonicalA) { return false; }
+	const canonicalB = toCanonicalAddress(b);
+	if (!canonicalB) { return false; }
+	return (canonicalA === canonicalB);
 }
 
 /**

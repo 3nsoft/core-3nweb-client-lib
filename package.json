@@ -1,12 +1,12 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.13.0",
+  "version": "0.13.3",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
   "scripts": {
-    "build": "tsc -p ts-code",
-    "test": "tsc -p ts-code && node build/tests/jasmine.js"
+    "build": "bash ci/build-ts.sh",
+    "test": "bash ci/build-ts.sh && node build/tests/jasmine.js"
   },
   "repository": {
     "type": "git",

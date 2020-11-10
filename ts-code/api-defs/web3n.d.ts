@@ -12,7 +12,16 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/// <reference path="asmail.d.ts" />
+/// <reference path="common-caps.d.ts" />
+/// <reference path="files.d.ts" />
+/// <reference path="mailerid.d.ts" />
+/// <reference path="rpc.d.ts" />
+/// <reference path="startup.d.ts" />
+/// <reference path="storage.d.ts" />
 
 
 declare namespace web3n {
