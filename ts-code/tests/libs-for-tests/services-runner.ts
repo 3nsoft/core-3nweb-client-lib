@@ -16,24 +16,13 @@
 */
 
 import { resolve } from "path";
-import { rmDirWithContent, FileException, existsFolderSync } from "../../lib-common/async-fs-node";
+import { rmDirWithContent, FileException } from "../../lib-common/async-fs-node";
+import * as serverMod from 'spec-3nweb-server';
 
-
-let numOfRunningServers = 0;
 
 const DATA_FOLDER = resolve(__dirname, `../../../test-server-data`);
 
-const serverMod = (() => {
-	let serverDir: string;
-	if (existsFolderSync(resolve(__dirname, '../../../../spec-server'))) {
-		serverDir = '../../../../spec-server';
-	} else if (existsFolderSync(resolve(__dirname, '../../../spec-server'))) {
-		serverDir = '../../../spec-server';
-	} else {
-		throw new Error(`Spec server directory is not found. You may need to download spec server from https://github.com/3nsoft/spec-server , build and place it near this project's main folder.`);
-	}
-	return require(serverDir+'/build/lib');
-})();
+let numOfRunningServers = 0;
 
 
 export class ServicesRunner {
