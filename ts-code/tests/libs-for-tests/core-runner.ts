@@ -93,7 +93,7 @@ export class CoreRunner {
 		this.appCaps = undefined;
 		this.core = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			() => makeNetClient(), {});
+			makeNetClient);
 	}
 
 	async close(): Promise<void> {

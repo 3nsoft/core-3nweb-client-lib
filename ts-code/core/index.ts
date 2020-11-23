@@ -24,11 +24,10 @@ import { errWithCause } from '../lib-common/exceptions/error';
 import { copy as jsonCopy } from '../lib-common/json-utils';
 import { makeCryptor } from '../lib-client/cryptor/cryptor';
 import { Subject, merge } from 'rxjs';
-import { Logger, AppLog, makeLogger } from '../lib-client/logging/log-to-file';
+import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { flatMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from '../lib-client/local-files/app-files';
-import { assert } from '../lib-common/assert';
 
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
@@ -44,9 +43,6 @@ export interface CoreConf {
 	signUpUrl: string;
 }
 
-export type CapFactory<T extends AppManifest> =
-	(manifest: T) => { cap: any; close?: () => void }|undefined;
-
 
 export class Core {
 
@@ -56,7 +52,6 @@ export class Core {
 	private idManager: IdManager|undefined = undefined;
 	private isInitialized = false;
 	private isClosed = false;
-	private readonly capFactories = new Map<string, CapFactory<any>>();
 
 	private constructor(
 		private readonly makeNet: () => NetClient,
@@ -74,58 +69,12 @@ export class Core {
 	}
 
 	static make<M extends AppManifest, W extends W3N>(
-		conf: CoreConf,
-		makeNet: () => NetClient,
-		additionalCaps: { [capName in keyof W]: CapFactory<M>; }
+		conf: CoreConf, makeNet: () => NetClient
 	): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
 		const core = new Core(makeNet, dirs, logger, conf.signUpUrl);
-		core.addCommonCaps();
-		core.addCapFactories(additionalCaps);
 		return core;
-	}
-
-	private addCapFactories<M extends AppManifest, W extends W3N>(
-		additionalCaps: { [capName in keyof W]: CapFactory<M>; }
-	): void {
-		for (const [capName, factory] of Object.entries(additionalCaps)) {
-			assert(!this.capFactories.has(capName),
-				`Duplicate factory for ${capName} capability`);
-			this.capFactories.set(capName, factory!);
-		}
-	}
-
-	private addCommonCaps(): void {
-		this.addCapFactories<AppManifest, W3N>({
-
-			storage: m => this.storages.makeStorageCAP(makeStoragePolicy(m)),
-
-			mail: m => {
-				if ((m.capsRequested.mail!.receivingFrom === 'all')
-				&& (m.capsRequested.mail!.sendingTo === 'all')) {
-					return { cap: this.asmail.makeASMailCAP() };
-				} else {
-					return undefined;
-				}
-			},
-
-			log: m => {
-				const cap: AppLog = (type, msg, e) => this.logger.appLog(
-					type, m.appDomain, msg, e);
-				return { cap };
-			},
-
-			mailerid: m => {
-				if (m.capsRequested.mailerid === true) {
-					const cap = this.idManager!.makeMailerIdCAP();
-					return { cap };
-				} else {
-					return undefined;
-				}
-			}
-
-		});
 	}
 
 	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
@@ -244,9 +193,9 @@ export class Core {
 
 	};
 
-	makeCAPsForApp<W extends W3N>(
+	makeCAPsForApp(
 		appDomain: string, manifest: AppManifest
-	): { caps: W; close: () => void; } {
+	): { caps: W3N; close: () => void; } {
 		if (!this.isInitialized || this.isClosed) { throw new Error(
 			`Core is either not yet initialized, or is already closed.`); }
 
@@ -254,22 +203,43 @@ export class Core {
 			throw new Error(`App manifest is for domain ${manifest.appDomain}, while app's domain is ${appDomain}`);
 		}
 
-		const caps = {} as W;
-		const closeFns: (() => void)[] = [];
+		const { cap: storage, close } = this.makeStorageCAP(manifest);
+		const mail = this.makeMailCAP(manifest);
+		const log = this.makeLogCAP(manifest);
+		const mailerid = this.makeMailerIdCAP(manifest);
 
-		for (const [capName, factory] of this.capFactories.entries()) {
-			const c = factory(manifest);
-			if (!c) { continue; }
-			caps[capName] = c.cap;
-			if (c.close) {
-				closeFns.push(c.close);
-			}
-		}
-
-		const close = () => closeFns.forEach(f => f());
+		const caps: W3N = { mail, log, mailerid, storage };
 
 		return { caps, close };
 	};
+
+	private makeStorageCAP(
+		m: AppManifest
+	): ReturnType<Storages['makeStorageCAP']> {
+		return this.storages.makeStorageCAP(makeStoragePolicy(m));
+	}
+
+	private makeMailCAP(m: AppManifest): W3N['mail'] {
+		if ((m.capsRequested.mail!.receivingFrom === 'all')
+		&& (m.capsRequested.mail!.sendingTo === 'all')) {
+			return this.asmail.makeASMailCAP();
+		} else {
+			return undefined;
+		}
+	}
+
+	private makeLogCAP(m: AppManifest): W3N['log'] {
+		return (type, msg, e) => this.logger.appLog(
+			type, m.appDomain, msg, e);
+	}
+
+	private makeMailerIdCAP(m: AppManifest): W3N['mailerid'] {
+		if (m.capsRequested.mailerid === true) {
+			return this.idManager!.makeMailerIdCAP();
+		} else {
+			return undefined;
+		}
+	}
 
 	private closeBroadcast = new Subject<void>();
 
