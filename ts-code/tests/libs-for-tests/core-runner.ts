@@ -19,7 +19,7 @@ import { Core, makeNetClient } from "../../lib-index";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
 import { stringOfB64Chars } from "../../lib-common/random-node";
-import { UTIL_DIR } from "../../lib-client/local-files/app-files";
+import { UTIL_DIR } from "../../core/app-files";
 import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
 import { assert } from "../../lib-common/assert";

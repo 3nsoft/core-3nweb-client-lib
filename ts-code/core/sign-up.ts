@@ -22,7 +22,7 @@ import { use as keyUse, JsonKey, keyToJson } from '../lib-common/jwkeys';
 import { base64 } from '../lib-common/buffer-utils';
 import { areAddressesEqual } from '../lib-common/canonical-address';
 import * as keyDeriv from '../lib-client/key-derivation';
-import { GetUsersOnDisk } from '../lib-client/local-files/app-files';
+import { GetUsersOnDisk } from './app-files';
 import * as random from '../lib-common/random-node';
 import { Cryptor } from '../lib-client/cryptor/cryptor';
 import { secret_box as sbox, box, arrays } from 'ecma-nacl';

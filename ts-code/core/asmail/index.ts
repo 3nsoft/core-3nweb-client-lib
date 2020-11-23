@@ -19,7 +19,7 @@ import { InboxOnServer } from './inbox';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { KeyRing } from './keyring';
 import { ConfigOfASMailServer } from './config';
-import { InboxPathForUser } from '../../lib-client/local-files/app-files';
+import { InboxPathForUser } from '../app-files';
 import { Delivery } from './delivery';
 import { StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
 import { GetSigner } from '../id-manager';

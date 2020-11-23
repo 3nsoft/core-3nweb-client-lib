@@ -27,7 +27,7 @@ import { Subject, merge } from 'rxjs';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { flatMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
-import { AppDirs, appDirs } from '../lib-client/local-files/app-files';
+import { AppDirs, appDirs } from './app-files';
 
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';

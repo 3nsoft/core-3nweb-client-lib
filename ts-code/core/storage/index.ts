@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { GetSigner } from '../id-manager';
 import { GenerateKey } from '../sign-in';
@@ -36,13 +37,12 @@ import { join } from 'path';
 import * as fs from '../../lib-common/async-fs-node';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { NetClient } from '../../lib-client/request-utils';
-import { StoragePathForUser } from '../../lib-client/local-files/app-files';
+import { StoragePathForUser } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
 type FS = web3n.files.FS;
-type File = web3n.files.File;
 type FSType = web3n.files.FSType;
 type StorageType = web3n.storage.StorageType;
 type FSCollection = web3n.files.FSCollection;

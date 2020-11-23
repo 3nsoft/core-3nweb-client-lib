@@ -12,9 +12,9 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { getCurrentAppVersion } from '../local-files/app-files';
 import { stringifyErr } from '../../lib-common/exceptions/error';
 import { SingleProc } from '../../lib-common/processes';
 import { appendFile, ensureFolderExists, FileException } from '../../lib-common/async-fs-node';
@@ -29,6 +29,23 @@ function logFileName(now: Date, appDomain?: string): string {
 		`${dateStr}.log.txt`);
 }
 
+let version: string;
+function getCurrentAppVersion(): string {
+	if (typeof version !== 'string') {
+		try {
+			const packInfo = require('../../../package.json');
+			if ( typeof packInfo.version === 'string') {
+				version = packInfo.version;
+			} else {
+				version = 'unspecified';
+			}
+		} catch (err) {
+			version = 'unspecified';
+		}
+	}
+	return version;
+}
+
 export function makeLogger(utilDir: string) {
 
 	async function logError(err: any, msg?: string): Promise<void> {
@@ -36,7 +53,7 @@ export function makeLogger(utilDir: string) {
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App version ${getCurrentAppVersion().join('.')}
+App version ${getCurrentAppVersion()}
 Log level: error.${msg ? `
 ${msg}` : ''}
 ${stringifyErr(err)}`;
@@ -68,7 +85,7 @@ ${stringifyErr(err)}`;
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App version ${getCurrentAppVersion().join('.')}
+App version ${getCurrentAppVersion()}
 Log level: warning.
 ${msg}
 ${err ? stringifyErr(err) : ''}`;
@@ -89,7 +106,7 @@ ${err ? stringifyErr(err) : ''}`;
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App ${appDomain}, running on core version ${getCurrentAppVersion().join('.')}
+App ${appDomain}, running on core version ${getCurrentAppVersion()}
 Log level: ${type}.${msg ? `
 ${msg}` : ''}
 ${stringifyErr(err)}`;

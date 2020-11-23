@@ -28,5 +28,9 @@ export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevi
 
 export { DeviceFS } from './lib-client/local-files/device-fs';
 
+export { appDirs } from './core/app-files';
+
+export { makeLogger } from './lib-client/logging/log-to-file';
+
 
 Object.freeze(exports);

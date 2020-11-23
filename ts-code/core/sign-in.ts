@@ -12,12 +12,13 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { IdManager } from './id-manager';
 import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey }
 	from '../lib-client/key-derivation';
-import { GetUsersOnDisk } from '../lib-client/local-files/app-files';
+import { GetUsersOnDisk } from './app-files';
 import { Cryptor } from '../lib-client/cryptor/cryptor';
 import { Subject } from 'rxjs';
 import { LogError } from '../lib-client/logging/log-to-file';
