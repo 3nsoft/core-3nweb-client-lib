@@ -241,7 +241,7 @@ class StorageAndFS<T extends Storage> {
 	}
 }
 
-export class Storages implements FactoryOfAppFSs {
+export class Storages implements FactoryOfFSs {
 
 	private synced: StorageAndFS<SyncedStorage>|undefined = undefined;
 	
@@ -257,7 +257,7 @@ export class Storages implements FactoryOfAppFSs {
 	}
 
 	makeStorageCAP(policy: StoragePolicy): { cap: Service; close: () => void; } {
-		return (new PerWinStorage(this, policy)).wrap();
+		return (new PerAppStorage(this, policy)).wrap();
 	}
 
 	addPreCloseWait(wait: Promise<void>): void {
@@ -430,11 +430,21 @@ export class Storages implements FactoryOfAppFSs {
 		this.local = undefined;
 	}
 
+	wrap(): FactoryOfFSs {
+		return {
+			addPreCloseWait: this.addPreCloseWait.bind(this),
+			getSysFSs: this.getSysFSs.bind(this),
+			getUserFS: this.getUserFS.bind(this),
+			makeLocalFSForApp: this.makeLocalFSForApp.bind(this),
+			makeSyncedFSForApp: this.makeSyncedFSForApp.bind(this)
+		}
+	}
+
 }
 Object.freeze(Storages.prototype);
 Object.freeze(Storages);
 
-async function userFilesOnDevice(): Promise<WritableFS> {
+export async function userFilesOnDevice(): Promise<WritableFS> {
 	if (process.platform === 'win32') {
 		return DeviceFS.makeWritable(process.env.USERPROFILE!);
 	} else {
@@ -443,7 +453,7 @@ async function userFilesOnDevice(): Promise<WritableFS> {
 }
 
 
-async function sysFilesOnDevice(): Promise<FSItem> {
+export async function sysFilesOnDevice(): Promise<FSItem> {
 	const c = makeFSCollection();
 	if (process.platform === 'win32') {
 		const sysDrive = process.env.SystemDrive!;
@@ -460,7 +470,7 @@ async function sysFilesOnDevice(): Promise<FSItem> {
 	return { isCollection: true, item: c };
 }
 
-interface FactoryOfAppFSs {
+export interface FactoryOfFSs {
 	makeSyncedFSForApp(appFolder: string): Promise<WritableFS>;
 	makeLocalFSForApp(appFolder: string): Promise<WritableFS>;
 	addPreCloseWait(wait: Promise<void>): void;
@@ -472,12 +482,12 @@ type Service = web3n.storage.Service;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
 
 
-class PerWinStorage {
+export class PerAppStorage {
 
 	private appFSs = new Map<string, WritableFS>();
 
 	constructor(
-		private appFSsFactory: FactoryOfAppFSs,
+		private appFSsFactory: FactoryOfFSs,
 		private policy: StoragePolicy
 	) {
 		Object.seal(this);
@@ -563,8 +573,8 @@ class PerWinStorage {
 	}
 
 }
-Object.freeze(PerWinStorage.prototype);
-Object.freeze(PerWinStorage);
+Object.freeze(PerAppStorage.prototype);
+Object.freeze(PerAppStorage);
 
 async function applyPolicyToFSItem(
 	fsi: FSItem, policy: 'w'|'r', path?: string

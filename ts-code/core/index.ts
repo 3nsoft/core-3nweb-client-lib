@@ -17,7 +17,7 @@
 
 import { SignUp, CreatedUser } from './sign-up';
 import { IdManager } from './id-manager';
-import { Storages } from './storage';
+import { Storages, FactoryOfFSs } from './storage';
 import { SignIn, StartInitWithoutCache, InitWithCache } from './sign-in';
 import { ASMail } from './asmail';
 import { errWithCause } from '../lib-common/exceptions/error';
@@ -68,9 +68,7 @@ export class Core {
 		Object.seal(this);
 	}
 
-	static make<M extends AppManifest, W extends W3N>(
-		conf: CoreConf, makeNet: () => NetClient
-	): Core {
+	static make(conf: CoreConf, makeNet: () => NetClient): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
 		const core = new Core(makeNet, dirs, logger, conf.signUpUrl);
@@ -275,6 +273,10 @@ export class Core {
 		} catch (err) {
 			throw errWithCause(err, 'Failed to initialize core');
 		}
+	}
+
+	getStorages(): FactoryOfFSs {
+		return this.storages.wrap();
 	}
 
 }

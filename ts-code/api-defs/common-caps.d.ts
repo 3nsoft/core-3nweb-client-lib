@@ -15,8 +15,6 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-/// <reference path="./web3n.d.ts" />
-
 declare namespace web3n.caps.common {
 
 	interface StoragePolicy {

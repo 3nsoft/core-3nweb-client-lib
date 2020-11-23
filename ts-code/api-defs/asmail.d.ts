@@ -12,9 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
-
-/// <reference path="./web3n.d.ts" />
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This is a namespace for things used by mail functionality.
