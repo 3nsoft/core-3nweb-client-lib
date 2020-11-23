@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../lib-common/async-fs-node';
 import * as pathMod from 'path';
@@ -26,7 +27,6 @@ import { wrapWritableFS, wrapReadonlyFS, LinkParameters, Linkable,
 import { selectInFS } from '../files-select';
 import { utf8 } from '../../lib-common/buffer-utils';
 import { pipe } from '../../lib-common/byte-streaming/pipe';
-import { markTransferable } from '../../lib-common/mark-transferable';
 import { DevFileByteSource } from './dev-file-src';
 import { DevFileByteSink } from './dev-file-sink';
 import { fileSrcFromContinuousSrc } from '../files/file-source';
@@ -237,7 +237,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			target: () => (readonly ?
 				DeviceFS.makeReadonly(path) : DeviceFS.makeWritable(path))
 		};
-		return Object.freeze(markTransferable(sl, 'SimpleObject'));
+		return Object.freeze(sl);
 	}
 	
 	static makeFileSymLink(fp: LinkParameters<FileLinkParams>): SymLink {
@@ -258,7 +258,7 @@ export class DeviceFS implements WritableFS, Linkable {
 				}
 			}
 		};
-		return Object.freeze(markTransferable(sl, 'SimpleObject'));
+		return Object.freeze(sl);
 	}
 
 	static async makeWritable(

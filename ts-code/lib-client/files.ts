@@ -12,9 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
-
-import { markTransferable } from '../lib-common/mark-transferable';
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 type FS = web3n.files.FS;
 type ReadonlyFS = web3n.files.ReadonlyFS;
@@ -105,7 +104,7 @@ function wrapWritableFileVersionedAPI(
 function addParamsAndFreezeFileWrap<T extends ReadonlyFile>(w: T, fImpl: T): T {
 	(w as any as Linkable).getLinkParams =
 		(fImpl as any as Linkable).getLinkParams.bind(fImpl);
-	return Object.freeze(markTransferable(w, 'File'));
+	return Object.freeze(w);
 }
 
 export function wrapReadonlyFile(fImpl: ReadonlyFile): ReadonlyFile {
@@ -201,7 +200,7 @@ function addParamsAndFreezeFSWrap<T extends ReadonlyFS>(w: T, fsImpl: T): T {
 		(w as any as Linkable).getLinkParams =
 			(fsImpl as any as Linkable).getLinkParams.bind(fsImpl);
 	}
-	return Object.freeze(markTransferable(w, 'FS'));
+	return Object.freeze(w);
 }
 
 type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
@@ -313,7 +312,7 @@ export function wrapIntoVersionlessReadonlyFS(
 		getXAttr: fs.getXAttr.bind(fs),
 		listXAttrs: fs.listXAttrs.bind(fs)
 	};
-	return Object.freeze(markTransferable(w, 'FS'));
+	return Object.freeze(w);
 }
 
 /**
@@ -341,7 +340,7 @@ function toVersionlessReadonlyFile(f: ReadonlyFile): ReadonlyFile {
 		getXAttr: f.getXAttr.bind(f),
 		listXAttrs: f.listXAttrs.bind(f)
 	};
-	return Object.freeze(markTransferable(w, 'File'));
+	return Object.freeze(w);
 }
 
 

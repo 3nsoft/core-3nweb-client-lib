@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { assert } from "../../lib-common/assert";
 import { BytesFIFOBuffer } from "../../lib-common/byte-streaming/bytes-fifo-buffer";
@@ -20,7 +21,6 @@ import { ContentSection, ROFileLayout } from "./file-layout";
 import { wrapAndSyncFileSource } from "../../lib-common/byte-streaming/wrapping";
 import { AttrsHolder, FileAttrs } from "./file-attrs";
 import { ByteSource } from "xsp-files";
-import { markTransferable } from "../../lib-common/mark-transferable";
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileSection = web3n.files.FileSection;
@@ -124,7 +124,7 @@ export function fileSrcFromContinuousSrc(src: ByteSource): FileByteSource {
 		read: src.read,
 		seek: src.seek
 	};
-	return markTransferable(w, 'SimpleObject');
+	return w;
 }
 
 

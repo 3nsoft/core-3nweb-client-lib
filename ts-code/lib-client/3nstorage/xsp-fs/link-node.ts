@@ -30,7 +30,6 @@ import { Storage, AsyncSBoxCryptor } from './common';
 import { FileObject } from './file';
 import { XspFS } from './fs';
 import { idToHeaderNonce, ObjSource } from 'xsp-files';
-import { markTransferable } from '../../../lib-common/mark-transferable';
 import { LinkAttrs, AttrsHolder } from '../../files/file-attrs';
 
 class LinkCrypto extends NodeCrypto {
@@ -73,7 +72,7 @@ function makeFileSymLink(
 		readonly: !!params.readonly,
 		target: () => FileObject.makeFileFromLinkParams(storage, params)
 	};
-	return Object.freeze(markTransferable(sl, 'SimpleObject'));
+	return Object.freeze(sl);
 }
 
 function makeFolderSymLink(
@@ -84,7 +83,7 @@ function makeFolderSymLink(
 		readonly: !!params.readonly,
 		target: () => XspFS.makeFolderFromLinkParams(storage, params)
 	};
-	return Object.freeze(markTransferable(sl, 'SimpleObject'));
+	return Object.freeze(sl);
 }
 
 function makeLinkToStorage(

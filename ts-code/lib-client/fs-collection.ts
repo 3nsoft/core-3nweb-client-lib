@@ -12,10 +12,10 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { Subject, Observer as RxObserver } from 'rxjs';
-import { markTransferable } from '../lib-common/mark-transferable';
 
 type FSCollection = web3n.files.FSCollection;
 type FSItem = web3n.files.FSItem;
@@ -66,7 +66,7 @@ class FSItemsCollection {
 		const asyncIter: AsyncIterator<[ string, FSItem ]> = {
 			next: async () => iter.next()
 		};
-		return markTransferable(asyncIter, 'SimpleObject');
+		return asyncIter;
 	}
 
 	async getAll(): Promise<[ string, FSItem ][]> {
@@ -92,7 +92,7 @@ class FSItemsCollection {
 			remove: this.remove.bind(this),
 			set: this.set.bind(this)
 		};
-		return Object.freeze(markTransferable(w, 'FSCollection'));
+		return Object.freeze(w);
 	}
 
 }
@@ -106,7 +106,7 @@ export function readonlyWrapFSCollection(c: FSCollection): FSCollection {
 		entries: c.entries,
 		watch: c.watch,
 	};
-	return Object.freeze(markTransferable(w, 'FSCollection'));
+	return Object.freeze(w);
 }
 
 export function makeFSCollection(): FSCollection {

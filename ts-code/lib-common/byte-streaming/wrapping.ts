@@ -12,10 +12,10 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { SingleProc, makeSyncedFunc } from "../processes";
-import { markTransferable } from "../mark-transferable";
 import { ByteSource } from "xsp-files";
 
 type FileByteSource = web3n.files.FileByteSource;
@@ -30,7 +30,7 @@ export function wrapAndSyncFileSink(sink: FileByteSink): FileByteSink {
 		splice: makeSyncedFunc(syncProc, sink, sink.splice),
 		truncate: makeSyncedFunc(syncProc, sink, sink.truncate)
 	};
-	return markTransferable(w, 'SimpleObject');
+	return w;
 }
 
 export function wrapAndSyncSource(src: ByteSource): ByteSource {
@@ -41,7 +41,7 @@ export function wrapAndSyncSource(src: ByteSource): ByteSource {
 		read: makeSyncedFunc(syncProc, src, src.read),
 		seek: makeSyncedFunc(syncProc, src, src.seek)
 	};
-	return markTransferable(w, 'SimpleObject');
+	return w;
 }
 
 export function wrapAndSyncFileSource(src: FileByteSource): FileByteSource {
@@ -52,7 +52,7 @@ export function wrapAndSyncFileSource(src: FileByteSource): FileByteSource {
 		read: makeSyncedFunc(syncProc, src, src.read),
 		seek: makeSyncedFunc(syncProc, src, src.seek),
 	};
-	return markTransferable(w, 'SimpleObject');
+	return w;
 }
 
 Object.freeze(exports);
