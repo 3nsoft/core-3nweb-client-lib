@@ -15,16 +15,28 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedObj, W3N_NAME, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
+import { ExposedObj, W3N_NAME, Caller, ExposedServices, ExposedFn } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
 import { exposeStorageCAP, makeStorageCaller } from "../ipc-via-protobuf/storage-cap";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
+import { assert } from "../lib-common/assert";
 
 type W3N = web3n.caps.common.W3N;
 
-export function exposeW3N(coreSide: ExposedServices, w3n: W3N): void {
-	const expW3N: ExposedObj<W3N> = {};
+export type CapExposer = (
+	cap: any, coreSide: ExposedServices
+) => ExposedObj<any>|ExposedFn;
+
+export type MakeCapClient = (
+	clientSide: Caller, objPath: string[]
+) => Promise<any>;
+
+export function exposeW3N<T extends W3N>(
+	coreSide: ExposedServices, w3n: T,
+	extraCAPs?: { [cap in keyof T]: CapExposer; }
+): void {
+	const expW3N = {} as ExposedObj<T>;
 	if (w3n.log) {
 		expW3N.log = exposeLogger(w3n.log);
 	}
@@ -37,27 +49,38 @@ export function exposeW3N(coreSide: ExposedServices, w3n: W3N): void {
 	if (w3n.storage) {
 		expW3N.storage = exposeStorageCAP(w3n.storage, coreSide);
 	}
+	if (extraCAPs) {
+		for (const [ capName, expose ] of Object.entries(extraCAPs)) {
+			assert(typeof expose === 'function');
+			const cap = w3n[capName];
+			if (cap) {
+				w3n[capName] = expose!(cap, coreSide);
+			}
+		}
+	}
 	coreSide.exposeW3NService(expW3N);
 }
 
-export async function makeW3Nclient(clientSide: Caller): Promise<W3N> {
+export async function makeW3Nclient<T extends W3N>(
+	clientSide: Caller, extraCAPs?: { [cap in keyof T]: MakeCapClient; }
+): Promise<T> {
 	const objPath = [ W3N_NAME ];
-	const lstOfCAPs = await clientSide.listObj(objPath) as (keyof W3N)[];
-	const w3n: W3N = {};
+	const lstOfCAPs = await clientSide.listObj(objPath) as (keyof T)[];
+	const w3n = {} as T;
 	for (const cap of lstOfCAPs) {
+		const capObjPath = objPath.concat(cap as string);
 		if (cap === 'log') {
-			w3n.log = makeLogCaller(clientSide, objPath.concat(cap));
+			w3n.log = makeLogCaller(clientSide, capObjPath);
 		} else if (cap === 'mailerid') {
-			w3n.mailerid = makeMailerIdCaller(clientSide, objPath.concat(cap));
+			w3n.mailerid = makeMailerIdCaller(clientSide, capObjPath);
 		} else if (cap === 'mail') {
-			w3n.mail = makeASMailCaller(clientSide, objPath.concat(cap));
+			w3n.mail = makeASMailCaller(clientSide, capObjPath);
 		} else if (cap === 'storage') {
-			const storePath = objPath.concat(cap);
-			const lstStorageCAP = await clientSide.listObj(
-				storePath) as (keyof NonNullable<W3N['storage']>)[];
-			const sysFS = lstStorageCAP.includes('getSysFS');
-			const userFS = lstStorageCAP.includes('getUserFS');
-			w3n.storage = makeStorageCaller(clientSide, storePath, sysFS, userFS);
+			w3n.storage = await makeStorageCaller(clientSide, capObjPath);
+		} else if (extraCAPs && extraCAPs[cap]) {
+			const makeCap = extraCAPs[cap];
+			assert(typeof makeCap === 'function');
+			w3n[cap] = await makeCap(clientSide, capObjPath);
 		}
 	}
 	return w3n;

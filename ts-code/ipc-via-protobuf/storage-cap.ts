@@ -40,10 +40,12 @@ export function exposeStorageCAP(
 	return wrap;
 }
 
-export function makeStorageCaller(
-	caller: Caller, objPath: string[],
-	sysFS: boolean, userFS: boolean
-): Storage {
+export async function makeStorageCaller(
+	caller: Caller, objPath: string[]
+): Promise<Storage> {
+	const lstStorageCAP = await caller.listObj(objPath) as (keyof Storage)[];
+	const sysFS = lstStorageCAP.includes('getSysFS');
+	const userFS = lstStorageCAP.includes('getUserFS');
 	const storage: Storage = {
 		getAppLocalFS: getAppLocalFS.makeCaller(caller, objPath),
 		getAppSyncedFS: getAppSyncedFS.makeCaller(caller, objPath)

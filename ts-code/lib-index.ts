@@ -19,6 +19,8 @@ export * from "./core-ipc/common-caps";
 export * from "./core-ipc/startup-caps";
 
 export * from "./ipc-via-protobuf/connector";
+export { FileMsg, makeFileCaller, exposeFileService } from "./ipc-via-protobuf/file";
+export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
 
 export * from "./core";
 
