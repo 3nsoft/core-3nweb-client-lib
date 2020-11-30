@@ -312,50 +312,68 @@ function workerMain(port: NonNullable<typeof parentPort>): void {
 				args[0], args[1], args[2], args[3], args[4], args[5],
 				progressCB, arrFactory);
 			wipe(args[0]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 
 		'box.calc_dhshared_key': args => {
 			const res = box.calc_dhshared_key(args[0], args[1], arrFactory);
 			wipe(args[0], args[1]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 		'box.generate_pubkey': args => {
 			const res = box.generate_pubkey(args[0], arrFactory);
 			wipe(args[0]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 
 		'sbox.open': args => {
 			const res = sbox.open(args[0], args[1], args[2], arrFactory);
 			wipe(args[2]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 		'sbox.pack': args => {
 			const res = sbox.pack(args[0], args[1], args[2], arrFactory);
 			wipe(args[2]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 		'sbox.formatWN.open': args => {
 			const res = sbox.formatWN.open(args[0], args[1], arrFactory);
 			wipe(args[1]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 		'sbox.formatWN.pack': args => {
 			const res = sbox.formatWN.pack(args[0], args[1], args[2], arrFactory);
 			wipe(args[2]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 
 		'sign.generate_keypair': args => {
 			const pair = sign.generate_keypair(args[0], arrFactory);
 			wipe(args[0]);
-			return { res: pair, trans: transfer(pair.pkey, pair.skey) };
+			return { res: pair };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res: pair, trans: transfer(pair.pkey, pair.skey) };
 		},
 		'sign.signature': args => {
 			const res = sign.signature(args[0], args[1], arrFactory);
 			wipe(args[1]);
-			return { res, trans: transfer(res) };
+			return { res };
+			// electron v.11.0.3 worker thread fails on memory move
+			// return { res, trans: transfer(res) };
 		},
 		'sign.verify': args => {
 			const ok = sign.verify(args[0], args[1], args[2], arrFactory);
