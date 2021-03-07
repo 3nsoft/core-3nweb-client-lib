@@ -174,7 +174,8 @@ export function stat(path: string): Promise<fs.Stats> {
 
 export function fstat(fd: number): Promise<fs.Stats> {
 	return new Promise<fs.Stats>((resolve, reject) => {
-		fs.fstat(fd, (err, stat) => {
+		// from some moment, typing of fs.fstat is broken
+		(fs.fstat as any)(fd, (err, stat) => {
 			if (err) { reject(makeFileExceptionFromNodes(err)); }
 			else { resolve(stat); }
 		});
