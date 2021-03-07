@@ -12,8 +12,11 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
+// XXX direct usage of weak should probably be replaced by wrapping
+// WeakReference that may use inbuilt instead of napi implmentation.
 import * as weak from 'weak-napi';
 import { stringOfB64CharsSync } from '../random-node';
 

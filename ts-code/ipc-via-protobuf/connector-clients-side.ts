@@ -18,7 +18,7 @@
 import { Subject } from "rxjs";
 import { ObjectReference, strArrValType, fixArray, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { Deferred, defer } from "../lib-common/processes";
-import { WeakRef } from "../lib-common/weakref";
+import { WeakReference, makeWeakRefFor } from "../lib-common/weakref";
 import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller } from "./connector";
 
 
@@ -28,11 +28,13 @@ interface FnCall {
 }
 
 
+// XXX can have an optimized use of WeakRef and FinalizationRegistry, when
+// these are available.
 export class ClientsSideImpl implements ClientsSide {
 
 	private readonly fnCalls = new Map<number, FnCall>();
 	private fnCallCounter = 1;
-	private readonly weakRefs = new Set<WeakRef<any>>();
+	private readonly weakRefs = new Set<WeakReference<any>>();
 	private readonly srvRefs = new WeakMap<any, ObjectReference>();
 	private isStopped = false;
 
@@ -171,14 +173,14 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	registerClientDrop(o: any, srvRef: ObjectReference): void {
-		const clientRef = WeakRef.makeFor(o);
+		const clientRef = makeWeakRefFor(o);
 		this.weakRefs.add(clientRef);
 		clientRef.addCallback(this.makeClientDropCB(clientRef, srvRef));
 		this.srvRefs.set(o, srvRef);
 	}
 
 	private makeClientDropCB(
-		clientRef: WeakRef<any>, srvRef: ObjectReference
+		clientRef: WeakReference<any>, srvRef: ObjectReference
 	): () => void {
 		return () => {
 			this.weakRefs.delete(clientRef);

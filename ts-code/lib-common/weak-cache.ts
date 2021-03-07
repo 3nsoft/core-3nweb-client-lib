@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 3NSoft Inc.
+ Copyright (C) 2016 - 2019, 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,12 +15,21 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { WeakRef } from './weakref';
+import { WeakReference, makeWeakRefFor } from './weakref';
 import { TimedCache } from './timed-cache';
 
+
+// XXX WeakReference shields choice between inbuilt and napi implementations of
+// weaks. But inbuilt uses FinalizationRegistry, which is better used in cache
+// directly. Take a look at following code:
+// let registry = new FinalizationRegistry(key => { ... removes WeakRef });
+// registry.register(val, key, val);
+// ... on delete do: registry.unregister(val);
+// Note that our WeakReference wrap has its own FinalizationRegistry, making it
+// heavier.
 export class WeakCache<TKey, TVal> {
 
-	private readonly wRefs = new Map<TKey, WeakRef<TVal>>();
+	private readonly wRefs = new Map<TKey, WeakReference<TVal>>();
 
 	constructor() {
 		Object.freeze(this);
@@ -44,12 +53,12 @@ export class WeakCache<TKey, TVal> {
 	}
 
 	set(key: TKey, val: TVal): void {
-		const wRef = WeakRef.makeFor(val);
+		const wRef = makeWeakRefFor(val);
 		wRef.addCallback(this.makeCB(key, wRef));
 		this.wRefs.set(key, wRef);
 	}
 
-	private makeCB(key: TKey, wRef: WeakRef<TVal>): Function {
+	private makeCB(key: TKey, wRef: WeakReference<TVal>): Function {
 		return () => {
 			if (wRef === this.wRefs.get(key)) {
 				this.wRefs.delete(key);
@@ -68,6 +77,7 @@ export class WeakCache<TKey, TVal> {
 }
 Object.freeze(WeakCache.prototype);
 Object.freeze(WeakCache);
+
 
 export class WeakCacheWithMinLifeTime<TKey, TVal>
 implements TimedCache<TKey, TVal> {

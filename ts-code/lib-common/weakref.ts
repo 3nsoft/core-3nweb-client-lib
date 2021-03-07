@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 3NSoft Inc.
+ Copyright (C) 2019, 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,43 +15,115 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import * as weak from 'weak-napi';
+export interface WeakReference<T> {
+	addCallback(cb: Function): void;
+	removeCallback(cb: Function): void;
+	removeCallbacks(): void;
+	get(): T|undefined;
+}
 
-export class WeakRef<T> {
+let weakNapi: any = undefined;
 
-	private constructor (
-		private readonly ref: T
-	) {
+type WeakRef<T> = {
+	new(o: T);
+	deref(): T|undefined;
+};
+declare var WeakRef: WeakRef<any>;
+type FinalizationRegistry = {
+	new(cb: Function);
+	register(o: any): void;
+};
+declare var FinalizationRegistry: FinalizationRegistry;
+
+export function makeWeakRefFor<T>(o: T): WeakReference<T> {
+	if ((typeof WeakRef !== 'undefined')
+	&& (typeof FinalizationRegistry !== 'undefined')) {
+		return new WeakRefInbuiltImpl(o);
+	} else {
+		if (!weakNapi) {
+			weakNapi = require('weak-napi');
+		}
+		return new WeakRefNapiImpl(o);
+	}
+}
+
+
+class WeakRefInbuiltImpl<T> implements WeakReference<T> {
+
+	private readonly ref: WeakRef<T>;
+	private readonly registry: FinalizationRegistry;
+	private readonly callbacks: Function[] = [];
+
+	constructor (o: T) {
+		this.ref = new WeakRef(o);
+		this.registry = new FinalizationRegistry(this.makeCleanupCallback());
 		Object.freeze(this);
 	}
 
-	static makeFor<T>(o: T): WeakRef<T> {
-		return new WeakRef<T>(weak(o));
+	private makeCleanupCallback(): (() => void) {
+		return () => {
+			for (const cb of this.callbacks) {
+				try {
+					cb();
+				} catch (err) {
+					console.error(err);
+				}
+			}
+		};
 	}
 
 	addCallback(cb: Function): void {
-		weak.addCallback(this.ref, cb);
+		this.callbacks.push(cb);
 	}
 
 	removeCallback(cb: Function): void {
-		weak.removeCallback(this.ref, cb);
+		const ind = this.callbacks.indexOf(cb);
+		if (ind >= 0) {
+			this.callbacks.splice(ind, 1);
+		}
 	}
 
 	removeCallbacks(): void {
-		weak.removeCallbacks(this.ref);
+		this.callbacks.splice(0, this.callbacks.length);
 	}
 
 	get(): T|undefined {
-		return weak.get(this.ref);
-	}
-
-	isDead(): boolean {
-		return weak.isDead(this.ref);
+		return this.ref.deref();
 	}
 
 }
-Object.freeze(WeakRef.prototype);
-Object.freeze(WeakRef);
+Object.freeze(WeakRefInbuiltImpl.prototype);
+Object.freeze(WeakRefInbuiltImpl);
+
+
+class WeakRefNapiImpl<T> implements WeakReference<T> {
+
+	private readonly ref: any;
+
+	constructor (o: T) {
+		this.ref = weakNapi(o);
+		Object.freeze(this);
+	}
+
+	addCallback(cb: Function): void {
+		weakNapi.addCallback(this.ref, cb);
+	}
+
+	removeCallback(cb: Function): void {
+		weakNapi.removeCallback(this.ref, cb);
+	}
+
+	removeCallbacks(): void {
+		weakNapi.removeCallbacks(this.ref);
+	}
+
+	get(): T|undefined {
+		return weakNapi.get(this.ref);
+	}
+
+}
+Object.freeze(WeakRefNapiImpl.prototype);
+Object.freeze(WeakRefNapiImpl);
 
 
 Object.freeze(exports);
