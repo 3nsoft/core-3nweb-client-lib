@@ -64,7 +64,8 @@ Object.freeze(ProtoType.prototype);
 Object.freeze(ProtoType);
 
 
-const protosDir = resolve(__dirname, '../../protos');
+// make sure to copy protos with compile step (use npm script)
+const protosDir = resolve(__dirname, './protos');
 
 const roots = new Map<string, protobuf.Root>();
 
@@ -75,6 +76,7 @@ function loadRoot(fileName: string): protobuf.Root {
 		try {
 			root = protobuf.loadSync(join(protosDir, fileName));
 		} catch (err) {
+			// make sure to generate proto-defs with compile step (use npm script)
 			const protos = require('./proto-defs').protos;
 			if (!protos || (typeof protos !== 'object')) { throw new Error(
 				`proto-defs doesn't have expected object`); }
