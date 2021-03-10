@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -27,6 +27,7 @@ import { secret_box as sbox, box, nonce as nMod, arrays, compareVectors } from '
 import { SessionEncryptor, makeSessionEncryptor } from '../lib-common/session-encryptor';
 import * as loginApi from '../lib-common/service-api/pub-key-login';
 import { parse as parseUrl } from 'url';
+import { assert } from '../lib-common/assert';
 
 export interface ICalcDHSharedKey {
 	(): Uint8Array;
@@ -46,7 +47,7 @@ export interface PKLoginException extends HTTPException {
 
 export abstract class ServiceUser {
 	
-	sessionId: string = (undefined as any);
+	sessionId: string|undefined = undefined;
 	
 	private uri: string;
 	get serviceURI(): string {
@@ -68,13 +69,13 @@ export abstract class ServiceUser {
 	
 	private loginUrlPart: string;
 	private logoutUrlEnd: string;
-	private redirectedFrom: string = (undefined as any);
+	private redirectedFrom: string|undefined = undefined;
 	private canBeRedirected: boolean;
 
-	encryptor: SessionEncryptor = (undefined as any);
-	private encChallenge: Uint8Array = (undefined as any);
-	private serverPubKey: Uint8Array = (undefined as any);
-	private serverVerificationBytes: Uint8Array = (undefined as any);
+	encryptor: SessionEncryptor|undefined = undefined;
+	private encChallenge: Uint8Array|undefined = undefined;
+	private serverPubKey: Uint8Array|undefined = undefined;
+	private serverVerificationBytes: Uint8Array|undefined = undefined;
 	
 	/**
 	 * This field will contain key derivation parameters from server for a
@@ -173,11 +174,12 @@ export abstract class ServiceUser {
 	}
 	
 	private openSessionKey(dhsharedKeyCalc: ICalcDHSharedKey): void {
+		assert(!!this.encChallenge);
 		const dhsharedKey = dhsharedKeyCalc();
 		const nonce = new Uint8Array(
-			this.encChallenge.subarray(0, sbox.NONCE_LENGTH));
+			this.encChallenge!.subarray(0, sbox.NONCE_LENGTH));
 		const sessionKey = new Uint8Array(
-			this.encChallenge.subarray(sbox.NONCE_LENGTH));
+			this.encChallenge!.subarray(sbox.NONCE_LENGTH));
 		// encrypted challenge has session key packaged into WN format, with
 		// poly part cut out. Therefore, usual open method will not do as it
 		// does poly check. We should recall that cipher is a stream with data
@@ -204,18 +206,19 @@ export abstract class ServiceUser {
 	}
 	
 	private async completeLoginExchange(): Promise<void> {
+		assert(!!this.encChallenge);
+		assert(!!this.serverVerificationBytes);
 		const rep = await this.net.doBinaryRequest<Uint8Array>({
 			url: `${this.serviceURI}${this.loginUrlPart}${loginApi.complete.URL_END}`,
 			method: loginApi.complete.method,
 			sessionId: this.sessionId,
 			responseType: 'arraybuffer'
-		}, this.encChallenge);
+		}, this.encChallenge!);
 		this.encChallenge = (undefined as any);
 		if (rep.status === loginApi.complete.SC.ok) {
 			// compare bytes to check, if server can be trusted
-			if (compareVectors(
-					rep.data, this.serverVerificationBytes)) {
-				this.serverVerificationBytes = (undefined as any);
+			if (compareVectors(rep.data, this.serverVerificationBytes)) {
+				this.serverVerificationBytes = undefined;
 			} else {
 				const exc = <PKLoginException> makeException(rep);
 				exc.serverNotTrusted = true;
@@ -242,15 +245,14 @@ export abstract class ServiceUser {
 	 */
 	async login(keyId: string|undefined): Promise<LoginCompletion> {
 		await this.startSession(keyId);
-		const thisPKL = this;
-		async function complete(dhsharedKeyCalc: ICalcDHSharedKey) {
-			thisPKL.openSessionKey(dhsharedKeyCalc)
-			await thisPKL.completeLoginExchange();
-		};
+		assert(!!this.serverPubKey);
 		return {
 			keyParams: this.keyDerivationParams,
-			serverPKey: this.serverPubKey,
-			complete: complete
+			serverPKey: this.serverPubKey!,
+			complete: async dhsharedKeyCalc => {
+				this.openSessionKey(dhsharedKeyCalc)
+				await this.completeLoginExchange();
+			}
 		};
 	}
 	
@@ -259,17 +261,19 @@ export abstract class ServiceUser {
 	 * @return a promise for request completion.
 	 */
 	async logout(): Promise<void> {
+		if (!this.encryptor) { return; }
 		const rep = await this.net.doBodylessRequest<void>({
 			url: `${this.serviceURI}${this.logoutUrlEnd}`,
 			method: 'POST',
 			sessionId: this.sessionId
-		})
-		if (rep.status !== 200) {
+		});
+		if ((rep.status === 200) || (rep.status === loginApi.ERR_SC.needAuth)) {
+			this.sessionId = undefined;
+			this.encryptor.destroy();
+			this.encryptor = undefined;
+		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
-		this.sessionId = (undefined as any);
-		this.encryptor.destroy();
-		this.encryptor = (undefined as any);
 	}
 	
 }

@@ -21,7 +21,8 @@
 
 export const ERR_SC = {
 	duplicate: 475,
-	malformed: 400
+	malformed: 400,
+	needAuth: 401
 };
 Object.freeze(ERR_SC);
 

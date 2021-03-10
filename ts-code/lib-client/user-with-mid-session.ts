@@ -59,11 +59,11 @@ export abstract class ServiceUser {
 		return `${this.serviceURI}${this.loginUrlPart}`;
 	}
 
-	private redirectedFrom: string = (undefined as any);
+	private redirectedFrom: string|undefined = undefined;
 	private canBeRedirected: boolean;
 
-	private sessionId: string = (undefined as any);
-	private loginProc: Promise<void> = (undefined as any);
+	private sessionId: string|undefined = undefined;
+	private loginProc: Promise<void>|undefined = undefined;
 
 	protected constructor(
 		public readonly userId: string,
@@ -170,7 +170,7 @@ export abstract class ServiceUser {
 			method: 'POST',
 			sessionId: this.sessionId
 		});
-		if (rep.status === 200) {
+		if ((rep.status === 200) || (rep.status === api.ERR_SC.needAuth)) {
 			this.sessionId = (undefined as any);
 		} else {
 			throw makeException(rep, 'Unexpected status');
@@ -217,16 +217,18 @@ export abstract class ServiceUser {
 		});
 	}
 
-	protected doJsonSessionRequest<T>(opts: RequestOpts, json: any):
-			Promise<Reply<T>> {
+	protected doJsonSessionRequest<T>(
+		opts: RequestOpts, json: any
+	): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
 			this.prepCallOpts(opts);
 			return this.net.doJsonRequest(opts, json);
 		});
 	}
 
-	protected doBinarySessionRequest<T>(opts: RequestOpts,
-			bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>> {
+	protected doBinarySessionRequest<T>(
+		opts: RequestOpts, bytes: Uint8Array|Uint8Array[]
+	): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
 			this.prepCallOpts(opts);
 			return this.net.doBinaryRequest(opts, bytes);
