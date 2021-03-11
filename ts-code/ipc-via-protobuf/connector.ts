@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -25,6 +25,7 @@ export interface ExposedServices {
 	): ObjectReference;
 	getOriginalObj<T>(ref: ObjectReference): T;
 	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
+	listObj(path: string[]): string[]|null;
 }
 
 export interface ServicesSide {
@@ -45,7 +46,7 @@ export interface Caller {
 	): () => void;
 	registerClientDrop(o: any, srvRef: ObjectReference): void;
 	srvRefOf(clientObj: any): ObjectReference;
-	listObj(path: string[]): Promise<string[]>;
+	listObj(path: string[]): string[];
 }
 
 export interface ClientsSide {
@@ -61,9 +62,12 @@ function makeServicesSide(sendMsg: (msg: Envelope) => void): ServicesSide {
 	return new srvClassFn(sendMsg);
 }
 
-function makeClientsSide(sendMsg: (msg: Envelope) => void): ClientsSide {
+function makeClientsSide(
+	sendMsg: (msg: Envelope) => void,
+	syncReqToListObj: (path: string[]) => string[]|null
+): ClientsSide {
 	const classFn = require('./connector-clients-side').ClientsSideImpl;
-	return new classFn(sendMsg);
+	return new classFn(sendMsg, syncReqToListObj);
 }
 
 
@@ -76,7 +80,8 @@ export class ObjectsConnector {
 	constructor(
 		private msgSink: Observer<Envelope>,
 		msgSrc: Observable<Envelope>,
-		sides: 'clients'|'services'|'clients-and-services'
+		sides: 'clients'|'services'|'clients-and-services',
+		listObjOnServiceSide?: (path: string[]) => string[]|null
 	) {
 		this.messagingProc = msgSrc.subscribe({
 			next: msg => this.processIncomingMsg(msg),
@@ -90,9 +95,13 @@ export class ObjectsConnector {
 		this.services = (
 			((sides === 'services') || (sides === 'clients-and-services')) ?
 			makeServicesSide(sendMsg) : undefined);
-		this.clients = (
-			((sides === 'clients') || (sides === 'clients-and-services')) ?
-			makeClientsSide(sendMsg) : undefined);
+		if ((sides === 'clients') || (sides === 'clients-and-services')) {
+			if (!listObjOnServiceSide) { throw new Error(
+				`Client side needs listObjOnServiceSide argument`); }
+			this.clients = makeClientsSide(sendMsg, listObjOnServiceSide);
+		} else {
+			this.clients = undefined;
+		}
 		Object.seal(this);
 	}
 

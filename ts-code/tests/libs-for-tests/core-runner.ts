@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -177,11 +177,11 @@ export class CoreRunner {
 		}
 	}
 
-	async setupTestAppCaps(): Promise<void> {
+	setupTestAppCaps(): void {
 		if (this.appCaps) { throw new Error(`App CAPs have already been set.`); }
 		const { caps, close: closeCAPs } = this.core.makeCAPsForApp(
 			testApp.appDomain, testApp);
-		const { clientW3N, close } = await wrapCommonW3N(caps);
+		const { clientW3N, close } = wrapCommonW3N(caps);
 		this.appCaps = {
 			raw: caps,
 			ipc: clientW3N,

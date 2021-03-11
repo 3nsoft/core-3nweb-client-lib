@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -36,7 +36,9 @@ function makePipe() {
 		map(buf => msgProtoType.unpack(buf))
 	);
 	const coreSide = new ObjectsConnector(fromCore, toCore, 'services');
-	const clientSide = new ObjectsConnector(fromClient, toClient, 'clients');
+	const listObjInCore = coreSide.exposedServices.listObj;
+	const clientSide = new ObjectsConnector(
+		fromClient, toClient, 'clients', listObjInCore);
 	return { coreSide, clientSide };
 }
 
@@ -50,12 +52,12 @@ export function wrapStartupW3N(
 	return { clientW3N, close };
 }
 
-export async function wrapCommonW3N(
+export function wrapCommonW3N(
 	coreW3N: CommonW3N
-): Promise<{ clientW3N: CommonW3N; close: () => void; }> {
+): { clientW3N: CommonW3N; close: () => void; } {
 	const { clientSide, coreSide } = makePipe();
 	exposeW3N(coreSide.exposedServices, coreW3N);
-	const clientW3N = await makeW3Nclient(clientSide.caller);
+	const clientW3N = makeW3Nclient(clientSide.caller);
 	const close = () => coreSide.close();
 	return { clientW3N, close };
 }

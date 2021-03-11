@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -40,10 +40,8 @@ export function exposeStorageCAP(
 	return wrap;
 }
 
-export async function makeStorageCaller(
-	caller: Caller, objPath: string[]
-): Promise<Storage> {
-	const lstStorageCAP = await caller.listObj(objPath) as (keyof Storage)[];
+export function makeStorageCaller(caller: Caller, objPath: string[]): Storage {
+	const lstStorageCAP = caller.listObj(objPath) as (keyof Storage)[];
 	const sysFS = lstStorageCAP.includes('getSysFS');
 	const userFS = lstStorageCAP.includes('getUserFS');
 	const storage: Storage = {

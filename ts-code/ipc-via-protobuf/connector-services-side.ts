@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -153,7 +153,11 @@ export class ServicesSideImpl implements ServicesSide {
 				this.exposedObjs),
 			exposeW3NService: this.exposedObjs.exposeW3NService.bind(
 				this.exposedObjs),
-			getOriginalObj: this.exposedObjs.getOriginalObj.bind(this.exposedObjs)
+			getOriginalObj: this.exposedObjs.getOriginalObj.bind(this.exposedObjs),
+			listObj: path => {
+				const obj = this.exposedObjs.find(path);
+				return (obj ? Object.keys(obj) : null);
+			}
 		};
 		return expSrv;
 	}

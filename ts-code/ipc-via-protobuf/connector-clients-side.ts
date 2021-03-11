@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,7 @@
 */
 
 import { Subject } from "rxjs";
-import { ObjectReference, strArrValType, fixArray, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
+import { ObjectReference, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { Deferred, defer } from "../lib-common/processes";
 import { WeakReference, makeWeakRefFor } from "../lib-common/weakref";
 import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller } from "./connector";
@@ -40,6 +40,7 @@ export class ClientsSideImpl implements ClientsSide {
 
 	constructor(
 		private readonly sendMsg: (msg: Envelope) => void,
+		private readonly syncReqToListObj: (path: string[]) => string[]
 	) {
 		Object.seal(this);
 	}
@@ -202,18 +203,10 @@ export class ClientsSideImpl implements ClientsSide {
 		}
 	}
 
-	async listObj(path: string[]): Promise<string[]> {
+	listObj(path: string[]): string[] {
 		if (this.isStopped) { throw makeIPCException(
 			{ 'ipcNotConnected': true }); }
-		const deferred = defer<EnvelopeBody>();
-		const fnCallNum = this.nextFnCallNum();
-		this.fnCalls.set(fnCallNum, { deferred });
-		this.sendMsg({
-			headers: { fnCallNum: toVal(fnCallNum), msgType: 'list-obj', path }
-		});
-		const lstPromise = deferred.promise
-		.then(buf => fixArray(strArrValType.unpack(buf).values));
-		return lstPromise;
+		return this.syncReqToListObj(path);
 	}
 
 }

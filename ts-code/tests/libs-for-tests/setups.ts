@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -233,7 +233,7 @@ export function setupWithUsers(
 		await setUp(users);
 		if (setupTestAppCaps) {
 			for (const runner of s.runners.values()) {
-				await runner.setupTestAppCaps();
+				runner.setupTestAppCaps();
 			}
 		}
 	}, users.length*7000);

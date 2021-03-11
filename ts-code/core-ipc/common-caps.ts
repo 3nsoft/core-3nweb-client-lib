@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -30,7 +30,7 @@ export type CapExposer = (
 
 export type MakeCapClient = (
 	clientSide: Caller, objPath: string[]
-) => Promise<any>;
+) => any;
 
 export function exposeW3N<T extends W3N>(
 	coreSide: ExposedServices, w3n: T,
@@ -61,11 +61,11 @@ export function exposeW3N<T extends W3N>(
 	coreSide.exposeW3NService(expW3N);
 }
 
-export async function makeW3Nclient<T extends W3N>(
+export function makeW3Nclient<T extends W3N>(
 	clientSide: Caller, extraCAPs?: { [cap in keyof T]: MakeCapClient; }
-): Promise<T> {
+): T {
 	const objPath = [ W3N_NAME ];
-	const lstOfCAPs = await clientSide.listObj(objPath) as (keyof T)[];
+	const lstOfCAPs = clientSide.listObj(objPath) as (keyof T)[];
 	const w3n = {} as T;
 	for (const cap of lstOfCAPs) {
 		const capObjPath = objPath.concat(cap as string);
@@ -76,11 +76,11 @@ export async function makeW3Nclient<T extends W3N>(
 		} else if (cap === 'mail') {
 			w3n.mail = makeASMailCaller(clientSide, capObjPath);
 		} else if (cap === 'storage') {
-			w3n.storage = await makeStorageCaller(clientSide, capObjPath);
+			w3n.storage = makeStorageCaller(clientSide, capObjPath);
 		} else if (extraCAPs && extraCAPs[cap]) {
 			const makeCap = extraCAPs[cap];
 			assert(typeof makeCap === 'function');
-			w3n[cap] = await makeCap(clientSide, capObjPath);
+			w3n[cap] = makeCap(clientSide, capObjPath);
 		}
 	}
 	return w3n;
