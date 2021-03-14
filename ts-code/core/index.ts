@@ -225,8 +225,9 @@ export class Core {
 	}
 
 	private makeMailCAP(m: AppManifest): W3N['mail'] {
-		if ((m.capsRequested.mail!.receivingFrom === 'all')
-		&& (m.capsRequested.mail!.sendingTo === 'all')) {
+		if (m.capsRequested.mail
+		&& (m.capsRequested.mail.receivingFrom === 'all')
+		&& (m.capsRequested.mail.sendingTo === 'all')) {
 			return this.asmail.makeASMailCAP();
 		} else {
 			return undefined;
