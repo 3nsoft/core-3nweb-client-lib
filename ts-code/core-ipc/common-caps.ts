@@ -54,7 +54,7 @@ export function exposeW3N<T extends W3N>(
 			assert(typeof expose === 'function');
 			const cap = w3n[capName];
 			if (cap) {
-				w3n[capName] = expose!(cap, coreSide);
+				expW3N[capName] = expose!(cap, coreSide);
 			}
 		}
 	}
