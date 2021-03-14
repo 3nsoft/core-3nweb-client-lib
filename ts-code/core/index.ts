@@ -201,7 +201,7 @@ export class Core {
 			throw new Error(`App manifest is for domain ${manifest.appDomain}, while app's domain is ${appDomain}`);
 		}
 
-		const { cap: storage, close } = this.makeStorageCAP(manifest);
+		const { storage, close } = this.makeStorageCAP(manifest);
 		const mail = this.makeMailCAP(manifest);
 		const log = this.makeLogCAP(manifest);
 		const mailerid = this.makeMailerIdCAP(manifest);
@@ -213,8 +213,15 @@ export class Core {
 
 	private makeStorageCAP(
 		m: AppManifest
-	): ReturnType<Storages['makeStorageCAP']> {
-		return this.storages.makeStorageCAP(makeStoragePolicy(m));
+	): { storage?: W3N['storage']; close: () => void; } {
+		if (m.capsRequested.storage) {
+			const {
+				cap: storage, close
+			} = this.storages.makeStorageCAP(makeStoragePolicy(m));
+			return { storage, close };
+		} else {
+			return { close: () => {} };
+		}
 	}
 
 	private makeMailCAP(m: AppManifest): W3N['mail'] {
