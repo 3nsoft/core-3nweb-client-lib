@@ -127,6 +127,15 @@ describe('3NStorage', () => {
 
 	});
 
+	describe('.getSysFS', () => {
+
+		itAsync('produces collection of items in synced storage', async () => {
+			const sysItems = await w3n.storage!.getSysFS!('synced');
+			expect(sysItems.isCollection).toBe(true);
+		});
+
+	});
+
 	describe('local FS is a web3n.files.WritableFS', () => {
 
 		const fsSetup = {} as SetupWithTestFS;

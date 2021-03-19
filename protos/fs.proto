@@ -187,7 +187,7 @@ message FSItem {
 	common.BooleanValue is_file = 1;
 	common.BooleanValue is_folder = 2;
 	common.BooleanValue is_link = 3;
-	common.BooleanValue is_collecton = 4;
+	common.BooleanValue is_collection = 4;
 	Item item = 5;
 	Location location = 6;
 }

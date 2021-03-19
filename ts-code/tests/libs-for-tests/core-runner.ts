@@ -45,7 +45,9 @@ export const testApp: web3n.caps.common.AppManifest = {
 					domain: "contacts.test.3nweb.computer",
 					storage: "synced-n-local"
 				}
-			]
+			],
+			userFS: 'all',
+			sysFS: 'all'
 		},
 		mailerid: true
 	}
