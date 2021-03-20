@@ -78,7 +78,7 @@ message AddMsgRequestBody {
 	OutgoingMessageMsg msg = 2;
 	string id = 3;
 	common.BooleanValue send_immeditely = 4;
-	common.BytesValue local_meta = 5;
+	common.AnyValue local_meta = 5;
 }
 
 message OutgoingMessageMsg {
@@ -127,7 +127,7 @@ message DeliveryProgressMsg {
 	common.BooleanValue not_connected = 1;
 	bool all_done = 2;
 	uint64 msg_size = 3;
-	common.BytesValue local_meta = 4;
+	common.AnyValue local_meta = 4;
 	repeated AddrAndDeliveryInfo recipients = 5;
 }
 

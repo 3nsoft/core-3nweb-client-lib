@@ -35,3 +35,9 @@ message ErrorValue {
 	string runtime_exc_json = 1;
 	string err = 2;
 }
+
+message AnyValue {
+	string type = 1;
+	StringValue json = 2;
+	BytesValue bytes = 3;
+}

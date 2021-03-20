@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,6 +20,7 @@ import { join, resolve } from 'path';
 import { makeIPCException, EnvelopeBody } from './connector';
 import { stringifyErr, errWithCause, ErrorWithCause } from '../lib-common/exceptions/error';
 import * as fs from 'fs';
+import { toBuffer } from '../lib-common/buffer-utils';
 
 type RuntimeException = web3n.RuntimeException;
 
@@ -214,8 +215,34 @@ export function valOfOptJson(valObj: Value<string>|undefined): any|undefined {
 }
 
 export function toOptJson(json: any): Value<string>|undefined {
-	return ((json === undefined) ?
-		undefined : toVal(JSON.stringify(json)));
+	return ((json === undefined) ? undefined : toVal(JSON.stringify(json)));
+}
+
+export interface AnyValue {
+	json?: Value<string>;
+	bytes?: Value<Buffer>;
+}
+
+export function toOptAny(value: any|undefined): AnyValue|undefined {
+	if (value === undefined) {
+		return undefined;
+	} else if (Buffer.isBuffer(value)) {
+		return { bytes: toVal(value) };
+	} else if (ArrayBuffer.isView(value)) {
+		return { bytes: toVal(toBuffer(value as Buffer)) };
+	} else {
+		return { json: toVal(JSON.stringify(value)) };
+	}
+}
+
+export function valOfOptAny(valObj: AnyValue|undefined): any|undefined {
+	if (!valObj) {
+		return undefined;
+	} else if (valObj.json) {
+		return JSON.parse(valOf(valObj.json));
+	} else {
+		return valOfOpt(valObj.bytes);
+	}
 }
 
 

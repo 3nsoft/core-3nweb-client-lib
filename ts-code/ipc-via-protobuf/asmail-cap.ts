@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptJson, packInt, unpackInt, valOfOptInt, errToMsg, ErrorValue, errFromMsg, ObjectReference } from './protobuf-msg';
+import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -382,7 +382,7 @@ namespace addMsg {
 		msg: OutgoingMessageMsg;
 		id: string;
 		sendImmeditely?: Value<boolean>;
-		localMeta?: Value<Buffer>;
+		localMeta?: AnyValue;
 	}
 
 	const requestType = asmailType<Request>('AddMsgRequestBody');
@@ -473,7 +473,7 @@ namespace addMsg {
 			const promise = fn(
 				fixArray(recipients), unpackMsg(msg, expServices), id,
 				{
-					localMeta: valOfOpt(localMeta),
+					localMeta: valOfOptAny(localMeta),
 					sendImmeditely: valOfOpt(sendImmeditely)
 				});
 			return { promise };
@@ -488,7 +488,7 @@ namespace addMsg {
 			const req: Request = { id, msg: packMsg(msg, caller), recipients };
 			if (opts) {
 				req.sendImmeditely = toOptVal(opts.sendImmeditely);
-				req.localMeta = toOptVal(opts.localMeta);
+				req.localMeta = toOptAny(opts.localMeta);
 			}
 			await caller.startPromiseCall(path, requestType.pack(req));
 		}
@@ -539,7 +539,7 @@ interface DeliveryProgressMsg {
 	notConnected?: Value<boolean>;
 	allDone: boolean;
 	msgSize: number;
-	localMeta?: Value<Buffer>;
+	localMeta?: AnyValue;
 	recipients: {
 		address: string;
 		info: {
@@ -559,7 +559,7 @@ function packDeliveryProgress(p: DeliveryProgress): DeliveryProgressMsg {
 		notConnected: toOptVal(p.notConnected),
 		allDone: p.allDone,
 		msgSize: p.msgSize,
-		localMeta: toOptVal(p.localMeta),
+		localMeta: toOptAny(p.localMeta),
 		recipients: []
 	};
 	for (const [ address, info ] of Object.entries(p.recipients)) {
@@ -581,7 +581,7 @@ function unpackDeliveryProgress(m: DeliveryProgressMsg): DeliveryProgress {
 		allDone: m.allDone,
 		msgSize: fixInt(m.msgSize),
 		notConnected: valOfOpt(m.notConnected) as true|undefined,
-		localMeta: valOfOpt(m.localMeta),
+		localMeta: valOfOptAny(m.localMeta),
 		recipients: {}
 	};
 	for (const { address, info } of fixArray(m.recipients)) {
