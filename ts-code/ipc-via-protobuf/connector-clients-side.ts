@@ -120,7 +120,7 @@ export class ClientsSideImpl implements ClientsSide {
 			}
 		}
 		const fnCallNum = this.fnCallCounter;
-		this.fnCallCounter = 1;
+		this.fnCallCounter += 1;
 		return fnCallNum;
 	}
 
