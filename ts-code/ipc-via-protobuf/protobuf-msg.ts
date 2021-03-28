@@ -18,7 +18,7 @@
 import * as protobuf from 'protobufjs';
 import { join, resolve } from 'path';
 import { makeIPCException, EnvelopeBody } from './connector';
-import { stringifyErr, errWithCause, ErrorWithCause } from '../lib-common/exceptions/error';
+import { stringifyErr } from '../lib-common/exceptions/error';
 import * as fs from 'fs';
 import { toBuffer } from '../lib-common/buffer-utils';
 
@@ -178,11 +178,11 @@ export function errToMsg(err: any): ErrorValue {
 		return { err: stringifyErr(err) };
 	}
 }
-export function errFromMsg(msg: ErrorValue): RuntimeException|ErrorWithCause {
+export function errFromMsg(msg: ErrorValue): RuntimeException|Error {
 	if (msg.runtimeExcJson) {
 		return JSON.parse(msg.runtimeExcJson) as RuntimeException;
 	} else {
-		return errWithCause(msg.err, 'Error from other side of ipc');
+		return new Error(`Error from other side of ipc:\n${msg.err}`);
 	}
 }
 
