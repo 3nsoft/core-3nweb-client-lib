@@ -165,7 +165,7 @@ async function writeJSON(msgFolderPath: string, fname: string, json: any,
 		exclusive = false): Promise<void> {
 	const path = join(msgFolderPath, fname);
 	await fs.writeFile(path, JSON.stringify(json),
-		{ flag: (exclusive ? 'wx' : 'r+') });
+		{ flag: (exclusive ? 'wx' : 'w') });
 }
 
 function objIdsFromMeta(meta: MsgMeta): Set<string> {
