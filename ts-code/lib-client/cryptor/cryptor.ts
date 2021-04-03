@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2021 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { signing } from 'ecma-nacl';
 import { LogWarning } from '../logging/log-to-file';
@@ -40,14 +41,13 @@ export interface Cryptor {
 	
 }
 
-const impl = (function choosingImplementation(): typeof makeCryptor {
-	try {
-		const { makeInWorkerCryptor } = require('./cryptor-in-worker');
-		return makeInWorkerCryptor;
-	} catch (err) {
-		return () => ({ cryptor: makeInProcessCryptor(), close: () => {} });
-	}
-})();
+let impl: typeof makeCryptor;
+try {
+	const { makeInWorkerCryptor } = require('./cryptor-in-worker');
+	impl = makeInWorkerCryptor;
+} catch (err) {
+	impl = () => ({ cryptor: makeInProcessCryptor(), close: () => {} });
+}
 
 export function makeCryptor(
 	logWarning: LogWarning, maxThreads?: number
