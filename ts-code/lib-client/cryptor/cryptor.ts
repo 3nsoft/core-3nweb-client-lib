@@ -41,13 +41,14 @@ export interface Cryptor {
 	
 }
 
-let impl: typeof makeCryptor;
-try {
-	const { makeInWorkerCryptor } = require('./cryptor-in-worker');
-	impl = makeInWorkerCryptor;
-} catch (err) {
-	impl = () => ({ cryptor: makeInProcessCryptor(), close: () => {} });
-}
+const impl = (function choosingImplementation(): typeof makeCryptor {
+	try {
+		const { makeInWorkerCryptor } = require('./cryptor-in-worker');
+		return makeInWorkerCryptor;
+	} catch (err) {
+		return () => ({ cryptor: makeInProcessCryptor(), close: () => {} });
+	}
+})();
 
 export function makeCryptor(
 	logWarning: LogWarning, maxThreads?: number
