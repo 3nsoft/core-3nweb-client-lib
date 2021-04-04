@@ -92,7 +92,19 @@ class Workers {
 	}
 
 	private async makeWorker(): Promise<Worker> {
-		const worker = new Worker(__filename, {
+		// There is a bug with electrons 12, 13, that doesn't let
+		// worker_thread read this file from asar pack, even though main thread
+		// makes call from here.
+		// Therefore, in case this runs from asar pack, we should switch to
+		// unpacked in path that is given to worker thread.
+		// Of course, asarUnpack should be used in electron-builder.
+		const asarInd = __filename.indexOf('app.asar');
+		const pathOfThis = ((asarInd < 0) ?
+			__filename : `${__filename.substring(0, asarInd+8)}.unpacked${
+				__filename.substring(asarInd+8)}`
+		);
+
+		const worker = new Worker(pathOfThis, {
 			workerData: WORKER_MARKER
 		});
 		this.allWorkers.add(worker);
