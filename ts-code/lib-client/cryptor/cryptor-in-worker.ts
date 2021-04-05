@@ -208,7 +208,7 @@ class Workers {
 		return res.promise;
 	}
 
-	close(): void {
+	async close(): Promise<void> {
 		if (this.isClosed) { return; }
 		this.isClosed = true;
 		clearInterval(this.periodicIdleClean);
@@ -217,7 +217,7 @@ class Workers {
 			defW.reject(exc);
 		}
 		for (const w of this.allWorkers.values()) {
-			w.terminate();
+			await w.terminate().catch(() => {});
 			w.unref();
 		}
 		this.allWorkers.clear();

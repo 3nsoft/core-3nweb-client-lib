@@ -259,7 +259,7 @@ export class Core {
 			this.asmail = (undefined as any);
 			this.storages = (undefined as any);
 		}
-		this.cryptor.close();
+		await this.cryptor.close();
 		this.cryptor = (undefined as any);
 		this.isClosed = true;
 		this.closeBroadcast.next();

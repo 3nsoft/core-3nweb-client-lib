@@ -46,13 +46,13 @@ const impl = (function choosingImplementation(): typeof makeCryptor {
 		const { makeInWorkerCryptor } = require('./cryptor-in-worker');
 		return makeInWorkerCryptor;
 	} catch (err) {
-		return () => ({ cryptor: makeInProcessCryptor(), close: () => {} });
+		return () => ({ cryptor: makeInProcessCryptor(), close: async () => {} });
 	}
 })();
 
 export function makeCryptor(
 	logWarning: LogWarning, maxThreads?: number
-): { cryptor: Cryptor; close: () => void; } {
+): { cryptor: Cryptor; close: () => Promise<void>; } {
 	return impl(logWarning, maxThreads);
 }
 
