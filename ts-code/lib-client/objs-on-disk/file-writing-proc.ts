@@ -17,7 +17,7 @@
 import { Subscribe, EncrEvent, HeaderEncrEvent, SegEncrEvent } from 'xsp-files';
 import { PressureValve } from '../../lib-common/processes';
 import { Observable } from 'rxjs';
-import { map, filter, flatMap } from 'rxjs/operators';
+import { map, filter, mergeMap } from 'rxjs/operators';
 import { joinByteArrs } from '../../lib-common/buffer-utils';
 import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-file';
 import { flatMapComplete } from '../../lib-common/utils-for-observables';
@@ -52,7 +52,7 @@ export class FileWritingProc {
 		const main$ = ee$.pipe(
 			map(ee => this.addToBuffer(ee)),
 			filter(() => this.canSaveBuffered()),
-			flatMap(() => this.saveBuffered(), 1),
+			mergeMap(() => this.saveBuffered(), 1),
 			flatMapComplete(() => this.saveBuffered(true))
 		);
 		return main$;

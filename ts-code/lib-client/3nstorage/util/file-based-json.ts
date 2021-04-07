@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
 import { Observable, Subscription } from 'rxjs';
-import { flatMap } from 'rxjs/operators';
+import { mergeMap } from 'rxjs/operators';
 
 type WritableFile = web3n.files.WritableFile;
 type FileEvent = web3n.files.FileEvent;
@@ -42,7 +42,7 @@ export abstract class JsonFileProc<T> {
 
 		this.proc = (new Observable<FileEvent>(obs => this.file.watch(obs)))
 		.pipe(
-			flatMap(ev => this.onFileEvent(ev), 1)
+			mergeMap(ev => this.onFileEvent(ev), 1)
 		)
 		.subscribe();
 	}

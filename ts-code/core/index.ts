@@ -25,7 +25,7 @@ import { copy as jsonCopy } from '../lib-common/json-utils';
 import { makeCryptor } from '../lib-client/cryptor/cryptor';
 import { Subject, merge } from 'rxjs';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
-import { flatMap, take } from 'rxjs/operators';
+import { mergeMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
 
@@ -93,7 +93,7 @@ export class Core {
 
 		const initFromSignUp$ = signUp.newUser$
 		.pipe(
-			flatMap(this.initForNewUser, 1)
+			mergeMap(this.initForNewUser, 1)
 		);
 
 		const initFromSignIn$ = signIn.existingUser$;
@@ -101,7 +101,7 @@ export class Core {
 		const coreInit = merge(initFromSignIn$, initFromSignUp$)
 		.pipe(
 			take(1),
-			flatMap(idManager => this.initCore(idManager), 1)
+			mergeMap(idManager => this.initCore(idManager), 1)
 		)
 		.toPromise();
 

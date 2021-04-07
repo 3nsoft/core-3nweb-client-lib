@@ -26,7 +26,7 @@ import { join } from 'path';
 import { ObjSource, Subscribe } from 'xsp-files';
 import { Downloader } from './downloader';
 import { assert } from '../../../lib-common/assert';
-import { flatMap, filter, tap } from 'rxjs/operators';
+import { mergeMap, filter, tap } from 'rxjs/operators';
 import { FileWrite } from '../../../lib-client/objs-on-disk/file-writing-proc';
 import { flatTap } from '../../../lib-common/utils-for-observables';
 import { GC } from './obj-files-gc';
@@ -159,16 +159,16 @@ export class ObjFiles {
 		return from([undefined])
 		.pipe(
 			// listing recent folders, exactly once
-			flatMap(() => this.folders.listRecent()),
+			mergeMap(() => this.folders.listRecent()),
 			// flatten array and space it in time, to process folders one by one
-			flatMap(objsAndPaths => objsAndPaths),
+			mergeMap(objsAndPaths => objsAndPaths),
 			filter(({ objId }) => !this.objs.has(objId)),
-			flatMap(async objsAndPaths => {
+			mergeMap(async objsAndPaths => {
 				await sleep(20);
 				return objsAndPaths;
 			}, 1),
 			// check, emiting objId, if not synced, and undefined, if synced
-			flatMap(({ path, objId }) => this.sync(objId, async () => {
+			mergeMap(({ path, objId }) => this.sync(objId, async () => {
 				if (this.objs.has(objId)) { return; }
 				const notSynced =
 					await ObjStatus.fileShowsObjNotInSyncedState(path, objId)

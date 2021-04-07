@@ -20,7 +20,7 @@ import { msgRecievedCompletely }
 	from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { ServerEvents } from '../../../lib-client/server-events';
-import { flatMap, filter, share } from 'rxjs/operators';
+import { mergeMap, filter, share } from 'rxjs/operators';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type Observer<T> = web3n.Observer<T>;
@@ -46,7 +46,7 @@ export class InboxEvents {
 		this.newMsg$ = serverEvents.observe<msgRecievedCompletely.Event>(
 			msgRecievedCompletely.EVENT_NAME)
 		.pipe(
-			flatMap(ev => getMsg(ev.msgId)
+			mergeMap(ev => getMsg(ev.msgId)
 				.catch(async (err) => {
 					// TODO should more error handling logic be added here?
 					await logError(err, `Cannot get message ${ev.msgId}`);

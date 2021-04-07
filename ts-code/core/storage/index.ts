@@ -147,6 +147,7 @@ async function getRootKeyDerivParams(
 export const sysFolders = {
 	appData: 'Apps Data',
 	apps: 'Apps Code',
+	packages: 'App&Lib Packs',
 	sharedLibs: 'Shared Libs',
 	userFiles: 'User Files'
 };
@@ -221,9 +222,13 @@ class StorageAndFS<T extends Storage> {
 	}
 
 	async sysFSs(): Promise<FSCollection> {
+		const folders = [
+			sysFolders.appData, sysFolders.apps,
+			sysFolders.packages,
+			sysFolders.sharedLibs
+		];
 		const c = makeFSCollection();
-		for (let fsName of [ sysFolders.appData,
-				sysFolders.apps, sysFolders.sharedLibs ]) {
+		for (let fsName of folders) {
 			await c.set!(fsName, {
 				isFolder: true,
 				item: await this.rootFS.writableSubRoot(fsName)

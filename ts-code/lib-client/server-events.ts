@@ -17,7 +17,7 @@
 import { SubscribingClient } from '../lib-common/ipc/generic-ipc';
 import { Observable, from, throwError } from 'rxjs';
 import { SingleProc, sleep } from '../lib-common/processes';
-import { catchError, flatMap } from 'rxjs/operators';
+import { catchError, mergeMap } from 'rxjs/operators';
 import { WSException } from '../lib-common/ipc/ws-ipc';
 import { ConnectException, HTTPException } from '../lib-common/exceptions/http';
 import { stringifyErr } from '../lib-common/exceptions/error';
@@ -115,7 +115,7 @@ export class ServerEvents {
 	private restartObservation<T>(event: string): Observable<T> {
 		return from(sleep(this.restartWaitSecs))
 		.pipe(
-			flatMap(() => this.observe<T>(event))
+			mergeMap(() => this.observe<T>(event))
 		);
 	}
 

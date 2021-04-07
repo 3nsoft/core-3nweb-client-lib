@@ -22,7 +22,7 @@ import { parse as parseUrl } from 'url';
 import { fromEvent, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { defer } from '../lib-common/processes';
-import { take, map, takeUntil, flatMap } from 'rxjs/operators';
+import { take, map, takeUntil, mergeMap } from 'rxjs/operators';
 
 export const SESSION_ID_HEADER = "X-Session-Id";
 export const CONTENT_TYPE_HEADER = 'Content-Type';
@@ -132,7 +132,7 @@ function attachRequestReaders(clReq: ClientRequest, opts: RequestOpts):
 	
 	return merge(response$, err$)
 	.pipe(
-		flatMap(async resAndBodyProm => {
+		mergeMap(async resAndBodyProm => {
 			const { res, resBodyPromise } = resAndBodyProm;
 			const resBody = await resBodyPromise;
 			return { res, resBody };

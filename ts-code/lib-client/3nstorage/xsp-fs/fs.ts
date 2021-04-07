@@ -33,7 +33,7 @@ import { posix } from 'path';
 import { pipe } from '../../../lib-common/byte-streaming/pipe';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { Observer as RxObserver, from } from 'rxjs';
-import { flatMap } from 'rxjs/operators';
+import { mergeMap } from 'rxjs/operators';
 import { NodeInFS } from './node-in-fs';
 import { EntityAttrs } from '../../files/file-attrs';
 import { sleep } from '../../../lib-common/processes';
@@ -422,7 +422,7 @@ export class XspFS implements WritableFS {
 		const watchSub = from(
 			this.v.root.getFolderInThisSubTree(splitPathIntoParts(path), false))
 		.pipe(
-			flatMap(f => f.event$)
+			mergeMap(f => f.event$)
 		)
 		.subscribe(observer as RxObserver<FolderEvent>);
 		return () => watchSub.unsubscribe();
@@ -433,8 +433,8 @@ export class XspFS implements WritableFS {
 		const watchSub = from(
 			this.v.root.getFolderInThisSubTree(folderPath, false))
 		.pipe(
-			flatMap(folder => folder.getFile(fileName)),
-			flatMap(f => f!.event$)
+			mergeMap(folder => folder.getFile(fileName)),
+			mergeMap(f => f!.event$)
 		)
 		.subscribe(observer as RxObserver<FileEvent>);
 		return () => watchSub.unsubscribe();

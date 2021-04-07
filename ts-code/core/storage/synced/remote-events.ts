@@ -20,7 +20,7 @@ import { ObjFiles } from './obj-files';
 import { Node, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ServerEvents } from '../../../lib-client/server-events';
 import { objChanged, objRemoved } from '../../../lib-common/service-api/3nstorage/owner';
-import { flatMap, filter } from 'rxjs/operators';
+import { mergeMap, filter } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 
 export type GetFSNode = (objId: ObjId) => Node|undefined;
@@ -51,14 +51,14 @@ export class RemoteEvents {
 		.pipe(
 			filter(objChange =>
 				Number.isInteger(objChange.newVer) && (objChange.newVer > 1)),
-			flatMap(objChange => this.remoteChange(objChange))
+				mergeMap(objChange => this.remoteChange(objChange))
 		);
 
 		const objRemoval$ = serverEvents.observe<objRemoved.Event>(
 			objRemoved.EVENT_NAME)
 		.pipe(
 			filter(objRm => !!objRm.objId),
-			flatMap(objRm => this.remoteRemoval(objRm))
+			mergeMap(objRm => this.remoteRemoval(objRm))
 		);
 
 		this.absorbingRemoteEventsProc = merge(objChange$, objRemoval$)
