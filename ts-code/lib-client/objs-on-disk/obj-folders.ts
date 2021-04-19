@@ -539,7 +539,7 @@ async function allTreePaths(
 		}
 	});
 	if (!lst) { return []; }
-	if (numOfSplits === 0) {
+	if (numOfSplits <= 1) {
 		return lst.map(f => [f]);
 	}
 	const sections: string[][] = [];
