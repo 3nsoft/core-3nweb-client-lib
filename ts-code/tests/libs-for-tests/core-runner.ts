@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core, makeNetClient } from "../../lib-index";
+import { Core, makeNetClient, cryptors } from "../../lib-index";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
 import { stringOfB64Chars } from "../../lib-common/random-node";
@@ -95,7 +95,8 @@ export class CoreRunner {
 		this.appCaps = undefined;
 		this.core = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			makeNetClient);
+			makeNetClient,
+			cryptors.makeInWorkerCryptor);
 	}
 
 	async close(): Promise<void> {

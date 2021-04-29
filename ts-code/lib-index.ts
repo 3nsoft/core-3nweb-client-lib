@@ -43,6 +43,9 @@ import * as signupApi from './lib-common/user-admin-api/signup';
 import { user as midUser } from './lib-common/mid-sigs-NaCl-Ed';
 import * as srvLocFuncs from './lib-client/service-locator';
 
+import * as cryptFactories from './lib-client/cryptor/cryptor';
+
+
 export namespace raw3NWebClients {
 
 	export type StorageOwner = StorageOwnerClient;
@@ -71,6 +74,16 @@ export namespace raw3NWebClients {
 
 }
 Object.freeze(raw3NWebClients);
+
+
+export namespace cryptors {
+
+	export const makeInProcessCryptor = cryptFactories.makeInProcessCryptor;
+
+	export const makeInWorkerCryptor = cryptFactories.makeInWorkerCryptor;
+
+}
+Object.freeze(cryptors);
 
 
 Object.freeze(exports);

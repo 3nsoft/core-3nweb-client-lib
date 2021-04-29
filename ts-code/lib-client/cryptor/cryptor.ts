@@ -18,42 +18,43 @@
 import { signing } from 'ecma-nacl';
 import { LogWarning } from '../logging/log-to-file';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { makeInProcessCryptor } from './cryptor-in-proc';
 
 export interface Cryptor {
-	
-	scrypt(passwd: Uint8Array, salt: Uint8Array, logN: number, r: number,
-		p: number, dkLen: number, progressCB: (p: number) => void):
-		Promise<Uint8Array>;
+
+	scrypt(
+		passwd: Uint8Array, salt: Uint8Array, logN: number, r: number,
+		p: number, dkLen: number, progressCB: (p: number) => void
+	): Promise<Uint8Array>;
 	
 	sbox: AsyncSBoxCryptor;
-	
+
 	box: {
 		generate_pubkey(sk: Uint8Array): Promise<Uint8Array>;
 		calc_dhshared_key(pk: Uint8Array, sk: Uint8Array): Promise<Uint8Array>;
 	}
-	
+
 	signing: {
 		signature(m: Uint8Array, sk: Uint8Array): Promise<Uint8Array>;
 		verify(sig: Uint8Array, m: Uint8Array, pk: Uint8Array): Promise<boolean>;
 		generate_keypair(seed: Uint8Array): Promise<signing.Keypair>;
 	}
-	
+
 }
 
-const impl = (function choosingImplementation(): typeof makeCryptor {
-	try {
-		const { makeInWorkerCryptor } = require('./cryptor-in-worker');
-		return makeInWorkerCryptor;
-	} catch (err) {
-		return () => ({ cryptor: makeInProcessCryptor(), close: async () => {} });
-	}
-})();
-
-export function makeCryptor(
+export type makeCryptor = (
 	logWarning: LogWarning, maxThreads?: number
-): { cryptor: Cryptor; close: () => Promise<void>; } {
-	return impl(logWarning, maxThreads);
+) => { cryptor: Cryptor; close: () => Promise<void>; };
+
+export function makeInWorkerCryptor(
+	logWarning: LogWarning, maxThreads?: number
+): ReturnType<makeCryptor> {
+	const { makeInWorkerCryptor } = require('./cryptor-in-worker');
+	return makeInWorkerCryptor(logWarning, maxThreads);
+}
+
+export function makeInProcessCryptor(): ReturnType<makeCryptor> {
+	const { makeInProcessCryptor } = require('./cryptor-in-proc');
+	return { cryptor: makeInProcessCryptor(), close: async () => {} }
 }
 
 type RuntimeException = web3n.RuntimeException;

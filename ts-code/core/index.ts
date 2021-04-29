@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2021 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -46,7 +46,7 @@ export interface CoreConf {
 
 export class Core {
 
-	private cryptor: ReturnType<typeof makeCryptor>;
+	private cryptor: ReturnType<makeCryptor>;
 	private storages: Storages;
 	private asmail: ASMail;
 	private idManager: IdManager|undefined = undefined;
@@ -55,6 +55,7 @@ export class Core {
 
 	private constructor(
 		private readonly makeNet: () => NetClient,
+		makeCryptor: makeCryptor,
 		private readonly appDirs: AppDirs,
 		private readonly logger: Logger,
 		private readonly signUpUrl: string
@@ -68,10 +69,12 @@ export class Core {
 		Object.seal(this);
 	}
 
-	static make(conf: CoreConf, makeNet: () => NetClient): Core {
+	static make(
+		conf: CoreConf, makeNet: () => NetClient, makeCryptor: makeCryptor
+	): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
-		const core = new Core(makeNet, dirs, logger, conf.signUpUrl);
+		const core = new Core(makeNet, makeCryptor, dirs, logger, conf.signUpUrl);
 		return core;
 	}
 
