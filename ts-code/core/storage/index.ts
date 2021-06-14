@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -39,6 +39,7 @@ import { errWithCause } from '../../lib-common/exceptions/error';
 import { NetClient } from '../../lib-client/request-utils';
 import { StoragePathForUser } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
+import { reverseDomain } from '..';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -261,8 +262,10 @@ export class Storages implements FactoryOfFSs {
 		Object.seal(this);
 	}
 
-	makeStorageCAP(policy: StoragePolicy): { cap: Service; close: () => void; } {
-		return (new PerAppStorage(this, policy)).wrap();
+	makeStorageCAP(
+		appDomain: string, policy: StoragePolicy
+	): { cap: Service; close: () => void; } {
+		return (new PerAppStorage(this, appDomain, policy)).wrap();
 	}
 
 	addPreCloseWait(wait: Promise<void>): void {
@@ -489,12 +492,15 @@ type StoragePolicy = web3n.caps.common.StoragePolicy;
 
 export class PerAppStorage {
 
-	private appFSs = new Map<string, WritableFS>();
+	private readonly appFSs = new Map<string, WritableFS>();
+	private readonly revAppDomain: string;
 
 	constructor(
-		private appFSsFactory: FactoryOfFSs,
-		private policy: StoragePolicy
+		private readonly appFSsFactory: FactoryOfFSs,
+		appDomain: string,
+		private readonly policy: StoragePolicy
 	) {
+		this.revAppDomain = reverseDomain(appDomain);
 		Object.seal(this);
 	}
 
@@ -513,7 +519,10 @@ export class PerAppStorage {
 		return { cap, close: () => this.close() };
 	}
 
-	private async getAppSyncedFS(appName: string): Promise<WritableFS> {
+	private async getAppSyncedFS(appName?: string): Promise<WritableFS> {
+		if (!appName) {
+			appName = this.revAppDomain;
+		}
 		this.ensureAppFSAllowed(appName, 'synced');
 		let appFS = this.appFSs.get(appName);
 		if (!appFS) {
@@ -522,7 +531,10 @@ export class PerAppStorage {
 		return appFS;
 	}
 	
-	private async getAppLocalFS(appName: string): Promise<WritableFS> {
+	private async getAppLocalFS(appName?: string): Promise<WritableFS> {
+		if (!appName) {
+			appName = this.revAppDomain;
+		}
 		this.ensureAppFSAllowed(appName, 'local');
 		let appFS = this.appFSs.get(appName);
 		if (!appFS) {

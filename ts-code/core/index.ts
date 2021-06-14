@@ -220,7 +220,7 @@ export class Core {
 		if (m.capsRequested.storage) {
 			const {
 				cap: storage, close
-			} = this.storages.makeStorageCAP(makeStoragePolicy(m));
+			} = this.storages.makeStorageCAP(m.appDomain, makeStoragePolicy(m));
 			return { storage, close };
 		} else {
 			return { close: () => {} };

@@ -65,7 +65,7 @@ function storageType<T extends object>(type: string): ProtoType<T> {
 namespace getAppLocalFS {
 
 	interface Request {
-		appName: string;
+		appName?: Value<string>;
 	}
 
 	const requestType = storageType<Request>('GetAppLocalFSRequestBody');
@@ -75,7 +75,7 @@ namespace getAppLocalFS {
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
-			const promise = fn(appName)
+			const promise = fn(valOfOpt(appName))
 			.then(fs => {
 				const fsMsg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(fsMsg);
@@ -89,7 +89,7 @@ namespace getAppLocalFS {
 	): Storage['getAppLocalFS'] {
 		const path = objPath.concat('getAppLocalFS');
 		return appName => caller
-		.startPromiseCall(path, requestType.pack({ appName }))
+		.startPromiseCall(path, requestType.pack({ appName: toOptVal(appName) }))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
 			return makeFSCaller(caller, fsMsg) as WritableFS;
@@ -103,7 +103,7 @@ Object.freeze(getAppLocalFS);
 namespace getAppSyncedFS {
 
 	interface Request {
-		appName: string;
+		appName?: Value<string>;
 	}
 
 	const requestType = storageType<Request>('GetAppSyncedFSRequestBody');
@@ -113,7 +113,7 @@ namespace getAppSyncedFS {
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
-			const promise = fn(appName)
+			const promise = fn(valOfOpt(appName))
 			.then(fs => {
 				const fsMsg = exposeFSService(fs, expServices);
 				return fsMsgType.pack(fsMsg);
@@ -127,7 +127,7 @@ namespace getAppSyncedFS {
 	): Storage['getAppSyncedFS'] {
 		const path = objPath.concat('getAppSyncedFS');
 		return appName => caller
-		.startPromiseCall(path, requestType.pack({ appName }))
+		.startPromiseCall(path, requestType.pack({ appName: toOptVal(appName) }))
 		.then(buf => {
 			const fsMsg = fsMsgType.unpack(buf);
 			return makeFSCaller(caller, fsMsg) as WritableFS;

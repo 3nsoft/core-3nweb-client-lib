@@ -21,19 +21,21 @@
 declare namespace web3n.storage {
 	
 	interface Service {
-		
+
 		/**
 		 * This returns a promise of an app's fs in local storage.
-		 * @param appName is a reversed app's domain
+		 * @param appName is a reversed domain. If omitted, this app's main
+		 * domain is assumed.
 		 */
-		getAppLocalFS(appName: string): Promise<files.WritableFS>;
-		
+		getAppLocalFS(appName?: string): Promise<files.WritableFS>;
+
 		/**
 		 * This returns a promise of an app's fs in synced storage.
-		 * @param appName is a reversed app's domain
+		 * @param appName is a reversed domain. If omitted, this app's main
+		 * domain is assumed.
 		 */
-		getAppSyncedFS(appName: string): Promise<files.WritableFS>;
-		
+		getAppSyncedFS(appName?: string): Promise<files.WritableFS>;
+
 		/**
 		 * This returns a promise, resolvable to user fs. It will be either
 		 * writable or readonly, depending on app's manifest setting.

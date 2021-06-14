@@ -10,13 +10,13 @@ package storage;
 // --- storage.getAppLocalFS ---
 // Reply body is common.ObjectReference to fs.WritableFS
 message GetAppLocalFSRequestBody {
-	string app_name = 1;
+	common.StringValue app_name = 1;
 }
 
 // --- storage.getAppSyncedFS ---
 // Reply body is common.ObjectReference to fs.WritableFS
 message GetAppSyncedFSRequestBody {
-	string app_name = 1;
+	common.StringValue app_name = 1;
 }
 
 // --- storage.getUserFS ---
