@@ -51,7 +51,7 @@ export class Core {
 	private asmail: ASMail;
 	private idManager: IdManager|undefined = undefined;
 	private isInitialized = false;
-	private isClosed = false;
+	private closingProc: Promise<void>|undefined = undefined;
 
 	private constructor(
 		private readonly makeNet: () => NetClient,
@@ -197,8 +197,9 @@ export class Core {
 	makeCAPsForApp(
 		appDomain: string, manifest: AppManifest
 	): { caps: W3N; close: () => void; } {
-		if (!this.isInitialized || this.isClosed) { throw new Error(
-			`Core is either not yet initialized, or is already closed.`); }
+		if (!this.isInitialized || this.closingProc) {
+			throw new Error(`Core is either not yet initialized, or is already closed.`);
+		}
 
 		if (appDomain !== manifest.appDomain) {
 			throw new Error(`App manifest is for domain ${manifest.appDomain}, while app's domain is ${appDomain}`);
@@ -255,17 +256,20 @@ export class Core {
 	close$ = this.closeBroadcast.asObservable();
 
 	async close(): Promise<void> {
-		if (this.isClosed) { return; }
-		if (this.isInitialized) {
-			await this.asmail.close();
-			await this.storages.close();
-			this.asmail = (undefined as any);
-			this.storages = (undefined as any);
+		if (!this.closingProc) {
+			this.closingProc = (async () => {
+				if (this.isInitialized) {
+					await this.asmail.close();
+					await this.storages.close();
+					this.asmail = (undefined as any);
+					this.storages = (undefined as any);
+				}
+				await this.cryptor.close();
+				this.cryptor = (undefined as any);
+				this.closeBroadcast.next();
+			})();
 		}
-		await this.cryptor.close();
-		this.cryptor = (undefined as any);
-		this.isClosed = true;
-		this.closeBroadcast.next();
+		await this.closingProc;
 	}
 
 	private async initCore(idManager: IdManager): Promise<string> {

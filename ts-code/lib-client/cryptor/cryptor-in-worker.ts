@@ -217,7 +217,7 @@ class Workers {
 			defW.reject(exc);
 		}
 		for (const w of this.allWorkers.values()) {
-			await w.terminate().catch(() => {});
+			await w.terminate();
 			w.unref();
 		}
 		this.allWorkers.clear();
