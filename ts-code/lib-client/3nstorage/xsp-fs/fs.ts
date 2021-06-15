@@ -313,7 +313,7 @@ export class XspFS implements WritableFS {
 	}
 	
 	checkLinkPresence(path: string, throwIfMissing = false): Promise<boolean> {
-		return this.checkPresence('file', path, throwIfMissing);
+		return this.checkPresence('link', path, throwIfMissing);
 	}
 
 	async copyFolder(
