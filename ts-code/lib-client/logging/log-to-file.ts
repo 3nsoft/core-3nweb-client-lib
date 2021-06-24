@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2020 3NSoft Inc.
+ Copyright (C) 2017 - 2021 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -30,7 +30,7 @@ function logFileName(now: Date, appDomain?: string): string {
 }
 
 let version: string;
-function getCurrentAppVersion(): string {
+function getCurrentCoreVersion(): string {
 	if (typeof version !== 'string') {
 		try {
 			const packInfo = require('../../../package.json');
@@ -53,7 +53,7 @@ export function makeLogger(utilDir: string) {
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App version ${getCurrentAppVersion()}
+Core version ${getCurrentCoreVersion()}
 Log level: error.${msg ? `
 ${msg}` : ''}
 ${stringifyErr(err)}`;
@@ -85,7 +85,7 @@ ${stringifyErr(err)}`;
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App version ${getCurrentAppVersion()}
+Core version ${getCurrentCoreVersion()}
 Log level: warning.
 ${msg}
 ${err ? stringifyErr(err) : ''}`;
@@ -106,7 +106,7 @@ ${err ? stringifyErr(err) : ''}`;
 			const now = new Date();
 			const entry = `
 ${now} ==================================
-App ${appDomain}, running on core version ${getCurrentAppVersion()}
+App ${appDomain}, running on core version ${getCurrentCoreVersion()}
 Log level: ${type}.${msg ? `
 ${msg}` : ''}
 ${stringifyErr(err)}`;

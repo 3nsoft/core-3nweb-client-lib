@@ -22,8 +22,6 @@ export interface WeakReference<T> {
 	get(): T|undefined;
 }
 
-let weakNapi: any = undefined;
-
 type WeakRef<T> = {
 	new(o: T);
 	deref(): T|undefined;
@@ -40,10 +38,7 @@ export function makeWeakRefFor<T>(o: T): WeakReference<T> {
 	&& (typeof FinalizationRegistry !== 'undefined')) {
 		return new WeakRefInbuiltImpl(o);
 	} else {
-		if (!weakNapi) {
-			weakNapi = require('weak-napi');
-		}
-		return new WeakRefNapiImpl(o);
+		throw new Error(`Weak reference are not available`);
 	}
 }
 
@@ -94,36 +89,6 @@ class WeakRefInbuiltImpl<T> implements WeakReference<T> {
 }
 Object.freeze(WeakRefInbuiltImpl.prototype);
 Object.freeze(WeakRefInbuiltImpl);
-
-
-class WeakRefNapiImpl<T> implements WeakReference<T> {
-
-	private readonly ref: any;
-
-	constructor (o: T) {
-		this.ref = weakNapi(o);
-		Object.freeze(this);
-	}
-
-	addCallback(cb: Function): void {
-		weakNapi.addCallback(this.ref, cb);
-	}
-
-	removeCallback(cb: Function): void {
-		weakNapi.removeCallback(this.ref, cb);
-	}
-
-	removeCallbacks(): void {
-		weakNapi.removeCallbacks(this.ref);
-	}
-
-	get(): T|undefined {
-		return weakNapi.get(this.ref);
-	}
-
-}
-Object.freeze(WeakRefNapiImpl.prototype);
-Object.freeze(WeakRefNapiImpl);
 
 
 Object.freeze(exports);
