@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2019 3NSoft Inc.
+ Copyright (C) 2015 - 2019, 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,17 +12,17 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from 'fs';
 import { createReadStream, createWriteStream, statSync } from 'fs';
 import { Readable, Writable } from 'stream';
-import { FileException, Code as excCode, makeFileException }
-	from './exceptions/file';
+import { FileException, Code as excCode, makeFileException } from './exceptions/file';
 import { SingleProc, defer, Deferred } from './processes';
 import { BytesFIFOBuffer } from './byte-streaming/bytes-fifo-buffer';
 import { toBuffer } from './buffer-utils';
-import { normalize as normalizePath } from 'path';
+import { join } from 'path';
 
 export { Stats } from 'fs';
 export { FileException } from './exceptions/file';
@@ -79,9 +79,11 @@ export function appendFile(
 	});
 }
 
-export function mkdir(path: string): Promise<void> {
+export function mkdir(
+	path: string, options?: number | string | fs.MakeDirectoryOptions | null
+): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
-		fs.mkdir(path, (err) => {
+		fs.mkdir(path, options, (err) => {
 			if (err) { reject(makeFileExceptionFromNodes(err)); }
 			else { resolve(); }
 		});
@@ -682,18 +684,17 @@ export function copyFile(
 export async function copyTree(
 	src: string, dst: string, fileOverwrite = false
 ): Promise<void> {
-	// ensure presence of destination folder
-	try {
-		await mkdir(dst);
-	} catch (exc) {
-		if (!(<FileException> exc).alreadyExists) { throw exc; }
-	}
+	// destination folder, non-exclusively
+	await mkdir(dst, { recursive: true })
+	.catch(async (exc: FileException) => {
+		if (!exc.alreadyExists) { throw exc; }
+	});
 	// copy files and folders from src folder
 	const srcFNames = await readdir(src);
 	const cpTasks: Promise<void>[] = [];
 	for (const fName of srcFNames) {
-		const srcPath = src+'/'+fName;
-		const dstPath = dst+'/'+fName;
+		const srcPath = join(src, fName);
+		const dstPath = join(dst, fName);
 		const task = stat(srcPath)
 		.then((stats) => {
 			if (stats.isFile()) {
@@ -714,15 +715,11 @@ export async function copyTree(
  * @param path is a folder path
  */
 export async function ensureFolderExists(path: string): Promise<void> {
-	path = normalizePath(path);
 	await stat(path).catch(async (exc: FileException) => {
 		if (!exc.notFound) { throw exc; }
-		await mkdir(path).catch(async (exc: FileException) => {
-			if (exc.alreadyExists) { return; }
-			else if (!exc.notFound) { throw exc; }
-			const cutInd = path.lastIndexOf('/');
-			await ensureFolderExists(path.substring(0, cutInd));
-			await mkdir(path);
+		await mkdir(path, { recursive: true })
+		.catch(async (exc: FileException) => {
+			if (!exc.alreadyExists) { throw exc; }
 		});
 	});
 }

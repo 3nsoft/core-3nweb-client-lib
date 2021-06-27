@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,6 +21,7 @@ import { rmDirWithContent, mkdir, rmdir } from '../../lib-common/async-fs-node';
 import { resolve } from 'path';
 import { loadSpecs } from '../libs-for-tests/spec-module';
 import { SetupWithTestFS, clearFS } from '../fs-checks/test-utils';
+import { platform } from 'os';
 
 type FileException = web3n.files.FileException;
 
@@ -78,7 +79,9 @@ describe('DeviceFS', () => {
 		loadSpecs(
 			s,
 			resolve(__dirname, '../fs-checks/not-versioned'),
-			[ 'device-fs' ]);
+			((platform() === 'win32') ?
+				[ 'win-local-fs', 'device-fs' ] :
+				[ 'device-fs' ]));
 
 		loadSpecs(
 			s,

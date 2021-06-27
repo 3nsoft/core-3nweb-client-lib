@@ -12,22 +12,20 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
  * reliance set, exposing to outside only file system's wrap.
  */
 
-import { makeFileException, Code as excCode, FileException }
-	from '../../../lib-common/exceptions/file';
+import { makeFileException, Code as excCode, FileException } from '../../../lib-common/exceptions/file';
 import { FolderNode, FolderLinkParams, FolderInfoWithAttrs } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject, readBytesFrom } from './file';
-import { Storage, Node, NodeType } from './common';
-import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile,
-	wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS }
-	from '../../files';
+import { Storage, NodeType } from './common';
+import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../../files';
 import { selectInFS } from '../../files-select';
 import { posix } from 'path';
 import { pipe } from '../../../lib-common/byte-streaming/pipe';
@@ -36,7 +34,6 @@ import { Observer as RxObserver, from } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 import { NodeInFS } from './node-in-fs';
 import { EntityAttrs } from '../../files/file-attrs';
-import { sleep } from '../../../lib-common/processes';
 
 function splitPathIntoParts(path: string): string[] {
 	return posix.resolve('/', path).split('/').filter(part => !!part);

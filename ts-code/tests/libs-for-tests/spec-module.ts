@@ -77,8 +77,7 @@ function specFuncFor(
 }
 
 export function loadSpecs<S extends { isUp: boolean }>(
-	setup: S|undefined,
-	folderWithModules: string, offFlags?: DisableFlag[]
+	setup: S|undefined, folderWithModules: string, offFlags?: DisableFlag[]
 ): void {
 	const specs = readSpecs(folderWithModules);
 	specs.forEach((d) => {

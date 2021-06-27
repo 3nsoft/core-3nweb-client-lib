@@ -112,7 +112,10 @@ it.func = async function(s) {
 };
 specs.its.push(it);
 
-it = { expectation: 'write big-ish file' };
+it = {
+	expectation: 'write big-ish file',
+	timeout: 10*1000
+};
 it.func = async function(s) {
 	const { testFS } = s;
 	let path = 'file5';
