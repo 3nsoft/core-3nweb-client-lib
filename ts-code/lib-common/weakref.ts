@@ -15,6 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+if (!WeakRef || !FinalizationRegistry) {
+	throw new Error(
+		`Weak references are not available, and this module can't be used`);
+}
+
 export interface WeakReference<T> {
 	addCallback(cb: Function): void;
 	removeCallback(cb: Function): void;
@@ -34,12 +39,7 @@ type FinalizationRegistry = {
 declare var FinalizationRegistry: FinalizationRegistry;
 
 export function makeWeakRefFor<T>(o: T): WeakReference<T> {
-	if ((typeof WeakRef !== 'undefined')
-	&& (typeof FinalizationRegistry !== 'undefined')) {
-		return new WeakRefInbuiltImpl(o);
-	} else {
-		throw new Error(`Weak reference are not available`);
-	}
+	return new WeakRefInbuiltImpl(o);
 }
 
 
