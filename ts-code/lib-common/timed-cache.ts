@@ -37,27 +37,18 @@ export interface TimedCache<TKey, TVal> {
 export function makeTimedCache<TKey, TVal>(
 	millis: number
 ): TimedCache<TKey, TVal> {
-	const weakCacheClassFn = getWeakCacheConstructor();
-	if (weakCacheClassFn) {
-		return new weakCacheClassFn(millis);
-	} else {
-		const nonWeakCache = require('./timed-non-weak-cache').TimeWindowCache;
-		return new nonWeakCache(millis);
-	}
+	return new CacheConstructor(millis);
 }
 
-function getWeakCacheConstructor() {
+// not all embeddings have js weak references, and this is captured be calling
+// fallable require inside the function and with a fallback option
+const CacheConstructor = (function() {
 	try {
-		const classFn = require('./weak-cache').WeakCacheWithMinLifeTime;
-		if (typeof classFn === 'function') {
-			return classFn;
-		} else {
-			throw new Error(`Weak cache constructor function is missing`);
-		}
+		return require('./weak-cache').WeakCacheWithMinLifeTime;
 	} catch (err) {
-		return;
+		return require('./timed-non-weak-cache').TimeWindowCache;
 	}
-}
+})();
 
 
 Object.freeze(exports);
