@@ -17,7 +17,7 @@
 
 import { SignUp, CreatedUser } from './sign-up';
 import { IdManager } from './id-manager';
-import { Storages, FactoryOfFSs } from './storage';
+import { Storages, FactoryOfFSs, reverseDomain } from './storage';
 import { SignIn, StartInitWithoutCache, InitWithCache } from './sign-in';
 import { ASMail } from './asmail';
 import { errWithCause } from '../lib-common/exceptions/error';
@@ -349,10 +349,6 @@ function makeStoragePolicy(manifest: AppManifest): StoragePolicy {
 type AppFSChecker = (appFolder: string, type: 'local'|'synced') => boolean;
 
 const noFS: AppFSChecker = () => false;
-
-export function reverseDomain(domain: string): string {
-	return domain.split('.').reverse().join('.');
-}
 
 function singleDomainAppFSChecker(appFS: AppFSSetting): AppFSChecker {
 	const revDomain = reverseDomain(appFS.domain);

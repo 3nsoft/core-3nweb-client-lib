@@ -20,7 +20,7 @@ import { setupWithUsers } from './libs-for-tests/setups';
 import { loadSpecs } from './libs-for-tests/spec-module';
 import { resolve } from 'path';
 import { platform } from 'os';
-import { reverseDomain } from '../core';
+import { reverseDomain } from '../core/storage';
 import { testApp } from './libs-for-tests/core-runner';
 import { clearFS, SetupWithTestFS, SetupWithTwoFSs } from './fs-checks/test-utils';
 import { StorageException } from '../core/storage';

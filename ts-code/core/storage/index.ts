@@ -39,7 +39,6 @@ import { errWithCause } from '../../lib-common/exceptions/error';
 import { NetClient } from '../../lib-client/request-utils';
 import { StoragePathForUser } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
-import { reverseDomain } from '..';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -484,6 +483,10 @@ export interface FactoryOfFSs {
 	addPreCloseWait(wait: Promise<void>): void;
 	getUserFS(type: StorageType): Promise<FSItem>;
 	getSysFSs(type: StorageType): Promise<FSItem>;
+}
+
+export function reverseDomain(domain: string): string {
+	return domain.split('.').reverse().join('.');
 }
 
 type Service = web3n.storage.Service;
