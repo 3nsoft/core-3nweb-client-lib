@@ -17,7 +17,7 @@ Just build is done with
 npm run build
 ```
 
-Build and test is done with
+Test is done with (after build)
 ```
 npm run test
 ```
