@@ -283,6 +283,7 @@ declare namespace web3n.asmail {
 		allowedSize?: number;
 		recipientHasNoPubKey?: true;
 		recipientPubKeyFailsValidation?: true;
+		msgNotFound?: true;
 		
 		// errors that are due to this side
 		msgCancelled?: true;

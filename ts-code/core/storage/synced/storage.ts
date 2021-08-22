@@ -74,7 +74,6 @@ export class SyncedStore implements ISyncedStorage {
 				s.remoteEvents.startAbsorbingRemoteEvents();
 			}
 		};
-
 	}
 
 	storageForLinking(type: web3n.files.FSType, location?: string): IStorage {

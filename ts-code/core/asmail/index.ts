@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -27,6 +27,7 @@ import { AsyncSBoxCryptor } from 'xsp-files';
 import { SendingParamsHolder } from './sending-params';
 import { NetClient } from '../../lib-client/request-utils';
 import { Logger } from '../../lib-client/logging/log-to-file';
+import { ServiceLocator, ServiceLocatorMaker } from '../../lib-client/service-locator';
 
 type WritableFS = web3n.files.WritableFS;
 type Service = web3n.asmail.Service;
@@ -61,12 +62,12 @@ export class ASMail {
 	async init(
 		address: string, getSigner: GetSigner,
 		syncedFS: WritableFS, localFS: WritableFS,
-		getStorages: StorageGetter
+		getStorages: StorageGetter, makeResolver: ServiceLocatorMaker
 	): Promise<void> {
 		try {
 			this.address = address;
 
-			await this.setupConfig(getSigner, syncedFS);
+			await this.setupConfig(getSigner, syncedFS, makeResolver('asmail'));
 
 			await Promise.all([
 				this.setupKeyring(syncedFS),
@@ -74,8 +75,8 @@ export class ASMail {
 			]);
 
 			await Promise.all([
-				this.setupInbox(syncedFS, getSigner, getStorages),
-				this.setupDelivery(localFS, getSigner)
+				this.setupInbox(syncedFS, getSigner, getStorages, makeResolver),
+				this.setupDelivery(localFS, getSigner, makeResolver)
 			]);
 			
 			await syncedFS.close();
@@ -86,11 +87,11 @@ export class ASMail {
 	}
 
 	private async setupConfig(
-		getSigner: GetSigner, syncedFS: WritableFS
+		getSigner: GetSigner, syncedFS: WritableFS, resolver: ServiceLocator
 	): Promise<void> {
 		const fs = await syncedFS.writableSubRoot(CONFIG_DATA_FOLDER)
 		this.config = await ConfigOfASMailServer.makeAndStart(
-			this.address, getSigner, this.makeNet(), fs);
+			this.address, getSigner, resolver, this.makeNet(), fs);
 	}
 
 	private async setupKeyring(syncedFS: WritableFS): Promise<void> {
@@ -106,13 +107,16 @@ export class ASMail {
 	}
 
 	private async setupDelivery(
-		localFS: WritableFS, getSigner: GetSigner
+		localFS: WritableFS, getSigner: GetSigner,
+		makeResolver: ServiceLocatorMaker
 	): Promise<void> {
 		const fs = await localFS.writableSubRoot(DELIVERY_DATA_FOLDER);
 		this.delivery = await Delivery.makeAndStart(fs, {
 			address: this.address,
 			cryptor: this.cryptor,
 			getSigner,
+			asmailResolver: makeResolver('asmail'),
+			midResolver: makeResolver('mailerid'),
 			correspondents: {
 				needIntroKeyFor: this.keyring.needIntroKeyFor,
 				generateKeysToSend: this.keyring.generateKeysToSend,
@@ -128,7 +132,8 @@ export class ASMail {
 	}
 
 	private async setupInbox(
-		syncedFS: WritableFS, getSigner: GetSigner, getStorages: StorageGetter
+		syncedFS: WritableFS, getSigner: GetSigner, getStorages: StorageGetter,
+		makeResolver: ServiceLocatorMaker
 	): Promise<void> {
 		const cachePath = this.inboxPathForUser(this.address);
 		const inboxFS = await syncedFS.writableSubRoot(INBOX_DATA_FOLDER);
@@ -137,10 +142,12 @@ export class ASMail {
 			cryptor: this.cryptor,
 			getSigner,
 			getStorages,
+			asmailResolver: makeResolver('asmail'),
 			correspondents: {
 				msgDecryptor: this.keyring.decrypt,
 				markOwnSendingParamsAsUsed: this.sendingParams.thisSide.setAsUsed,
-				saveParamsForSendingTo: this.sendingParams.otherSides.set
+				saveParamsForSendingTo: this.sendingParams.otherSides.set,
+				midResolver: makeResolver('mailerid')
 			},
 			makeNet: this.makeNet,
 			logError: this.logger.logError

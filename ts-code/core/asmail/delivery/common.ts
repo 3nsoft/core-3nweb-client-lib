@@ -24,6 +24,7 @@ import { JsonKey } from '../../../lib-common/jwkeys';
 import { ASMailKeyPair } from '../keyring/common';
 import { NetClient } from '../../../lib-client/request-utils';
 import { LogWarning, LogError } from '../../../lib-client/logging/log-to-file';
+import { ServiceLocator } from '../../../lib-client/service-locator';
 
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
@@ -156,6 +157,8 @@ export interface ResourcesForSending {
 	address: string;
 	getSigner: GetSigner;
 	makeNet: () => NetClient;
+	asmailResolver: ServiceLocator;
+	midResolver: ServiceLocator;
 	correspondents: {
 
 		/**
@@ -204,6 +207,7 @@ export interface ResourcesForSending {
 		 */
 		newParamsForSendingReplies: (address: string) =>
 			Promise<SendingParams|undefined>;
+
 	};
 	cryptor: AsyncSBoxCryptor;
 	notifyMsgProgress: (id: string, progress: DeliveryProgress) => void;

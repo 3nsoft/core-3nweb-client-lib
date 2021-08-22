@@ -19,9 +19,8 @@ import { StorageGetter } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { NamedProcs } from '../../../lib-common/processes';
-import { MailRecipient, makeMsgNotFoundException }
-	from '../../../lib-client/asmail/recipient';
-import { getASMailServiceFor } from '../../../lib-client/service-locator';
+import { MailRecipient, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
+import { ServiceLocator } from '../../../lib-client/service-locator';
 import { OpenedMsg, openMsg } from '../msg/opener';
 import { MsgKeyInfo } from '../keyring';
 import { MsgIndex } from './msg-indexing';
@@ -56,6 +55,7 @@ export interface ResourcesForReceiving {
 	getStorages: StorageGetter;
 	cryptor: AsyncSBoxCryptor;
 	makeNet: () => NetClient;
+	asmailResolver: ServiceLocator;
 
 	correspondents: {
 
@@ -102,6 +102,9 @@ export interface ResourcesForReceiving {
 		 */
 		saveParamsForSendingTo: (address: string, params: SendingParams) =>
 			Promise<void>;
+
+		midResolver: ServiceLocator;
+
 	};
 
 	logError: LogError;
@@ -145,7 +148,7 @@ export class InboxOnServer {
 			ensureCorrectFS(fs, 'synced', true);
 			const msgReceiver = new MailRecipient(
 				r.address, r.getSigner,
-				() => getASMailServiceFor(r.address), r.makeNet());
+				() => r.asmailResolver(r.address), r.makeNet());
 			const downloader = new MsgDownloader(msgReceiver);
 			const cache = await CachedMessages.makeFor(
 				cachePath, downloader, r.logError);
@@ -225,7 +228,7 @@ export class InboxOnServer {
 			const checkMidKeyCerts = (certs: confApi.p.initPubKey.Certs):
 					Promise<{ pkey: JsonKey; address: string; }> => {
 				return checkAndExtractPKeyWithAddress(
-					this.msgReceiver.getNet(), certs,
+					this.msgReceiver.getNet(), this.r.midResolver, certs,
 					Math.round(msgOnDisk.deliveryTS / 1000));
 			};
 

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,13 +19,13 @@ import { box } from 'ecma-nacl';
 import { MailerIdProvisioner } from '../lib-client/mailer-id/provisioner';
 import { user as mid } from '../lib-common/mid-sigs-NaCl-Ed';
 import { JsonKey, keyFromJson, use as keyUse } from '../lib-common/jwkeys';
-import { getMailerIdServiceFor } from '../lib-client/service-locator';
 import { PKLoginException } from '../lib-client/user-with-pkl-session';
 import { SingleProc } from '../lib-common/processes';
 import { GenerateKey } from './sign-in';
 import { LogError, LogWarning } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';
 import { startMidSession, authenticateMidSession } from '../lib-client/mailer-id/login';
+import { ServiceLocator } from '../lib-client/service-locator';
 
 type WritableFS = web3n.files.WritableFS;
 
@@ -65,6 +65,7 @@ export class IdManager {
 
 	private constructor(
 		private makeNet: () => NetClient,
+		private midServiceFor: ServiceLocator,
 		private readonly logError: LogError,
 		private readonly logWarning: LogWarning,
 		private address: string,
@@ -78,20 +79,22 @@ export class IdManager {
 
 	static async initInOneStepWithoutStore(
 		address: string, midLoginKey: GenerateKey|Uint8Array,
-		makeNet: () => NetClient, logError: LogError, logWarning: LogWarning
+		resolver: ServiceLocator, makeNet: () => NetClient,
+		logError: LogError, logWarning: LogWarning
 	): Promise<IdManager|undefined> {
 		const stepTwo = await IdManager.initWithoutStore(
-			address, makeNet, logError, logWarning);
+			address, resolver, makeNet, logError, logWarning);
 		if (!stepTwo) { throw new Error(
 			`MailerId server doesn't recognize identity ${address}`); }
 		return stepTwo(midLoginKey);
 	}
 
 	static async initWithoutStore(
-		address: string, makeNet: () => NetClient,
+		address: string, resolver: ServiceLocator, makeNet: () => NetClient,
 		logError: LogError, logWarning: LogWarning
 	): Promise<((midLoginKey: GenerateKey|Uint8Array) => Promise<IdManager|undefined>) | undefined> {
-		const idManager = new IdManager(makeNet, logError, logWarning, address);
+		const idManager = new IdManager(
+			makeNet, resolver, logError, logWarning, address);
 		const completion = await idManager.provisionWithGivenKey(address);
 		if (!completion) { return; }
 		return async (midLoginKey) => {
@@ -105,10 +108,12 @@ export class IdManager {
 	}
 
 	static async initFromLocalStore(
-		address: string, localFS: WritableFS, makeNet: () => NetClient,
+		address: string, localFS: WritableFS,
+		resolver: ServiceLocator, makeNet: () => NetClient,
 		logError: LogError, logWarning: LogWarning
 	): Promise<IdManager|undefined> {
-		const idMan = new IdManager(makeNet, logError, logWarning, address);
+		const idMan = new IdManager(
+			makeNet, resolver, logError, logWarning, address);
 		if (localFS.type !== 'local') { throw new Error(
 			`Expected local storage is typed as ${localFS.type}`); }
 		idMan.localFS = localFS;
@@ -186,7 +191,7 @@ export class IdManager {
 	private async provisionWithGivenKey(
 		address: string
 	): Promise<CompleteProvisioning|undefined> {
-		const midUrl = await getMailerIdServiceFor(address);
+		const midUrl = await this.midServiceFor(address);
 		const provisioner = new MailerIdProvisioner(
 			address, midUrl, this.makeNet());
 		try {
@@ -227,7 +232,7 @@ export class IdManager {
 		let proc = this.provisioningProc.getP<mid.MailerIdSigner>();
 		if (proc) { return proc; }
 		proc = this.provisioningProc.start(async () => {
-			const midUrl = await getMailerIdServiceFor(this.address);
+			const midUrl = await this.midServiceFor(this.address);
 			const provisioner = new MailerIdProvisioner(
 				this.address, midUrl, this.makeNet());
 			const key = await this.getSavedKey();

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2019 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2019 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,9 +12,9 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+ */
 
-import { getASMailServiceFor } from '../../../lib-client/service-locator';
 import { JsonKey } from '../../../lib-common/jwkeys';
 import { base64 } from '../../../lib-common/buffer-utils';
 import { MailSender, SessionInfo, FirstSaveReqOpts, FollowingSaveReqOpts }
@@ -218,11 +218,13 @@ export class WIP {
 		const sp = this.msg.r.correspondents.paramsForSendingTo(recipient);
 		if (sp) {
 			this.sender = await MailSender.fresh(
-				this.msg.r.makeNet(), (sp.auth ? senderAddress : undefined),
-				recipient, getASMailServiceFor, sp.invitation);
+				this.msg.r.makeNet(), this.msg.r.asmailResolver,
+				(sp.auth ? senderAddress : undefined),
+				recipient, sp.invitation);
 		} else {
 			this.sender = await MailSender.fresh(
-				this.msg.r.makeNet(), undefined, recipient, getASMailServiceFor);
+				this.msg.r.makeNet(), this.msg.r.asmailResolver, undefined,
+				recipient);
 		}
 		
 		await this.sender.startSession();
@@ -314,8 +316,9 @@ export class WIP {
 		if (!this.msg.r.correspondents.needIntroKeyFor(
 			this.sender.recipient)) { return; }
 		const certs = await this.sender.getRecipientsInitPubKey();
-		return checkAndExtractPKey(this.sender.net, recipient, certs)
-		.catch(err => {
+		return checkAndExtractPKey(
+			this.sender.net, this.msg.r.midResolver, recipient, certs
+		).catch(err => {
 			const exc: web3n.asmail.ASMailSendException = {
 				runtimeException: true,
 				type: 'asmail-delivery',

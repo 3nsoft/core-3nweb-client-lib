@@ -28,6 +28,7 @@ import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { mergeMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
+import { ServiceLocatorMaker } from '../lib-client/service-locator';
 
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
@@ -55,6 +56,7 @@ export class Core {
 
 	private constructor(
 		private readonly makeNet: () => NetClient,
+		private readonly makeResolver: ServiceLocatorMaker,
 		makeCryptor: makeCryptor,
 		private readonly appDirs: AppDirs,
 		private readonly logger: Logger,
@@ -70,11 +72,13 @@ export class Core {
 	}
 
 	static make(
-		conf: CoreConf, makeNet: () => NetClient, makeCryptor: makeCryptor
+		conf: CoreConf, makeNet: () => NetClient,
+		makeResolver: ServiceLocatorMaker, makeCryptor: makeCryptor
 	): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
-		const core = new Core(makeNet, makeCryptor, dirs, logger, conf.signUpUrl);
+		const core = new Core(
+			makeNet, makeResolver, makeCryptor, dirs, logger, conf.signUpUrl);
 		return core;
 	}
 
@@ -114,7 +118,8 @@ export class Core {
 	private initForNewUser = async (u: CreatedUser): Promise<IdManager> => {
 		// 1) init of id manager without setting fs
 		const idManager = await IdManager.initInOneStepWithoutStore(
-			u.address, u.midSKey.default, this.makeNet,
+			u.address, u.midSKey.default,
+			this.makeResolver('mailerid'), this.makeNet,
 			this.logger.logError, this.logger.logWarning);
 		if (!idManager) { throw new Error(
 			`Failed to provision MailerId identity`); }
@@ -122,7 +127,7 @@ export class Core {
 		// 2) setup storage
 		const storesUp = await this.storages.initFromRemote(
 			u.address, idManager.getSigner, u.storeSKey,
-			this.makeNet, this.logger.logError);
+			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
 		if (!storesUp) { throw new Error(`Stores failed to initialize`); }
 
 		// 3) give id manager fs, in which it will record labeled key(s)
@@ -139,7 +144,8 @@ export class Core {
 	) => {
 		// 1) init of id manager without setting fs
 		const stepTwo = await IdManager.initWithoutStore(
-			address, this.makeNet, this.logger.logError, this.logger.logWarning);
+			address, this.makeResolver('mailerid'), this.makeNet,
+			this.logger.logError, this.logger.logWarning);
 		if (!stepTwo) { return; }
 		return async (midLoginKey, storageKey) => {
 			// 2) complete id manager login, without use of fs
@@ -148,8 +154,8 @@ export class Core {
 
 			// 3) initialize all storages
 			const storeDone = await this.storages.initFromRemote(
-				address, idManager.getSigner, storageKey, this.makeNet,
-				this.logger.logError);
+				address, idManager.getSigner, storageKey,
+				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
 			if (!storeDone) { return; }
 
 			// 4) complete initialization of id manager
@@ -165,12 +171,14 @@ export class Core {
 		address, storageKey
 	) => {
 		const completeStorageInit = await this.storages.startInitFromCache(
-			address, storageKey, this.makeNet, this.logger.logError);
+			address, storageKey,
+			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
 		if (!completeStorageInit) { return; }
 
 		const idManager = await IdManager.initFromLocalStore(address,
 			await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
-			this.makeNet, this.logger.logError, this.logger.logWarning);
+			this.makeResolver('mailerid'), this.makeNet,
+			this.logger.logError, this.logger.logWarning);
 
 		if (idManager) {
 			const res = await completeStorageInit(idManager.getSigner);
@@ -182,7 +190,7 @@ export class Core {
 
 		return async (midLoginKey) => {
 			const idManager = await IdManager.initInOneStepWithoutStore(
-				address, midLoginKey, this.makeNet,
+				address, midLoginKey, this.makeResolver('mailerid'), this.makeNet,
 				this.logger.logError, this.logger.logWarning);
 			if (!idManager) { return; }
 			const res = await completeStorageInit!(idManager.getSigner);
@@ -281,7 +289,8 @@ export class Core {
 				ASMAIL_APP_NAME);
 			await this.asmail.init(
 				this.idManager.getId(), this.idManager.getSigner,
-				inboxSyncedFS, inboxLocalFS, this.storages.storageGetterForASMail()
+				inboxSyncedFS, inboxLocalFS,
+				this.storages.storageGetterForASMail(), this.makeResolver
 			);
 			this.isInitialized = true;
 			return this.idManager.getId();

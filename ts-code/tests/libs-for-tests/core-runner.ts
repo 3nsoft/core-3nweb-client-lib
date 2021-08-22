@@ -24,6 +24,8 @@ import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
 import { assert } from "../../lib-common/assert";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
+import { makeServiceLocator } from "../../lib-client/service-locator";
+import { resolveTxt as resolveDnsTxt } from 'dns';
 
 export const testApp: web3n.caps.common.AppManifest = {
 	appDomain: 'test.3nweb.computer',
@@ -95,7 +97,13 @@ export class CoreRunner {
 		this.appCaps = undefined;
 		this.core = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			makeNetClient,
+			makeNetClient, makeServiceLocator({
+				resolveTxt: domain => new Promise(
+					(resolve, reject) => resolveDnsTxt(domain, (err, texts) => {
+						if (err) { reject(err); }
+						else { resolve(texts as any); }
+					}))
+			}),
 			cryptors.makeInWorkerCryptor);
 	}
 

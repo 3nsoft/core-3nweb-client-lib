@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,12 +12,13 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { resolveTxt as resolveDnsTxt } from 'dns';
 import { SignedLoad, isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { parse as parseUrl } from 'url';
 import { Reply, makeException, NetClient } from './request-utils';
+import { promises as dnsPromises } from 'dns';
 
 async function readJSONLocatedAt<T>(
 	client: NetClient, url: string
@@ -218,27 +219,6 @@ function extractPair(
 	return;
 }
 
-/**
- * This is promisifying of node's dns.resolveTxt().
- * @param domain for which we need to get TXT dns records
- * @return a promise, resolvable to two dimensional array of strings, which
- * node's function returns.
- */
-function resolveTxt(domain: string): Promise<string[][]> {
-	return new Promise<string[][]>((resolve, reject) => {
-		// As of March 2017, docs for node say that texts given in a callback
-		// are string[][], and node works this way, but definition is incorrect.
-		// Therefore, need to insert "as any" into resolve function.
-		resolveDnsTxt(domain, (err, texts) => {
-			if (err) {
-				reject(err);
-			} else {
-				resolve(texts as any);
-			}
-		});
-	});
-}
-
 interface DnsError extends Error {
 	code: string;
 	hostname: string;
@@ -250,62 +230,48 @@ const DNS_ERR_CODE = {
 };
 Object.freeze(DNS_ERR_CODE);
 
-async function getServiceFor(
-	address: string, serviceLabel: string
-): Promise<string> {
-	try {
-		const domain = domainOfAddress(address);
-		const txtRecords = await resolveTxt(domain);
-		const recValue = extractPair(txtRecords, serviceLabel);
-		if (!recValue) { throw noServiceRecordExc(address); }
-		const url = checkAndPrepareURL(recValue);
-		return url;
-	} catch (err) {
-		if ((<DnsError> err).code === DNS_ERR_CODE.NODATA) {
-			throw noServiceRecordExc(address);
-		} else if ((<DnsError> err).code === DNS_ERR_CODE.NOTFOUND) {
-			throw domainNotFoundExc(address)
-		} else {
-			throw err;
-		}
+export type ServiceTypeDNSLabel = 'mailerid' | 'asmail' | '3nstorage';
+
+export type ServiceLocatorMaker = (
+	serviceLabel: ServiceTypeDNSLabel
+) => ServiceLocator;
+
+export type ServiceLocator = (address: string) => Promise<string>;
+
+export function makeServiceLocator(
+	resolver: {
+		resolveTxt: (typeof dnsPromises)['resolveTxt'];
 	}
+): ServiceLocatorMaker {
+	return serviceLabel => async address => {
+		try {
+			const domain = domainOfAddress(address);
+			const txtRecords = await resolver.resolveTxt(domain);
+			const recValue = extractPair(txtRecords, serviceLabel);
+			if (!recValue) { throw noServiceRecordExc(address); }
+			const url = checkAndPrepareURL(recValue);
+			return url;
+		} catch (err) {
+			if ((<DnsError> err).code === DNS_ERR_CODE.NODATA) {
+				throw noServiceRecordExc(address);
+			} else if ((<DnsError> err).code === DNS_ERR_CODE.NOTFOUND) {
+				throw domainNotFoundExc(address)
+			} else {
+				throw err;
+			}
+		}
+	};
 }
 
 /**
- * @param address
- * @return a promise, resolvable to MailerId service url, that serves
- * domain of a given address.
- */
-export async function getMailerIdServiceFor(address: string): Promise<string> {
-	return getServiceFor(address, 'mailerid');
-}
-
-/**
- * @param address
- * @return a promise, resolvable to ASMail service url, that serves
- * domain of a given address.
- */
-export async function getASMailServiceFor(address: string): Promise<string> {
-	return getServiceFor(address, 'asmail');
-}
-
-/**
- * @param address
- * @return a promise, resolvable to 3NStorage service url, that serves
- * domain of a given address.
- */
-export async function getStorageServiceFor(address: string): Promise<string> {
-	return getServiceFor(address, '3nstorage');
-}
-
-/**
+ * @param resolver
  * @param address
  * @return a promise, resolvable to ASMailRoutes object and mid root domain.
  */
 export async function getMailerIdInfoFor(
-	client: NetClient, address: string
+	resolver: ServiceLocator, client: NetClient, address: string
 ): Promise<{ info: MailerIdServiceInfo; domain: string; }> {
-	const serviceURL = await getMailerIdServiceFor(address);
+	const serviceURL = await resolver(address);
 	const rootAddr = parseUrl(serviceURL).hostname!;
 	const info = await mailerIdInfoAt(client, serviceURL);
 	return {

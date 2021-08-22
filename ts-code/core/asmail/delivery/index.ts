@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,15 +12,14 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { getASMailServiceFor } from '../../../lib-client/service-locator';
 import { FileException, ensureCorrectFS } from '../../../lib-common/exceptions/file';
 import { MailSender } from '../../../lib-client/asmail/sender';
 import { Msg } from './msg';
 import { Attachments, ResourcesForSending } from './common';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
-import { LogError, LogWarning } from '../../../lib-client/logging/log-to-file';
 import { Observer as RxObserver, Subject } from 'rxjs';
 import { share } from 'rxjs/operators';
 
@@ -29,6 +28,7 @@ type DeliveryService = web3n.asmail.DeliveryService;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type DeliveryOptions = web3n.asmail.DeliveryOptions;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
+type ASMailSendException = web3n.asmail.ASMailSendException;
 type Observer<T> = web3n.Observer<T>;
 
 const SMALL_MSG_SIZE = 1024*1024;
@@ -122,9 +122,9 @@ export class Delivery {
 		const msg = this.msgs.get(id);
 		if (!msg) {
 			if (observer.error) {
-				const exc = {
+				const exc: ASMailSendException = {
 					runtimeException: true,
-					type: 'msg-delivery-service',
+					type: 'asmail-delivery',
 					msgNotFound: true
 				};
 				observer.error(exc);
@@ -154,11 +154,12 @@ export class Delivery {
 		let mSender: MailSender;
 		if (sendParams) {
 			mSender = await MailSender.fresh(
-				this.r.makeNet(), (sendParams.auth ? this.r.address : undefined),
-				recipient, getASMailServiceFor, sendParams.invitation);
+				this.r.makeNet(), this.r.asmailResolver,
+				(sendParams.auth ? this.r.address : undefined),
+				recipient, sendParams.invitation);
 		} else {
 			mSender = await MailSender.fresh(
-				this.r.makeNet(), undefined, recipient, getASMailServiceFor);
+				this.r.makeNet(), this.r.asmailResolver, undefined, recipient);
 		}
 		await mSender.performPreFlight();
 		return mSender.maxMsgLength;

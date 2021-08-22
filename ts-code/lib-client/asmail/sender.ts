@@ -21,7 +21,7 @@
 import { NetClient, makeException } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/delivery';
 import { user as mid } from '../../lib-common/mid-sigs-NaCl-Ed';
-import { asmailInfoAt } from '../service-locator';
+import { asmailInfoAt, ServiceLocator } from '../service-locator';
 import { parse as parseUrl } from 'url';
 
 const LIMIT_ON_MAX_CHUNK = 1024*1024;
@@ -76,17 +76,17 @@ export class MailSender {
 	 * This static method creates a fresh, as apposed to restarted, sender.
 	 * Returned promise resolves to it.
 	 * @param net
+	 * @param getDeliveryURL is a function that produces recipient's service url
 	 * @param sender is a string with sender's mail address, or undefined,
 	 * for anonymous sending (non-authenticated).
 	 * @param recipient is a required string with recipient's mail address.
-	 * @param getDeliveryURL is a function that produces recipient's service url
 	 * @param invitation is an optional string token, used with either anonymous
 	 * (non-authenticated) delivery, or in a more strict delivery control in
 	 * authenticated setting.
 	 */
 	static async fresh(
-		net: NetClient, sender: string|undefined, recipient: string,
-		getDeliveryURL: ServiceUrlGetter, invitation?: string
+		net: NetClient, getDeliveryURL: ServiceLocator,
+		sender: string|undefined, recipient: string, invitation?: string
 	): Promise<MailSender> {
 		const ms = new MailSender(sender, recipient, invitation, net);
 		const deliveryURL = await getDeliveryURL(recipient);
@@ -290,7 +290,7 @@ export class MailSender {
 					'Malformed reply: missing sessionId string');
 			}
 			this.sessionId = rep.data.sessionId;
-			delete rep.data.sessionId;
+			delete (rep.data as any).sessionId;
 			return rep.data;
 		} else if (rep.status == api.sessionStart.SC.redirect) {
 			this.prepareRedirectOrThrowUp(<any> rep.data);

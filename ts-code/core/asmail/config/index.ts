@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,9 +12,10 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { getASMailServiceFor } from '../../../lib-client/service-locator';
+import { ServiceLocator } from '../../../lib-client/service-locator';
 import { MailConfigurator } from '../../../lib-client/asmail/service-config';
 import { ensureCorrectFS } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
@@ -66,11 +67,12 @@ export class ConfigOfASMailServer {
 			{ role: MsgKeyRole; pair: JWKeyPair; replacedAt?: number; };
 	};
 
-	private constructor(address: string, getSigner: GetSigner, net: NetClient) {
+	private constructor(
+		address: string, getSigner: GetSigner,
+		resolver: ServiceLocator, net: NetClient
+	) {
 		const serviceConf = new MailConfigurator(
-			address, getSigner,
-			() => getASMailServiceFor(serviceConf.userId),
-			net);
+			address, getSigner, () => resolver(serviceConf.userId), net);
 		this.anonInvites = new Invites(serviceConf);
 		this.publishedIntroKeys = new PublishedIntroKey(getSigner, serviceConf);
 		
@@ -91,12 +93,13 @@ export class ConfigOfASMailServer {
 	}
 
 	static async makeAndStart(
-		address: string, getSigner: GetSigner, net: NetClient,
-		fs: WritableFS
+		address: string, getSigner: GetSigner,
+		resolver: ServiceLocator, net: NetClient, fs: WritableFS
 	): Promise<ConfigOfASMailServer> {
 		try {
 			ensureCorrectFS(fs, 'synced', true);
-			const conf = new ConfigOfASMailServer(address, getSigner, net);
+			const conf = new ConfigOfASMailServer(
+				address, getSigner, resolver, net);
 			await Promise.all([
 				fs.writableFile(ANON_SENDER_INVITES_FILE)
 				.then(f => conf.anonInvites.start(f)),

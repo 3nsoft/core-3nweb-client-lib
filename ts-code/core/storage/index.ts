@@ -24,7 +24,7 @@ import { StorageException as BaseExc }
 	from '../../lib-client/3nstorage/exceptions';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
-import { getStorageServiceFor } from '../../lib-client/service-locator';
+import { ServiceLocator } from '../../lib-client/service-locator';
 import { ScryptGenParams } from '../../lib-client/key-derivation';
 import { FileException, makeFileException, Code as excCode }
 	from '../../lib-common/exceptions/file';
@@ -173,8 +173,9 @@ class StorageAndFS<T extends Storage> {
 		Object.seal(this);
 	}
 
-	static async existing<T extends Storage>(storage: T, key: Uint8Array):
-			Promise<StorageAndFS<T>|undefined> {
+	static async existing<T extends Storage>(
+		storage: T, key: Uint8Array
+	): Promise<StorageAndFS<T>|undefined> {
 		const s = new StorageAndFS(storage);
 		try {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
@@ -188,8 +189,9 @@ class StorageAndFS<T extends Storage> {
 		}
 	}
 
-	static async newOrExisting<T extends Storage>(storage: T, key: Uint8Array):
-			Promise<StorageAndFS<T>|undefined> {
+	static async newOrExisting<T extends Storage>(
+		storage: T, key: Uint8Array
+	): Promise<StorageAndFS<T>|undefined> {
 		const s = new StorageAndFS(storage);
 		try {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
@@ -317,8 +319,8 @@ export class Storages implements FactoryOfFSs {
 	};
 
 	async startInitFromCache(
-		user: string, keyGen: GenerateKey, makeNet: () => NetClient,
-		logError: LogError
+		user: string, keyGen: GenerateKey,
+		makeNet: () => NetClient, resolver: ServiceLocator, logError: LogError
 	): Promise<((getSigner: GetSigner) => Promise<boolean>)|undefined> {
 		const storageDir = this.storageDirForUser(user);
 		const params = await readRootKeyDerivParamsFromCache(storageDir);
@@ -338,7 +340,7 @@ export class Storages implements FactoryOfFSs {
 				user, getSigner,
 				this.storageGetterForSyncedStorage,
 				this.cryptor,
-				() => getStorageServiceFor(user),
+				() => resolver(user),
 				makeNet, logError);
 			this.synced = await StorageAndFS.existing(syncedStore, key);
 			key.fill(0);
@@ -350,7 +352,7 @@ export class Storages implements FactoryOfFSs {
 
 	async initFromRemote(
 		user: string, getSigner: GetSigner, keyOrGen: GenerateKey|Uint8Array,
-		makeNet: () => NetClient, logError: LogError
+		makeNet: () => NetClient, resolver: ServiceLocator, logError: LogError
 	): Promise<boolean> {
 		const storageDir = this.storageDirForUser(user);
 		const { startObjProcs, syncedStore } = await SyncedStore.makeAndStart(
@@ -358,7 +360,7 @@ export class Storages implements FactoryOfFSs {
 			user, getSigner,
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
-			() => getStorageServiceFor(user),
+			() => resolver(user),
 			makeNet, logError);
 		// getting parameters records them locally on a disk
 		const params = await getRootKeyDerivParams(
