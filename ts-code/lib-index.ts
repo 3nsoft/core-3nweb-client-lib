@@ -26,7 +26,7 @@ export * from "./core";
 
 export { makeNetClient } from "./lib-client/request-utils";
 
-export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevice, userFilesOnDevice } from "./core/storage";
+export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevice, userFilesOnDevice, reverseDomain } from "./core/storage";
 
 export { DeviceFS } from './lib-client/local-files/device-fs';
 
