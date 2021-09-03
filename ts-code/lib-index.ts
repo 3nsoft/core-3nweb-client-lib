@@ -24,6 +24,7 @@ export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
 
 export * from "./core";
 
+export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";
 export { makeNetClient } from "./lib-client/request-utils";
 
 export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevice, userFilesOnDevice, reverseDomain } from "./core/storage";
