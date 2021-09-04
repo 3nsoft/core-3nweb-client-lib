@@ -19,7 +19,7 @@
  * reliance set.
  */
 
-import { utf8 } from '../../../lib-common/buffer-utils';
+import { makeUint8ArrayCopy, utf8 } from '../../../lib-common/buffer-utils';
 import { FolderInfo, NodeInfo } from './folder-node';
 import { KEY_LENGTH } from 'xsp-files';
 import { errWithCause } from '../../../lib-common/exceptions/error';
@@ -112,7 +112,7 @@ function deserializeNodeInfoV1(bytes: Uint8Array):
 	if (bytes.length < (KEY_LENGTH + 4)) { throw new Error(
 		`Cannot deserialize node key from bytes`); }
 
-	const key = new Uint8Array(bytes.subarray(0, KEY_LENGTH));
+	const key = makeUint8ArrayCopy(bytes.subarray(0, KEY_LENGTH));
 	bytes = bytes.subarray(KEY_LENGTH);
 
 	const jsonBytesLen = load_bigendian(bytes);

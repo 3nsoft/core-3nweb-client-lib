@@ -22,7 +22,7 @@
 
 import { makeException, NetClient } from './request-utils';
 import { HTTPException } from '../lib-common/exceptions/http';
-import { base64 } from '../lib-common/buffer-utils';
+import { base64, makeUint8ArrayCopy } from '../lib-common/buffer-utils';
 import { secret_box as sbox, box, nonce as nMod, arrays, compareVectors } from 'ecma-nacl';
 import { SessionEncryptor, makeSessionEncryptor } from '../lib-common/session-encryptor';
 import * as loginApi from '../lib-common/service-api/pub-key-login';
@@ -176,9 +176,9 @@ export abstract class ServiceUser {
 	private openSessionKey(dhsharedKeyCalc: ICalcDHSharedKey): void {
 		assert(!!this.encChallenge);
 		const dhsharedKey = dhsharedKeyCalc();
-		const nonce = new Uint8Array(
+		const nonce = makeUint8ArrayCopy(
 			this.encChallenge!.subarray(0, sbox.NONCE_LENGTH));
-		const sessionKey = new Uint8Array(
+		const sessionKey = makeUint8ArrayCopy(
 			this.encChallenge!.subarray(sbox.NONCE_LENGTH));
 		// encrypted challenge has session key packaged into WN format, with
 		// poly part cut out. Therefore, usual open method will not do as it

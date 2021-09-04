@@ -112,4 +112,10 @@ export function byteLengthIn(arrs: Uint8Array[]): number {
 	return len;
 }
 
+export function makeUint8ArrayCopy(arr: Uint8Array): Uint8Array {
+	const copy = new Uint8Array(arr.length);
+	copy.set(arr);
+	return copy;
+}
+
 Object.freeze(exports);

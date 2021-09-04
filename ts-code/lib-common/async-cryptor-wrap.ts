@@ -16,6 +16,7 @@
 
 import { AsyncSBoxCryptor, advanceNonce } from 'xsp-files';
 import { box } from 'ecma-nacl';
+import { makeUint8ArrayCopy } from './buffer-utils';
 
 /**
  * This is an encryptor that packs bytes according to "with-nonce" format.
@@ -90,8 +91,8 @@ export function makeEncryptor(cryptor: AsyncSBoxCryptor,
 		throw new Error("Given delta is out of bounds.");
 	}
 	
-	key = new Uint8Array(key);
-	nextNonce = new Uint8Array(nextNonce);
+	key = makeUint8ArrayCopy(key);
+	nextNonce = makeUint8ArrayCopy(nextNonce);
 	let counter = 0;
 	const counterMax = Math.floor(0xfffffffffffff / delta);
 	
@@ -137,7 +138,7 @@ export function makeDecryptor(cryptor: AsyncSBoxCryptor, key: Uint8Array):
 	if (key.length !== 32) { throw new Error(
 		`Key array key should have 32 elements (bytes) in it, but it is ${key.length} elements long.`); }
 	
-	key = new Uint8Array(key);
+	key = makeUint8ArrayCopy(key);
 	
 	const decryptor = {
 		open: (c) => {
