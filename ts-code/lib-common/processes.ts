@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2019 - 2020 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2019 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { errWithCause } from "./exceptions/error";
 
@@ -21,52 +22,6 @@ export function sleep(millis: number): Promise<void> {
 		setTimeout(resolve, millis).unref();
 	});
 }
-
-/**
- * Standard Promise has no finally() method, when all respected libraries do.
- * Inside of an async function one may use try-finally clause. But, when we
- * work with raw promises, we need a compact finalization routine. And this is
- * it for synchronous completion.
- * @param promise
- * @param fin is a synchronous function that performs necessary
- * finalization/cleanup. Use finalizeAsync, when finalization is asynchronous.
- * @return a finalized promise
- */
-export function finalize<T>(promise: Promise<T>, fin: () => void): Promise<T> {
-	return promise
-	.then((res) => {
-		fin();
-		return res;
-	}, (err) => {
-		fin();
-		throw err;
-	})
-}
-
-/**
- * Standard Promise has no finally() method, when all respected libraries do.
- * Inside of an async function one may use try-finally clause. But, when we
- * work with raw promises, we need a compact finalization routine. And this is
- * it for an asynchronous completion.
- * @param promise
- * @param fin is an asynchronous function that performs necessary
- * finalization/cleanup. Use finalize, when finalization is synchronous
- * (is not returning promise).
- * @return a finalized promise
- */
-export function finalizeAsync<T>(
-	promise: Promise<T>, fin: () => Promise<void>
-): Promise<T> {
-	return promise
-	.then((res) => {
-		return fin()
-		.then(() => { return res; });
-	}, (err) => {
-		return fin()
-		.then(() => { throw err; });
-	})
-}
-
 
 /**
  * This represents a function that will create a promise, potentially starting
@@ -86,7 +41,7 @@ export type Action<T> = () => Promise<T>;
  */
 export class NamedProcs {
 	
-	private promises = new Map<string, Promise<any>>();
+	private processes = new Map<string, SingleProc>();
 	
 	constructor() {
 		Object.freeze(this);
@@ -98,17 +53,8 @@ export class NamedProcs {
 	 * given id is unknown.
 	 */
 	getP<T>(id: string): Promise<T> | undefined {
-		return this.promises.get(id);
-	}
-	
-	private insertPromise<T>(id: string, promise: Promise<T>): Promise<T> {
-		promise = finalize(promise, () => {
-			if (this.promises.get(id) === promise) {
-				this.promises.delete(id);
-			}
-		});
-		this.promises.set(id, promise);
-		return promise;
+		const proc = this.processes.get(id);
+		return (proc ? proc.getP() : undefined);
 	}
 	
 	/**
@@ -118,9 +64,9 @@ export class NamedProcs {
 	 * @return a promise of a process' completion.
 	 */
 	addStarted<T>(id: string, promise: Promise<T>): Promise<T> {
-		if (this.promises.has(id)) { throw new Error(
+		if (this.getP(id)) { throw new Error(
 			'Process with id "'+id+'" is already in progress.'); }
-		return this.insertPromise(id, promise);
+		return this.startOrChain(id, () => promise);
 	}
 	
 	/**
@@ -131,9 +77,9 @@ export class NamedProcs {
 	 * @return a promise of a process' completion.
 	 */
 	start<T>(id: string, action: Action<T>): Promise<T> {
-		if (this.promises.has(id)) { throw new Error(
+		if (this.getP(id)) { throw new Error(
 			'Process with id "'+id+'" is already in progress.'); }
-		return this.insertPromise(id, action());
+		return this.startOrChain(id, action);
 	}
 	
 	/**
@@ -145,13 +91,12 @@ export class NamedProcs {
 	 * @return a promise of a process' completion.
 	 */
 	startOrChain<T>(id: string, action: Action<T>): Promise<T> {
-		const promise = this.promises.get(id);
-		if (promise) {
-			const next = promise.then(() => action());
-			return this.insertPromise(id, next);
-		} else {
-			return this.insertPromise(id, action());
+		let proc = this.processes.get(id);
+		if (!proc) {
+			proc = new SingleProc(() => this.processes.delete(id));
+			this.processes.set(id, proc);
 		}
+		return proc.startOrChain(action);
 	}
 	
 }
@@ -168,43 +113,65 @@ Object.freeze(NamedProcs);
  */
 export class SingleProc {
 	
-	private promise: Promise<any>|undefined = undefined;
+	private actions: {
+		action: Action<any>;
+		deferred: Deferred<any>;
+	}[] = [];
+	private running = false;
 	
-	constructor() {
+	constructor(
+		private onGoingIdle?: () => void
+	) {
 		Object.seal(this);
 	}
 	
-	private insertPromise<T>(promise: Promise<T>): Promise<T> {
-		promise = finalize(promise, () => {
-			if (this.promise === promise) {
-				this.promise = undefined;
-			}
-		});
-		this.promise = promise;
-		return promise;
-	}
-	
 	getP<T>(): Promise<T>|undefined {
-		return this.promise;
+		return ((this.actions.length === 0) ?
+			undefined :
+			this.actions[this.actions.length-1].deferred.promise);
 	}
 	
 	addStarted<T>(promise: Promise<T>): Promise<T> {
-		if (this.promise) { throw new Error('Process is already in progress.'); }
-		return this.insertPromise(promise);
+		if (this.actions.length > 0) { throw new Error(
+			'Process is already in progress.'); }
+		return this.startOrChain(() => promise);
 	}
 	
 	start<T>(action: Action<T>): Promise<T> {
-		if (this.promise) { throw new Error('Process is already in progress.'); }
-		return this.insertPromise(action());
+		if (this.actions.length > 0) { throw new Error(
+			'Process is already in progress.'); }
+		return this.startOrChain(action);
+	}
+
+	private async runIfIdle(): Promise<void> {
+		if (this.running) { return; }
+		this.running = true;
+		while (this.actions.length > 0) {
+			const { action, deferred } = this.actions[0];
+			try {
+				const res = await action();
+				deferred.resolve(res);
+			} catch (err) {
+				deferred.reject(err);
+			}
+			this.actions.shift();
+		}
+		this.running = false;
+		// paranoid check after seeing LiquidCore 0.7.10 on iOS
+		if (this.actions.length > 0) {
+			return this.runIfIdle();
+		}
+		// when listener is used, like with NamedPcos
+		if (this.onGoingIdle) {
+			this.onGoingIdle();
+		}
 	}
 	
 	startOrChain<T>(action: Action<T>): Promise<T> {
-		if (this.promise) {
-			const next = this.promise.then(() => { return action(); });
-			return this.insertPromise(next);
-		} else {
-			return this.insertPromise(action());
-		}
+		const deferred = defer<T>();
+		this.actions.push({ action, deferred });
+		this.runIfIdle();
+		return deferred.promise;
 	}
 	
 }
@@ -269,240 +236,6 @@ export function makeSyncedFunc<T extends Function>(
 	syncProc: SingleProc, thisArg: any, func: T
 ): T {
 	return ((...args) => syncProc.startOrChain(() => func.apply(thisArg, args))) as any as T;
-}
-
-/**
- * This is a cycling process, that ensures single execution.
- * It cycles while given "while" predicate returns true. When predicate returns
- * false, process goes to idle. Pushing this process into action is done via
- * startIfIdle() method.
- */
-export class SingleCyclicProc {
-
-	private proc: Promise<void>|undefined = undefined;
-	
-	/**
-	 * @param cycleWhile is a "while" predicate. When it returns true, process
-	 * continues to cycle, and when it returns false, process goes to idle.
-	 * @param action is an async cycle body to run at each iteration.
-	 */
-	constructor(
-		private cycleWhile: () => boolean,
-		private action: () => Promise<void>
-	) {
-		Object.seal(this);
-	}
-
-	/**
-	 * This starts process, if it is idle.
-	 */
-	startIfIdle(): void {
-		if (this.proc) { return; }
-		this.proc = this.action();
-		this.proc.then(this.cycleOrIdle);
-	}
-
-	private cycleOrIdle = () => {
-		if (this.cycleWhile()) {
-			this.proc = this.action();
-		} else {
-			this.proc = undefined;
-		}
-	};
-
-	isRunning(): boolean {
-		return !!this.proc;
-	}
-
-	/**
-	 * This makes process unusable and unstartable. Waiting on a return promise,
-	 * awaits the completion of the last iteration this process is in (if any).
-	 */
-	async close(): Promise<void> {
-		this.cycleWhile = () => false;
-		this.action = () => {
-			throw new Error('This cyclic process has already been closed');
-		};
-		await this.proc;
-	}
-
-}
-Object.freeze(SingleCyclicProc.prototype);
-Object.freeze(SingleCyclicProc);
-
-
-function oneTimeCaller(f: () => void): () => void {
-	let hasBeenCalled = false;
-	return function(): void {
-		if (hasBeenCalled) { return; }
-		hasBeenCalled = true;
-		f();
-	}
-}
-
-/**
- * Lock allows for exclusive process flow.
- * Locking is done by calling a lock function that returns an unlocker. Unlocker
- * must be called when lock can be released, preferably in a finally clause.
- * @return a lock function.
- * CAUTION: Lock is not re-entrant.
- */
-export function makeLock(): () => Promise<() => void> {
-	
-	let isLocked = false;
-	const queue: ((unlock: () => void) => void)[] = [];
-	
-	function unlock(): void {
-		if (queue.length === 0) {
-			isLocked = false;
-		} else {
-			const next = queue.shift();
-			if (!next) { return; }
-			next(oneTimeCaller(unlock));
-		}
-	}
-	
-	async function lock(): Promise<() => void> {
-		if (isLocked) {
-			return await new Promise<() => void>((resolve) => {
-				queue.push(resolve);
-			});
-		} else {
-			isLocked = true;
-			return oneTimeCaller(unlock);
-		}
-	}
-	
-	return lock;
-}
-
-/**
- * Read-write lock allows reads to occur concurrently, while writes exclude
- * both reads and other writes. Implementation uses fair locking policy.
- * Locking is done by calling proper function that returns an unlocker. Unlocker
- * must be called when lock can be released, preferably in finally clause.
- * CAUTION: Lock is not re-entrant.
- */
-export interface ReadWriteLock {
-	
-	/**
-	 * This method acquires lock for reading. This excludes writes, but does
-	 * allows other reads, unless they have to be scheduled after an already
-	 * waiting write (as per fair policy).
-	 * @return a promise, resolvable to unlocking function.
-	 */
-	lockForRead(): Promise<() => void>;
-	
-	/**
-	 * This method acquires lock for writing. This excludes both reads and other
-	 * writes.
-	 * @return a promise, resolvable to unlocking function.
-	 */
-	lockForWrite(): Promise<() => void>;
-	
-}
-
-/**
- * @return new read-write lock
- */
-export function makeReadWriteLock(): ReadWriteLock {
-	
-	interface Queued {
-		isWrite: boolean;
-		write?: (unlock: () => void) => void;
-		reads?: ((unlock: () => void) => void)[];
-	}
-	
-	let isLockedForWrite = false;
-	let isLockedForRead = false;
-	const queue: Queued[] = [];
-	let readsInProgress = 0;
-	
-	async function lockForWrite(): Promise<() => void> {
-		if (isLockedForRead || isLockedForWrite) {
-			return await new Promise<() => void>((resolve) => {
-				queue.push({
-					isWrite: true,
-					write: resolve
-				});
-			});
-		} else {
-			isLockedForWrite = true;
-			return oneTimeCaller(unlockAfterWrite);
-		}
-	}
-	
-	function unlockAfterWrite(): void {
-		if (queue.length === 0) {
-			isLockedForWrite = false;
-			return;
-		}
-		const next = queue.shift();
-		if (!next) { return; }
-		if (next.isWrite) {
-			next.write!(oneTimeCaller(unlockAfterWrite));
-		} else {
-			isLockedForWrite = false;
-			isLockedForRead = true;
-			readsInProgress = next.reads!.length;
-			for (const read of next.reads!) {
-				read(oneTimeCaller(unlockAfterRead));
-			}
-		}
-	}
-	
-	async function lockForRead(): Promise<() => void> {
-		if (isLockedForRead) {
-			if (queue.length === 0) {
-				readsInProgress += 1;
-				return oneTimeCaller(unlockAfterRead);
-			} else {
-				return await queueRead();
-			}
-		} else if (isLockedForWrite) {
-			return await queueRead();
-		} else {
-			isLockedForRead = true;
-			readsInProgress = 1;	// no plus, as it is the first read
-			return oneTimeCaller(unlockAfterRead);
-		}
-	}
-	
-	async function queueRead():  Promise<() => void> {
-		const last = queue[queue.length-1];
-		if (!last || last.isWrite) {
-			return await new Promise<() => void>((resolve) => {
-				queue.push({
-					isWrite: false,
-					reads: [ resolve ]
-				});
-			});
-		} else {
-			return await new Promise<() => void>((resolve) => {
-				last.reads!.push(resolve);
-			});
-		}
-	}
-	
-	function unlockAfterRead(): void {
-		readsInProgress -= 1;
-		if (readsInProgress > 0) { return; }
-		if (queue.length === 0) {
-			isLockedForRead = false;
-			return;
-		}
-		const next = queue.shift();
-		if (!next) { return; }
-		if (next.isWrite) {
-			isLockedForWrite = true;
-			isLockedForRead = false;
-			next.write!(oneTimeCaller(unlockAfterWrite));
-		} else {
-			throw new Error('Read locking is incorrectly queued');
-		}
-	}
-	
-	return { lockForRead, lockForWrite };
 }
 
 
