@@ -229,7 +229,7 @@ export class IdManager {
 	}
 
 	private async provisionUsingSavedKey(): Promise<mid.MailerIdSigner> {
-		let proc = this.provisioningProc.getP<mid.MailerIdSigner>();
+		let proc = this.provisioningProc.latestTaskAtThisMoment<mid.MailerIdSigner>();
 		if (proc) { return proc; }
 		proc = this.provisioningProc.start(async () => {
 			const midUrl = await this.midServiceFor(this.address);

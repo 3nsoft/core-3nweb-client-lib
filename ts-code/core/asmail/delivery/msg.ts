@@ -200,7 +200,7 @@ export class Msg {
 	}
 
 	isSendingNow(): boolean {
-		return !!this.sendingProc.getP();
+		return !!this.sendingProc.isProcessing();
 	}
 
 	deliverySizeLeft(): number {
@@ -229,7 +229,7 @@ export class Msg {
 	async cancelSending(): Promise<void> {
 		if (this.cancelled) { return; }
 		this.cancelled = true;
-		const filesProc = this.progressSavingProc.getP();
+		const filesProc = this.progressSavingProc.latestTaskAtThisMoment();
 		if (!filesProc) { return; }
 		await filesProc.catch(() => {});
 		const exc: web3n.asmail.ASMailSendException = {

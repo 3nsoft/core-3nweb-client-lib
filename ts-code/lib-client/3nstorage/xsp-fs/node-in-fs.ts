@@ -176,10 +176,6 @@ export abstract class NodeInFS<
 	protected attrs: AttrsHolder<TAttrs> = (undefined as any);
 	
 	private writeProc: SingleProc|undefined = undefined;
-	protected get transition(): Promise<any>|undefined {
-		if (!this.writeProc) { return; }
-		return this.writeProc.getP();
-	}
 
 	get version(): number {
 		return this.currentVersion;
@@ -311,7 +307,7 @@ export abstract class NodeInFS<
 		if (!this.writeProc) {
 			this.writeProc = new SingleProc();
 		}
-		if (!awaitPrevChange && this.writeProc.getP()) {
+		if (!awaitPrevChange && this.writeProc.isProcessing()) {
 			throw makeFileException(excCode.concurrentUpdate, this.name+` type ${this.type}`);
 		}
 		try {

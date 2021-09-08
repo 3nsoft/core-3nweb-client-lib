@@ -174,7 +174,7 @@ export class InboxOnServer {
 	private async removeMsg(msgId: string): Promise<void> {
 		// check for an already started process
 		const procId = 'removal of '+msgId;
-		const promise = this.procs.getP<void>(procId);
+		const promise = this.procs.latestTaskAtThisMoment<void>(procId);
 		if (promise) { return promise; }
 		// start removal process
 		return this.procs.start<any>(procId, (async () => {
@@ -303,7 +303,7 @@ export class InboxOnServer {
 
 		// check for an already started process
 		const procId = 'listing msgs';
-		const promise = this.procs.getP<MsgInfo[]>(procId);
+		const promise = this.procs.latestTaskAtThisMoment<MsgInfo[]>(procId);
 		if (promise) { return promise; }
 		// start message listing process
 		return this.procs.start(procId, async () => {
@@ -339,7 +339,7 @@ export class InboxOnServer {
 		if (!msgId || (typeof msgId !== 'string')) {
 			throw `Given message id is not a non-empty string`; }
 		const procId = `get msg #${msgId}`;
-		const promise = this.procs.getP<IncomingMessage>(procId);
+		const promise = this.procs.latestTaskAtThisMoment<IncomingMessage>(procId);
 		if (promise) { return promise; }
 		return this.procs.start(procId, async () => {
 			

@@ -48,7 +48,7 @@ export class GC {
 
 	scheduleCollection = (obj: LocalObj): void => {
 		this.scheduled.add(obj);
-		if (this.gcProc.getP()) { return; }
+		if (this.gcProc.isProcessing()) { return; }
 		this.gcProc.start(this.objCollecting);
 	};
 

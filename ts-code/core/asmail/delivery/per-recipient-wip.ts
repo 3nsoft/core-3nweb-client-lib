@@ -175,7 +175,7 @@ export class WIP {
 	 * or if this wip is done, undefined is returned.
 	 */
 	startNext(): Promise<void>|undefined {
-		let proc = this.proc.getP<void>();
+		let proc = this.proc.latestTaskAtThisMoment<void>();
 		if (proc) { return; }
 		const stage = this.state.stage;
 		if (stage === "1-start-session") {

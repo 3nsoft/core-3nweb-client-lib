@@ -50,10 +50,10 @@ export class ServerEvents {
 			let obs: (typeof observer)|undefined = observer;
 
 			// open server, ensuring only one process running
-			if (!this.openningServer.getP()) {
+			if (!this.openningServer.isProcessing()) {
 				this.openningServer.addStarted(this.subscribeToServer());
 			}
-			this.openningServer.getP<SubscribingClient>()!
+			this.openningServer.latestTaskAtThisMoment<SubscribingClient>()!
 			.then((server) => {
 				this.setServer(server);
 				if (!obs) { return; }

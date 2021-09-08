@@ -50,7 +50,7 @@ export class GC {
 	scheduleCollection = (obj: SyncedObj): void => {
 		if (this.isStopped) { return; }
 		this.scheduled.add(obj);
-		if (this.gcProc.getP()) { return; }
+		if (this.gcProc.isProcessing()) { return; }
 		this.gcProc.start(this.objCollecting);
 	};
 

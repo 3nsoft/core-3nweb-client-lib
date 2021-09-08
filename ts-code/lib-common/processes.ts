@@ -52,9 +52,14 @@ export class NamedProcs {
 	 * @return a promise of a process' completion, or undefined, if process with
 	 * given id is unknown.
 	 */
-	getP<T>(id: string): Promise<T> | undefined {
+	latestTaskAtThisMoment<T>(id: string): Promise<T> | undefined {
 		const proc = this.processes.get(id);
-		return (proc ? proc.getP() : undefined);
+		return (proc ? proc.latestTaskAtThisMoment() : undefined);
+	}
+
+	isProcessing(id: string): boolean {
+		const proc = this.processes.get(id);
+		return (proc ? proc.isProcessing() : false);
 	}
 	
 	/**
@@ -64,7 +69,7 @@ export class NamedProcs {
 	 * @return a promise of a process' completion.
 	 */
 	addStarted<T>(id: string, promise: Promise<T>): Promise<T> {
-		if (this.getP(id)) { throw new Error(
+		if (this.isProcessing(id)) { throw new Error(
 			'Process with id "'+id+'" is already in progress.'); }
 		return this.startOrChain(id, () => promise);
 	}
@@ -77,7 +82,7 @@ export class NamedProcs {
 	 * @return a promise of a process' completion.
 	 */
 	start<T>(id: string, action: Action<T>): Promise<T> {
-		if (this.getP(id)) { throw new Error(
+		if (this.isProcessing(id)) { throw new Error(
 			'Process with id "'+id+'" is already in progress.'); }
 		return this.startOrChain(id, action);
 	}
@@ -112,33 +117,37 @@ Object.freeze(NamedProcs);
  * do ning something as an exclusive process.
  */
 export class SingleProc {
-	
+
 	private actions: {
 		action: Action<any>;
 		deferred: Deferred<any>;
 	}[] = [];
 	private running = false;
-	
+
 	constructor(
 		private onGoingIdle?: () => void
 	) {
 		Object.seal(this);
 	}
-	
-	getP<T>(): Promise<T>|undefined {
+
+	isProcessing(): boolean {
+		return (this.actions.length > 0);
+	}
+
+	latestTaskAtThisMoment<T>(): Promise<T>|undefined {
 		return ((this.actions.length === 0) ?
 			undefined :
 			this.actions[this.actions.length-1].deferred.promise);
 	}
-	
+
 	addStarted<T>(promise: Promise<T>): Promise<T> {
-		if (this.actions.length > 0) { throw new Error(
+		if (this.isProcessing()) { throw new Error(
 			'Process is already in progress.'); }
 		return this.startOrChain(() => promise);
 	}
-	
+
 	start<T>(action: Action<T>): Promise<T> {
-		if (this.actions.length > 0) { throw new Error(
+		if (this.isProcessing()) { throw new Error(
 			'Process is already in progress.'); }
 		return this.startOrChain(action);
 	}
@@ -166,14 +175,14 @@ export class SingleProc {
 			this.onGoingIdle();
 		}
 	}
-	
+
 	startOrChain<T>(action: Action<T>): Promise<T> {
 		const deferred = defer<T>();
 		this.actions.push({ action, deferred });
 		this.runIfIdle();
 		return deferred.promise;
 	}
-	
+
 }
 Object.freeze(SingleProc.prototype);
 Object.freeze(SingleProc);
