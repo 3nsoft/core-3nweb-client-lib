@@ -54,7 +54,7 @@ it.func = async function(s) {
 	await new Promise((resolve, reject) => {
 		const observer: web3n.Observer<DeliveryProgress> = {
 			next: (p: DeliveryProgress) => { notifs.push(p); },
-			complete: resolve, error: reject
+			complete: resolve as () => void, error: reject
 		};
 		const cbDetach = u1_w3n.mail!.delivery.observeDelivery(
 			idForSending, observer);
@@ -78,7 +78,7 @@ it.func = async function(s) {
 	const u2_w3n = s.testAppCapsByUser(u2);
 	const msgs = await u2_w3n.mail!.inbox.listMsgs();
 	const msgInfo = msgs.find(m => (m.msgId === msgId))!;
-	expect(msgInfo).not.toBeUndefined(`message ${msgId} should be present in a list of all messages`);
+	expect(msgInfo).withContext(`message ${msgId} should be present in a list of all messages`).not.toBeUndefined();
 	expect(msgInfo.msgType).toBe('mail');
 	const inMsg = await u2_w3n.mail!.inbox.getMsg(msgId);
 	expect(inMsg).toBeTruthy();

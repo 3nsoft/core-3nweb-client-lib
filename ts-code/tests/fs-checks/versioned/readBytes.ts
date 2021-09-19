@@ -49,14 +49,14 @@ it.func = async function(s) {
 	let fName = 'file1';
 	let v1 = await testFS.v!.writeBytes(fName, originalBytes);
 	let { bytes, version } = await testFS.v!.readBytes(fName);
-	expect(bytesEqual(bytes!, originalBytes)).toBe(true, 'file read should produce array with all bytes');
-	expect(version).toBe(v1, 'file version at reading should exactly the same as that on respective write');
+	expect(bytesEqual(bytes!, originalBytes)).withContext('file read should produce array with all bytes').toBe(true);
+	expect(version).withContext('file version at reading should be exactly the same as that on respective write').toBe(v1);
 	
 	let v2 = await testFS.v!.writeBytes(fName, new Uint8Array(0));
 	expect(v2).toBeGreaterThan(v1);
 	({ bytes, version } = await testFS.v!.readBytes(fName));
-	expect(typeof bytes).toBe('undefined', 'reading empty file should produce undefined');
-	expect(version).toBe(v2, 'file version at reading should exactly the same as that on respective write');
+	expect(typeof bytes).withContext('reading empty file should produce undefined').toBe('undefined');
+	expect(version).withContext('file version at reading should be exactly the same as that on respective write').toBe(v2);
 };
 specs.its.push(it);
 
@@ -68,27 +68,27 @@ it.func = async function(s) {
 	let v = await testFS.v!.writeBytes(fName, originalBytes);
 	
 	let { bytes, version } = await testFS.v!.readBytes(fName, 12, 3456);
-	expect(bytesEqual(bytes!, originalBytes.subarray(12, 3456))).toBe(true, 'should read from a proper file interior.');
+	expect(bytesEqual(bytes!, originalBytes.subarray(12, 3456))).withContext('should read from a proper file interior').toBe(true);
 	expect(version).toBe(v);
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, 12*1024));
-	expect(bytesEqual(bytes!, originalBytes.subarray(12*1024))).toBe(true, 'read should start from interior and go to file\'s end.');
+	expect(bytesEqual(bytes!, originalBytes.subarray(12*1024))).withContext('read should start from interior and go to file\'s end').toBe(true);
 	expect(version).toBe(v);
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, 12*1024, 1024*1024));
-	expect(bytesEqual(bytes!, originalBytes.subarray(12*1024))).toBe(true, 'when end parameter is greater than file size, bytes up to files end must be read.');
+	expect(bytesEqual(bytes!, originalBytes.subarray(12*1024))).withContext('when end parameter is greater than file size, bytes up to files end must be read').toBe(true);
 	expect(version).toBe(v);
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, undefined, 123));
-	expect(bytesEqual(bytes!, originalBytes)).toBe(true, 'when start parameter is not given, end should also be ignored');
+	expect(bytesEqual(bytes!, originalBytes)).withContext('when start parameter is not given, end should also be ignored').toBe(true);
 	expect(version).toBe(v);
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, 1024*1024, 1024*1024+4));
-	expect(typeof bytes).toBe('undefined', 'when start is greater than file size, undefined must be returned');
+	expect(bytes).withContext('when start is greater than file size, undefined must be returned').toBeUndefined();
 	expect(version).toBe(v);
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, 1024*1024));
-	expect(typeof bytes).toBe('undefined', 'when start is greater than file size, undefined must be returned');
+	expect(bytes).withContext('when start is greater than file size, undefined must be returned').toBeUndefined();
 	expect(version).toBe(v);
 
 	await testFS.readBytes(fName, -1).then(
@@ -100,7 +100,7 @@ it.func = async function(s) {
 		() => {});
 	
 	({ bytes, version } = await testFS.v!.readBytes(fName, 1234, 100));
-	expect(typeof bytes).toBe('undefined', 'when end is smaller than start , undefined must be returned');
+	expect(bytes).withContext('when end is smaller than start , undefined must be returned').toBeUndefined();
 	expect(version).toBe(v);
 };
 specs.its.push(it);

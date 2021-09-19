@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, xitAsync } from './async-jasmine';
+import { itCond, xitCond } from './jasmine-utils';
 import { resolve } from 'path';
 import { readdirSync } from 'fs';
 
@@ -52,7 +52,7 @@ function readSpecs(folderWithModules: string): SpecDescribe[] {
 
 function specFuncFor(
 	it: SpecIt<any>, offFlags: DisableFlag[]|undefined
-): (typeof xitAsync)|(typeof itAsync)|undefined {
+): (typeof xitCond)|(typeof itCond)|undefined {
 	if (offFlags) {
 		if (it.notIncludedIn) {
 			if (Array.isArray(it.notIncludedIn)) {
@@ -66,14 +66,14 @@ function specFuncFor(
 		if (it.disableIn) {
 			if (Array.isArray(it.disableIn)) {
 				for (const flag of it.disableIn) {
-					if (offFlags.includes(flag)) { return xitAsync; }
+					if (offFlags.includes(flag)) { return xitCond; }
 				}
 			} else {
-				if (offFlags.includes(it.disableIn)) { return xitAsync; }
+				if (offFlags.includes(it.disableIn)) { return xitCond; }
 			}
 		}
 	}
-	return itAsync;
+	return itCond;
 }
 
 export function loadSpecs<S extends { isUp: boolean }>(

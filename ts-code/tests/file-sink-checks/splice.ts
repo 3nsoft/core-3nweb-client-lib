@@ -102,9 +102,9 @@ it.func = async function(s) {
 	): void {
 		const section = l.sections[sectionInd];
 		if (section) {
-			expect(section.src).toBe(src, `wrong source in section ${sectionInd}`);
-			expect(section.ofs).toBe(ofs, `wrong offset in section ${sectionInd}`);
-			expect(section.len).toBe(len, `wrong length in section ${sectionInd}`);
+			expect(section.src).withContext(`source in section ${sectionInd}`).toBe(src);
+			expect(section.ofs).withContext(`offset in section ${sectionInd}`).toBe(ofs);
+			expect(section.len).withContext(`length in section ${sectionInd}`).toBe(len);
 		} else {
 			fail(`section indexes ${sectionInd} is not in layout with ${l.sections.length} sections`);
 		}

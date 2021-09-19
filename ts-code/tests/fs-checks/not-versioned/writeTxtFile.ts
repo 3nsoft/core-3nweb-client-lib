@@ -102,7 +102,7 @@ it.func = async function(s) {
 	}, (exc: FileException) => {
 		expect(exc.alreadyExists).toBe(true);
 	});
-	expect(await testFS.readTxtFile(path)).toBe(initTxt, 'initial file content stays intact');
+	expect(await testFS.readTxtFile(path)).withContext('initial file content stays intact').toBe(initTxt);
 };
 specs.its.push(it);
 

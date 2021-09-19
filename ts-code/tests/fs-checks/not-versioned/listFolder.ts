@@ -45,7 +45,7 @@ it.func = async function(s) {
 		} else if (entry.isFolder) {
 			expect(entry.name).toBe('folder1');
 		} else {
-			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, '  ')}`);
+			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, 2)}`);
 		}
 	}
 
@@ -100,7 +100,7 @@ it.func = async function(s) {
 		} else if (entry.isFolder) {
 			expect(entry.name).toBe('folder1');
 		} else {
-			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, '  ')}`);
+			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, 2)}`);
 		}
 	}
 };
@@ -130,7 +130,7 @@ it.func = async function(s) {
 		} else if (entry.isLink) {
 			expect(entry.name).toBe('link1');
 		} else {
-			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, '  ')}`);
+			fail(`folder listing has unknown type: ${JSON.stringify(entry, null, 2)}`);
 		}
 	}
 };

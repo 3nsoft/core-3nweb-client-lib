@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-jasmine';
+import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
 import { minimalSetup } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { testApp } from '../libs-for-tests/core-runner';
@@ -29,19 +29,19 @@ describe('signUp process', () => {
 	let coreInit: Promise<string>;
 	let closeIPC: () => void;
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		({ closeIPC, coreInit, w3n } = s.runner.startCore());
 	});
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		closeIPC();
 	});
 
 	const name = 'Mike Marlow ';
 	const pass = 'some long passphrase';
 
-	itAsync('gets available addresses', async () => {
+	itCond('gets available addresses', async () => {
 		const addresses = await w3n.signUp.getAvailableAddresses(name);
 		expect(Array.isArray(addresses)).toBe(true);
 		expect(addresses.length).toBe(s.signupDomains.length);
@@ -50,14 +50,14 @@ describe('signUp process', () => {
 		}
 	});
 
-	itAsync('creates user parameters', async () => {
+	itCond('creates user parameters', async () => {
 		const notifications: number[] = [];
 		const notifier = (p: number) => { notifications.push(p); }
 		await w3n.signUp.createUserParams(pass, notifier);
 		checkKeyDerivNotifications(notifications);
 	}, 60000);
 
-	itAsync('creates user account, allowing caps for apps', async () => {
+	itCond('creates user account, allowing caps for apps', async () => {
 		try {
 			s.runner.core.makeCAPsForApp(testApp.appDomain, testApp);
 			fail(`Attempt to make app CAPs before core initialization should throw up`);

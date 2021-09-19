@@ -47,14 +47,14 @@ it.func = async function(s) {
 	let fName = 'file1';
 	let v1 = await testFS.v!.writeTxtFile(fName, original);
 	let { txt, version } = await testFS.v!.readTxtFile(fName);
-	expect(txt).toBe(original, 'file read should produce original text');
-	expect(version).toBe(v1, 'file version at reading should exactly the same as that on respective write');
+	expect(txt).withContext('file read should produce original text').toBe(original);
+	expect(version).withContext('file version at reading should exactly the same as that on respective write').toBe(v1);
 	
 	let v2 = await testFS.v!.writeBytes(fName, new Uint8Array(0));
 	expect(v2).toBeGreaterThan(v1);
 	({ txt, version } = await testFS.v!.readTxtFile(fName));
-	expect(txt).toBe('', 'empty file should be read as an empty string');
-	expect(version).toBe(v2, 'file version at reading should exactly the same as that on respective write');
+	expect(txt).withContext('empty file should be read as an empty string').toBe('');
+	expect(version).withContext('file version at reading should exactly the same as that on respective write').toBe(v2);
 };
 specs.its.push(it);
 

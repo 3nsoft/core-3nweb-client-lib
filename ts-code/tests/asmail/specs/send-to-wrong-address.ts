@@ -54,7 +54,7 @@ it.func = async function(s) {
 	await new Promise((resolve, reject) => {
 		const observer: web3n.Observer<DeliveryProgress> = {
 			next: (p: DeliveryProgress) => { notifs.push(p); },
-			complete: resolve, error: reject
+			complete: resolve as () => void, error: reject
 		};
 		const cbDetach = w3n.mail!.delivery.observeDelivery(
 			idForSending, observer);

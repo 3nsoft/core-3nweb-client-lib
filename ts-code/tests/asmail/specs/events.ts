@@ -60,7 +60,7 @@ it.func = async function(s) {
 	[[ msgId1, txtBody1 ], [ msgId2, txtBody2 ]]
 	.forEach(([ msgId, txtBody ]) => {
 		const msg = incomingMsgs.find(m => (m.msgId === msgId));
-		expect(msg).toBeTruthy(`message ${msgId} should be present in a list of all messages`);
+		expect(msg).withContext(`message ${msgId} should be present in a list of all messages`).toBeTruthy();
 		expect(msg!.plainTxtBody).toBe(txtBody);
 	});
 	

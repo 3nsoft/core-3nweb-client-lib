@@ -48,8 +48,8 @@ it.func = async function(s) {
 	let fName = 'file1';
 	let v1 = await testFS.v!.writeJSONFile(fName, original);
 	let { json, version } = await testFS.v!.readJSONFile(fName);
-	expect(deepEqual(json, original)).toBe(true, 'file read should produce original json');
-	expect(version).toBe(v1, 'file version at reading should exactly the same as that on respective write');
+	expect(deepEqual(json, original)).withContext('file read should produce original json').toBe(true);
+	expect(version).withContext('file version at reading should exactly the same as that on respective write').toBe(v1);
 	
 	let v2 = await testFS.v!.writeBytes(fName, new Uint8Array(0));
 	expect(v2).toBeGreaterThan(v1);

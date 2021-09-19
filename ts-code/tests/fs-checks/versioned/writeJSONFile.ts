@@ -112,8 +112,8 @@ it.func = async function(s) {
 		expect(exc.alreadyExists).toBe(true);
 	});
 	let { json, version } = await testFS.v!.readJSONFile(path);
-	expect(deepEqual(initJson, json)).toBe(true, 'initial file content stays intact');
-	expect(version).toBe(v, 'initial file version stays intact');
+	expect(deepEqual(initJson, json)).withContext('initial file content stays intact').toBe(true);
+	expect(version).withContext('initial file version stays intact').toBe(v);
 };
 specs.its.push(it);
 

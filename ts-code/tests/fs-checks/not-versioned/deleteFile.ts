@@ -43,7 +43,7 @@ it.func = async function(s) {
 	.then(() => {
 		fail('deleting folder as file must fail');
 	}, (exc: FileException) => {
-		expect(exc.notFile || exc.opNotPermitted).toBe(true, 'folder is not a file');
+		expect(exc.notFile || exc.opNotPermitted).withContext('folder is not a file').toBe(true, );
 	});
 };
 specs.its.push(it);

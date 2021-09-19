@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018б 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -117,7 +117,7 @@ it.func = async function(s) {
 	await new Promise((resolve, reject) => {
 		const observer: web3n.Observer<DeliveryProgress> = {
 			next: (p: DeliveryProgress) => { notifs.push(p); },
-			complete: resolve, error: reject
+			complete: resolve as () => void, error: reject
 		};
 		const cbDetach = u1_w3n.mail!.delivery.observeDelivery(
 			idForSending, observer);
@@ -142,24 +142,24 @@ it.func = async function(s) {
 	// check message
 	const msgs = await u2_w3n.mail!.inbox.listMsgs();
 	const msgInfo = msgs.find(m => (m.msgId === msgId));
-	expect(msgInfo).toBeTruthy(`message ${msgId} should be present in a list of all messages`);
+	expect(msgInfo).withContext(`message ${msgId} should be present in a list of all messages`).toBeTruthy();
 	const inMsg = await u2_w3n.mail!.inbox.getMsg(msgId);
 	expect(inMsg).toBeTruthy();
 	expect(inMsg.plainTxtBody).toBe(txtBody);
 
 	// check attachments presence
-	expect(!!inMsg.attachments).toBe(true, `attachments should be present in message ${msgId}`);
+	expect(!!inMsg.attachments).withContext(`attachments should be present in message ${msgId}`).toBe(true);
 	const attachments = inMsg.attachments;
 	if (!attachments) { throw new Error(`skipping further checks`); }
 
 	// check files in attachments
 	for (const fp of files) {
-		expect(await attachments.readTxtFile(fp.name)).toBe(fp.content, `file content should be exactly what has been sent`);
+		expect(await attachments.readTxtFile(fp.name)).withContext(`file content should be exactly what has been sent`).toBe(fp.content);
 	}
 
 	// check folder in attachments
 	const checkFolderIn = async (parent: ReadonlyFS, params: FolderParams) => {
-		expect(await parent.checkFolderPresence(params.name)).toBe(true, `folder ${params.name} should be present in ${parent.name}`);
+		expect(await parent.checkFolderPresence(params.name)).withContext(`folder ${params.name} should be present in ${parent.name}`).toBe(true);
 		const fs = await parent.readonlySubRoot(params.name);
 		for (const fp of params.files) {
 			expect(await fs.readTxtFile(fp.name)).toBe(fp.content, `file content should be exactly what has been sent`);
@@ -190,7 +190,7 @@ async function doRoundTripSendingToEstablishInvites(
 	await u2_w3n.mail!.delivery.addMsg([ u1.userId ], msg, idForSending);
 	await new Promise((resolve, reject) => {
 		u2_w3n.mail!.delivery.observeDelivery(
-			idForSending, { complete: resolve, error: reject });
+			idForSending, { complete: resolve as () => void, error: reject });
 	});
 	await u2_w3n.mail!.delivery.rmMsg(idForSending);
 
@@ -241,7 +241,7 @@ it.func = async function(s) {
 	await new Promise((resolve, reject) => {
 		const observer: web3n.Observer<DeliveryProgress> = {
 			next: (p: DeliveryProgress) => { notifs.push(p); },
-			complete: resolve, error: reject
+			complete: resolve as () => void, error: reject
 		};
 		const cbDetach = u1_w3n.mail!.delivery.observeDelivery(
 			idForSending, observer);
@@ -265,13 +265,13 @@ it.func = async function(s) {
 	// check message
 	const msgs = await u2_w3n.mail!.inbox.listMsgs();
 	const msgInfo = msgs.find(m => (m.msgId === msgId));
-	expect(msgInfo).toBeTruthy(`message ${msgId} should be present in a list of all messages`);
+	expect(msgInfo).withContext(`message ${msgId} should be present in a list of all messages`).toBeTruthy();
 	const inMsg = await u2_w3n.mail!.inbox.getMsg(msgId);
 	expect(inMsg).toBeTruthy();
 	expect(inMsg.plainTxtBody).toBe(txtBody);
 
 	// check attachments presence
-	expect(!!inMsg.attachments).toBe(true, `attachments should be present in message ${msgId}`);
+	expect(!!inMsg.attachments).withContext(`attachments should be present in message ${msgId}`).toBe(true);
 	const attachments = inMsg.attachments;
 	if (!attachments) { throw new Error(`skipping further checks`); }
 

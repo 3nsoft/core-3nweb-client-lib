@@ -48,7 +48,7 @@ it.func = async function(s) {
 	let fName = 'file1';
 	await testFS.writeJSONFile(fName, original);
 	let json = await testFS.readJSONFile(fName);
-	expect(deepEqual(json, original)).toBe(true, 'file read should produce original json');
+	expect(deepEqual(json, original)).withContext('file read should produce original json').toBe(true);
 	
 	fName = 'file2';
 	await testFS.writeBytes(fName, new Uint8Array(0));

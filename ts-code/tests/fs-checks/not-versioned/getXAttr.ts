@@ -51,7 +51,7 @@ it.func = async function(s) {
 
 	async function testforPath(path: string) {
 		let attrValue = await testFS.getXAttr(path, 'unknown attribute');
-		expect((attrValue === null) || (attrValue === undefined)).toBe(true, 'for attribute that is not present');
+		expect((attrValue === null) || (attrValue === undefined)).withContext('value of attribute that is not present').toBe(true);
 
 		const attr1Name = 'attribute name 1';
 		const attr1Value = 'some string value';

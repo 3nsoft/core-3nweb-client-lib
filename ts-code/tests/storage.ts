@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, afterEachAsync, beforeAllAsync, afterAllAsync } from './libs-for-tests/async-jasmine';
+import { itCond, afterEachCond, beforeAllWithTimeoutLog, afterAllCond } from './libs-for-tests/jasmine-utils';
 import { setupWithUsers } from './libs-for-tests/setups';
 import { loadSpecs } from './libs-for-tests/spec-module';
 import { resolve } from 'path';
@@ -36,18 +36,18 @@ describe('3NStorage', () => {
 	const s = setupWithUsers(true);
 	let w3n: commonW3N;
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		w3n = s.testAppCapsByUserIndex(0);
 	});
 
-	itAsync('storage capability is present in test app', async () => {
+	itCond('storage capability is present in test app', async () => {
 		expect(typeof w3n.storage).toBe('object');
 	}, undefined, s);
 
 	describe('.getAppSyncedFS', () => {
 
-		itAsync('will not produce FS for domain (reversed), not associated with app',
+		itCond('will not produce FS for domain (reversed), not associated with app',
 				async () => {
 			await w3n.storage!.getAppSyncedFS('com.app.unknown')
 			.then(() => {
@@ -59,7 +59,7 @@ describe('3NStorage', () => {
 			});
 		}, undefined, s);
 
-		itAsync('produces FS for domains (reversed), associated with app',
+		itCond('produces FS for domains (reversed), associated with app',
 				async () => {
 			for (const appDomain of allowedAppFS) {
 				const fs = await w3n.storage!.getAppSyncedFS(appDomain);
@@ -67,7 +67,7 @@ describe('3NStorage', () => {
 			}
 		}, undefined, s);
 
-		itAsync('concurrently produces FS for an app', async () => {
+		itCond('concurrently produces FS for an app', async () => {
 			const appDomain = allowedAppFS[0];
 			const promises: Promise<web3n.files.FS>[] = [];
 			for (let i=0; i<10; i+=1) {
@@ -88,7 +88,7 @@ describe('3NStorage', () => {
 
 	describe('.getAppLocalFS', () => {
 
-		itAsync('will not produce FS for domain, not associated with app',
+		itCond('will not produce FS for domain, not associated with app',
 				async () => {
 			await w3n.storage!.getAppLocalFS('com.app.unknown')
 			.then(() => {
@@ -100,7 +100,7 @@ describe('3NStorage', () => {
 			});
 		}, undefined, s);
 
-		itAsync('produces FS for domains (reversed), associated with app',
+		itCond('produces FS for domains (reversed), associated with app',
 				async () => {
 			for (const appDomain of allowedAppFS) {
 				const fs = await w3n.storage!.getAppLocalFS(appDomain);
@@ -108,7 +108,7 @@ describe('3NStorage', () => {
 			}
 		}, undefined, s);
 
-		itAsync('concurrently produces FS for an app', async () => {
+		itCond('concurrently produces FS for an app', async () => {
 			const appDomain = allowedAppFS[0];
 			const promises: Promise<web3n.files.FS>[] = [];
 			for (let i=0; i<10; i+=1) {
@@ -129,7 +129,7 @@ describe('3NStorage', () => {
 
 	describe('.getSysFS', () => {
 
-		itAsync('produces collection of items in synced storage', async () => {
+		itCond('produces collection of items in synced storage', async () => {
 			const sysItems = await w3n.storage!.getSysFS!('synced');
 			expect(sysItems.isCollection).toBe(true);
 		});
@@ -140,13 +140,13 @@ describe('3NStorage', () => {
 
 		const fsSetup = {} as SetupWithTestFS;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
 			fsSetup.isUp = true;
 			fsSetup.testFS = await w3n.storage!.getAppLocalFS(allowedAppFS[0]);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.testFS);
 		});
@@ -166,13 +166,13 @@ describe('3NStorage', () => {
 
 		const fsSetup = {} as SetupWithTestFS;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
 			fsSetup.isUp = true;
 			fsSetup.testFS = await w3n.storage!.getAppLocalFS(allowedAppFS[0]);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.testFS);
 		});
@@ -187,13 +187,13 @@ describe('3NStorage', () => {
 
 		const fsSetup = {} as SetupWithTestFS;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
 			fsSetup.isUp = true;
 			fsSetup.testFS = await w3n.storage!.getAppSyncedFS(allowedAppFS[0]);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.testFS);
 		});
@@ -212,13 +212,13 @@ describe('3NStorage', () => {
 
 		const fsSetup = {} as SetupWithTestFS;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
 			fsSetup.isUp = true;
 			fsSetup.testFS = await w3n.storage!.getAppSyncedFS(allowedAppFS[0]);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.testFS);
 		});
@@ -233,7 +233,7 @@ describe('3NStorage', () => {
 
 		const fsSetup = {} as SetupWithTwoFSs;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
 			fsSetup.isUp = true;
 			const domain = allowedAppFS[0];
@@ -241,7 +241,7 @@ describe('3NStorage', () => {
 			fsSetup.syncedTestFS = await w3n.storage!.getAppSyncedFS(domain);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.localTestFS);
 			await clearFS(fsSetup.syncedTestFS);

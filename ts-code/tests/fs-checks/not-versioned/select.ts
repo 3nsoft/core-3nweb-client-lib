@@ -73,7 +73,7 @@ it.func = async function(s) {
 	for (const [ name, item ] of found) {
 		expect(name.endsWith('.zip')).toBe(true);
 		expect(item.isFile).toBe(true);
-		expect(item.location!.path).toBe(name, `name key for item in collection is the same as path, to ensure uniqueness`);
+		expect(item.location!.path).withContext(`name key for item in collection is the same as path, to ensure uniqueness`).toBe(name);
 		expect(filePaths.includes(name.substring(1))).toBeTruthy();
 		expect(item.location!.storageType).toBeFalsy();
 		expect(item.location!.storageUse).toBeFalsy();

@@ -47,7 +47,7 @@ it.func = async function(s) {
 	let fName = 'file1';
 	await testFS.writeTxtFile(fName, original);
 	let txt = await testFS.readTxtFile(fName);
-	expect(txt).toBe(original, 'file read should produce original text');
+	expect(txt).withContext('file read should produce original text').toBe(original);
 	
 	fName = 'file2';
 	await testFS.writeBytes(fName, new Uint8Array(0));

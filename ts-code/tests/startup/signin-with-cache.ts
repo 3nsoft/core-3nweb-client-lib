@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-jasmine';
+import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { User, testApp } from '../libs-for-tests/core-runner';
@@ -30,7 +30,7 @@ describe('signIn process (with cache)', () => {
 	let coreInit: Promise<string>;
 	let closeIPC: () => void;
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		user = s.users[0];
 		const runner = s.runners.get(user.userId)!;
@@ -38,17 +38,17 @@ describe('signIn process (with cache)', () => {
 		({ closeIPC, coreInit, w3n } = runner.startCore());
 	}, 30000);
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		closeIPC();
 	});
 
-	itAsync('identifies user on disk', async () => {
+	itCond('identifies user on disk', async () => {
 		const users = await w3n.signIn.getUsersOnDisk();
 		expect(Array.isArray(users)).toBe(true);
 		expect(users).toContain(user.userId);
 	});
 
-	itAsync(`won't startup with a wrong pass`, async () => {
+	itCond(`won't startup with a wrong pass`, async () => {
 		const notifications: number[] = [];
 		const notifier = (p: number) => { notifications.push(p); }
 		const passOK = await w3n.signIn.useExistingStorage(
@@ -57,7 +57,7 @@ describe('signIn process (with cache)', () => {
 		checkKeyDerivNotifications(notifications);
 	}, 60000);
 
-	itAsync('starts with correct pass', async () => {
+	itCond('starts with correct pass', async () => {
 		const core = s.runners.get(user.userId)!.core;
 		try {
 			core.makeCAPsForApp(testApp.appDomain, testApp);

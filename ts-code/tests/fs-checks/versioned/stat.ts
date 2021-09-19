@@ -50,18 +50,18 @@ it.func = async function(s) {
 	let stat = await testFS.stat(fName);
 	expect(typeof stat).toBe('object');
 	expect(stat).not.toBeNull();
-	expect(stat.isFile).toBe(true, 'flag indicating that path points to file');
-	expect(stat.size).toBe(originalFileSize, 'file size');
+	expect(stat.isFile).withContext('flag indicating that path points to file').toBe(true);
+	expect(stat.size).withContext('file size').toBe(originalFileSize);
 	expect(typeof stat.version).toBe('number');
 	const fstVersion =  stat.version!;
-	
+
 	const sndTxt = 'I better work!';
 	const sndVersionFileSize = sndTxt.length;
 	await testFS.writeTxtFile(fName, sndTxt);
 	stat = await testFS.stat(fName);
-	expect(stat.isFile).toBe(true, 'flag indicating that path points to file');
-	expect(stat.size).toBe(sndVersionFileSize, 'file size');
-	expect(stat.version).toBe(fstVersion + 1, 'second version of the file');
+	expect(stat.isFile).withContext('flag indicating that path points to file').toBe(true);
+	expect(stat.size).withContext('file size').toBe(sndVersionFileSize);
+	expect(stat.version).withContext('second version of the file').toBe(fstVersion + 1);
 };
 specs.its.push(it);
 
@@ -73,14 +73,14 @@ it.func = async function(s) {
 	let stat = await testFS.stat(fName);
 	expect(typeof stat).toBe('object');
 	expect(stat).not.toBeNull();
-	expect(stat.isFolder).toBe(true, 'flag indicating that path points to folder');
+	expect(stat.isFolder).withContext('flag indicating that path points to folder').toBe(true);
 	expect(typeof stat.version).toBe('number');
 	const fstVersion =  stat.version!;
-	
+
 	await testFS.writeTxtFile(`${fName}/some-file`, '');
 	stat = await testFS.stat(fName);
-	expect(stat.isFolder).toBe(true, 'flag indicating that path points to folder');
-	expect(stat.version).toBe(fstVersion + 1, 'second version of the folder');
+	expect(stat.isFolder).withContext('flag indicating that path points to folder').toBe(true);
+	expect(stat.version).withContext('second version of the folder').toBe(fstVersion + 1);
 };
 specs.its.push(it);
 

@@ -51,8 +51,8 @@ it.func = async function(s) {
 	expect(typeof file).toBe('object');
 	expect(file.writable).toBe(false);
 	expect(!!file.v).toBe(!!testFS.v);
-	expect(file.name).toBe(fName, 'file object should have file name');
-	expect(file.isNew).toBe(false, 'readonly file must exist');		
+	expect(file.name).withContext('file object should have file name').toBe(fName);
+	expect(file.isNew).withContext('readonly file must exist').toBe(false);
 };
 specs.its.push(it);
 

@@ -95,7 +95,7 @@ it.func = async function(s) {
 	await testFS.writeBytes(path, bytes);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 	const sink = await testFS.getByteSink(path, {truncate:false});
-	expect(await sink.getSize()).toBe(originalSize, 'Existing file should be opened as is');
+	expect(await sink.getSize()).withContext('Existing file should be opened as is').toBe(originalSize);
 	const continousSink = makeContinuousSink(sink, originalSize);
 	await continousSink(bytes);
 	expect(await sink.getSize()).toBe(originalSize + bytes.length);

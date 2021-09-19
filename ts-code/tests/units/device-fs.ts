@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, beforeAllAsync, afterAllAsync, afterEachAsync } from '../libs-for-tests/async-jasmine';
+import { itCond, beforeAllWithTimeoutLog, afterAllCond, afterEachCond } from '../libs-for-tests/jasmine-utils';
 import { DeviceFS } from '../../lib-client/local-files/device-fs';
 import { rmDirWithContent, mkdir, rmdir } from '../../lib-common/async-fs-node';
 import { resolve } from 'path';
@@ -31,7 +31,7 @@ describe('DeviceFS', () => {
 
 	const rootPath = resolve(TEST_DATA, 'root');
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		await rmDirWithContent(TEST_DATA).catch((e: FileException) => {
 			if (!e.notFound) { throw e; }
 		});
@@ -39,11 +39,11 @@ describe('DeviceFS', () => {
 		await mkdir(rootPath);
 	});
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		await rmDirWithContent(TEST_DATA);
 	});
 
-	itAsync('is created with static make function', async () => {
+	itCond('is created with static make function', async () => {
 
 		// creating on non-existing folder should fail
 		try {
@@ -67,12 +67,12 @@ describe('DeviceFS', () => {
 
 		const s = {} as SetupWithTestFS;
 
-		beforeAllAsync(async () => {
+		beforeAllWithTimeoutLog(async () => {
 			s.isUp = true;
 			s.testFS = await DeviceFS.makeWritable(rootPath);
 		});
 
-		afterEachAsync(async () => {
+		afterEachCond(async () => {
 			await clearFS(s.testFS);
 		});
 

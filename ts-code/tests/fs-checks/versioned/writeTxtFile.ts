@@ -108,8 +108,8 @@ it.func = async function(s) {
 		expect(exc.alreadyExists).toBe(true);
 	});
 	let { txt, version } = await testFS.v!.readTxtFile(path);
-	expect(txt).toBe(initTxt, 'initial file content stays intact');
-	expect(version).toBe(v, 'initial file version stays intact');
+	expect(txt).withContext('initial file content stays intact').toBe(initTxt);
+	expect(version).withContext('initial file version stays intact').toBe(v);
 };
 specs.its.push(it);
 

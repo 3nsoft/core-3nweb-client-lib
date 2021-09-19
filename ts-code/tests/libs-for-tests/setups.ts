@@ -16,7 +16,7 @@
 */
 
 import { CoreRunner, User } from "./core-runner";
-import { beforeAllAsync, afterAllAsync } from "./async-jasmine";
+import { beforeAllWithTimeoutLog, afterAllCond } from "./jasmine-utils";
 import { callWithTimeout } from "../../lib-common/processes";
 import { ServicesRunner } from "./services-runner";
 import { assert } from "../../lib-common/assert";
@@ -108,9 +108,9 @@ export function minimalSetup(
 
 	const { s, setDown, setUp } = makeSetupObject(signupDomains);
 
-	beforeAllAsync(() => setUp());
+	beforeAllWithTimeoutLog(() => setUp());
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		if (s.isUp) {
 			await callWithTimeout(
 				setDown, 5000, () => `Timeout when calling teardown of test setup`
@@ -229,7 +229,7 @@ export function setupWithUsers(
 		other: []
 	});
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		await setUp(users);
 		if (setupTestAppCaps) {
 			for (const runner of s.runners.values()) {
@@ -238,7 +238,7 @@ export function setupWithUsers(
 		}
 	}, users.length*7000);
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		if (s.isUp) {
 			await callWithTimeout(
 				setDown, 5000, () => `Timeout when calling teardown of test setup`

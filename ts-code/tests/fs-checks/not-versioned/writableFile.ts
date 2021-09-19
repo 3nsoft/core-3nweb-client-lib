@@ -66,16 +66,16 @@ it.func = async function(s) {
 	
 	let file = await testFS.writableFile(fName);
 	expect(typeof file).toBe('object');
-	expect(file.name).toBe(fName, 'file object should have file name');
-	expect(file.isNew).toBe(true, 'readonly file must exist');
+	expect(file.name).withContext('file object should have file name').toBe(fName);
+	expect(file.isNew).withContext('readonly file must exist').toBe(true);
 	expect(file.writable).toBe(true);
 	expect(!!file.v).toBe(!!testFS.v);
 	
-	expect(await testFS.checkFilePresence(fName)).toBe(false, 'File does not exist, while nothing has been written to it.');
+	expect(await testFS.checkFilePresence(fName)).withContext('File does not exist, while nothing has been written to it.').toBe(false);
 
 	let txt = 'some text';
 	await file.writeTxt(txt);
-	expect(await testFS.checkFilePresence(fName)).toBe(true, 'File is created on the first write.');
+	expect(await testFS.checkFilePresence(fName)).withContext('File is created on the first write.').toBe(true);
 	expect(await file.readTxt()).toBe(txt);
 };
 specs.its.push(it);

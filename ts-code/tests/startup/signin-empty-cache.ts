@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-jasmine';
+import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { User, testApp } from '../libs-for-tests/core-runner';
@@ -30,7 +30,7 @@ describe('signIn process (empty cache)', () => {
 	let coreInit: Promise<string>;
 	let closeIPC: () => void;
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		user = s.users[0];
 		const runner = s.runners.get(user.userId)!;
@@ -38,17 +38,17 @@ describe('signIn process (empty cache)', () => {
 		({ closeIPC, coreInit, w3n } = runner.startCore());
 	}, 30000);
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		closeIPC();
 	});
 
-	itAsync('has no users on disk', async () => {
+	itCond('has no users on disk', async () => {
 		const users = await w3n.signIn.getUsersOnDisk();
 		expect(Array.isArray(users)).toBe(true);
 		expect(users.length).toBe(0);
 	});
 
-	itAsync(`won't startup with a wrong pass`, async () => {
+	itCond(`won't startup with a wrong pass`, async () => {
 
 		// start MailerId provisioning
 		const userExists = await w3n.signIn.startLoginToRemoteStorage(
@@ -60,11 +60,11 @@ describe('signIn process (empty cache)', () => {
 		const notifier = (p: number) => { notifications.push(p); }
 		const ok = await w3n.signIn.completeLoginAndLocalSetup(
 			'wrong password', notifier);
-		expect(ok).toBe(false, 'false should be returned for wrong pass');
+		expect(ok).withContext('false should be returned for wrong pass').toBe(false);
 		checkKeyDerivNotifications(notifications);
 	}, 60000);
 
-	itAsync('starts with correct pass', async () => {
+	itCond('starts with correct pass', async () => {
 		const core = s.runners.get(user.userId)!.core;
 		try {
 			core.makeCAPsForApp(testApp.appDomain, testApp);
@@ -81,7 +81,7 @@ describe('signIn process (empty cache)', () => {
 		const notifier = (p: number) => { notifications.push(p); }
 		const ok = await w3n.signIn.completeLoginAndLocalSetup(
 			user.pass, notifier);
-		expect(ok).toBe(true, 'indicates completion of login and storage setup');
+		expect(ok).withContext('indicates completion of login and storage setup').toBe(true);
 		checkKeyDerivNotifications(notifications);
 
 		const initAs = await coreInit;

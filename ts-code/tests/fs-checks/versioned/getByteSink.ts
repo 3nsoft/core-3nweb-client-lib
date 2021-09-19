@@ -98,8 +98,8 @@ it.func = async function(s) {
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 
 	const { sink, version } = await testFS.v!.getByteSink(path, {truncate:false});
-	expect(version).toBeGreaterThan(v, 'it should be next file version');
-	expect(await sink.getSize()).toBe(originalSize, 'Existing file should be opened as is');
+	expect(version).withContext('it should be next file version').toBeGreaterThan(v);
+	expect(await sink.getSize()).withContext('Existing file should be opened as is').toBe(originalSize);
 	const continousSink = makeContinuousSink(sink, originalSize);
 	await continousSink(bytes);
 	expect(await sink.getSize()).toBe(originalSize + bytes.length);

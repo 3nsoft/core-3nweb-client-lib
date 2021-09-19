@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,13 +12,13 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
-
-// NOTE: due to bad definition file, typescript below is not 100% type-strict.
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { stringifyErr } from '../lib-common/exceptions/error';
+import jasmine = require('jasmine');
 
-const jas = new (require('jasmine'))();
+const jas = new jasmine({});
 
 const specsFromCLI: string[] = [];
 for (let i=2; i<process.argv.length; i+=1) {
@@ -35,7 +35,8 @@ const ALL_SPECS = [
 
 jas.loadConfig({
 	spec_dir: 'build/tests',
-	spec_files: ((specsFromCLI.length > 0) ? specsFromCLI : ALL_SPECS)
+	spec_files: ((specsFromCLI.length > 0) ? specsFromCLI : ALL_SPECS),
+	random: false
 });
 
 jas.configureDefaultReporter({

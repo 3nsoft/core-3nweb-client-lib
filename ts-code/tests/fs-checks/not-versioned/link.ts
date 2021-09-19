@@ -42,7 +42,7 @@ it.func = async function(s) {
 	expect(link.readonly).toBe(true, 'target extractable via this link should be readonly');
 
 	file = (await link.target()) as web3n.files.File;
-	expect(!!file).toBe(true, 'target should be instantiated');
+	expect(!!file).withContext('target should be instantiated').toBe(true);
 	expect(file.writable).toBe(false);
 	expect(await file.readTxt()).toBe(original);
 };
@@ -63,11 +63,11 @@ it.func = async function(s) {
 	await testFS.link(linkPath, file);
 
 	const link = await testFS.readLink(linkPath);
-	expect(link.isFile).toBe(true, 'this link should be for a file');
-	expect(link.readonly).toBe(false, 'this link should be writable');
+	expect(link.isFile).withContext('this link should be for a file').toBe(true);
+	expect(link.readonly).withContext('this link should be writable').toBe(false);
 
 	file = (await link.target()) as web3n.files.WritableFile;
-	expect(!!file).toBe(true, 'target should be instantiated');
+	expect(!!file).withContext('target should be instantiated').toBe(true);
 	expect(file.writable).toBe(true);
 	expect(await file.readTxt()).toBe(original);
 	const newTxt = 'I better work. A-a-a!!!';
@@ -92,11 +92,11 @@ it.func = async function(s) {
 	await testFS.link(linkPath, folder);
 
 	const link = await testFS.readLink(linkPath);
-	expect(link.isFolder).toBe(true, 'this link should be for a folder');
-	expect(link.readonly).toBe(false, 'this link should be writable');
+	expect(link.isFolder).withContext('this link should be for a folder').toBe(true);
+	expect(link.readonly).withContext('this link should be writable').toBe(false);
 
 	folder = (await link.target()) as web3n.files.WritableFS;
-	expect(!!folder).toBe(true, 'target should be instantiated');
+	expect(!!folder).withContext('target should be instantiated').toBe(true);
 	expect(folder.writable).toBe(true);
 	expect(await folder.readTxtFile(fName)).toBe(original);
 	const newTxt = 'I better work. A-a-a!!!';
@@ -125,10 +125,10 @@ it.func = async function(s) {
 	expect(await testFS.checkFolderPresence(linkFolder)).toBe(true);
 	
 	const link = await testFS.readLink(linkPath);
-	expect(link.isFile).toBe(true, 'this link should be for a file');
+	expect(link.isFile).withContext('this link should be for a file').toBe(true);
 
 	file = (await link.target()) as web3n.files.File;
-	expect(!!file).toBe(true, 'target should be instantiated');
+	expect(!!file).withContext('target should be instantiated').toBe(true);
 	expect(await file.readTxt()).toBe(original);
 };
 specs.its.push(it);

@@ -38,9 +38,9 @@ it.func = async function(s) {
 	): void {
 		const section = l.sections[sectionInd];
 		if (section) {
-			expect(section.src).toBe(src, `wrong source in section ${sectionInd}`);
-			expect(section.ofs).toBe(ofs, `wrong offset in section ${sectionInd}`);
-			expect(section.len).toBe(len, `wrong length in section ${sectionInd}`);
+			expect(section.src).withContext(`source in section ${sectionInd}`).toBe(src);
+			expect(section.ofs).withContext(`offset in section ${sectionInd}`).toBe(ofs);
+			expect(section.len).withContext(`length in section ${sectionInd}`).toBe(len);
 		} else {
 			fail(`section index ${sectionInd} is not in layout with ${l.sections.length} sections`);
 		}
@@ -106,8 +106,8 @@ it.func = async function(s) {
 		file: string, expectedSize: number, expectedVersion: number
 	) {
 		const { size, version } = await testFS.stat(file);
-		expect(size).toBe(expectedSize, `file size of "${file}"`);
-		expect(version).toBe(expectedVersion, `file version`);
+		expect(size).withContext(`file size of "${file}"`).toBe(expectedSize);
+		expect(version).withContext(`file version`).toBe(expectedVersion);
 	}
 	const file = 'file to truncate';
 
@@ -138,7 +138,7 @@ it.func = async function(s) {
 
 	async function checkSizeOf(file: string, expectedSize: number) {
 		const { size, version } = await testFS.stat(file);
-		expect(size).toBe(expectedSize, `file size of "${file}"`);
+		expect(size).withContext(`file size of "${file}"`).toBe(expectedSize);
 	}
 	const file = 'file to truncate';
 

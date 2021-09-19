@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync } from './libs-for-tests/async-jasmine';
+import { itCond } from './libs-for-tests/jasmine-utils';
 import { setupWithUsers } from './libs-for-tests/setups';
 import { loadSpecs } from './libs-for-tests/spec-module';
 import { resolve } from 'path';
@@ -32,7 +32,7 @@ describe('ASMail', () => {
 		assert(s.users.length >= 2, `at least two users should be set up`);
 	});
 
-	itAsync('mail is present in common CAPs', async () => {
+	itCond('mail is present in common CAPs', async () => {
 		assert(s.users.length > 0);
 		for (const u of s.users) {
 			const w3n = s.testAppCapsByUser(u);
@@ -43,7 +43,7 @@ describe('ASMail', () => {
 		}
 	}, undefined, s);
 
-	itAsync('gets current user id', async () => {
+	itCond('gets current user id', async () => {
 		assert(s.users.length > 0);
 		for (const u of s.users) {
 			const w3n = s.testAppCapsByUser(u);
@@ -52,7 +52,7 @@ describe('ASMail', () => {
 		}
 	}, undefined, s);
 
-	itAsync('lists incoming messages (no messages)', async () => {
+	itCond('lists incoming messages (no messages)', async () => {
 		assert(s.users.length > 0);
 		for (const u of s.users) {
 			const w3n = s.testAppCapsByUser(u);

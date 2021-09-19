@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync, beforeAllAsync, afterAllAsync } from '../libs-for-tests/async-jasmine';
+import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
 import { minimalSetup } from '../libs-for-tests/setups';
 
 describe('signUp process with token for single user', () => {
@@ -32,17 +32,17 @@ describe('signUp process with token for single user', () => {
 	const pass = 'some long passphrase';
 	let token: string;
 
-	beforeAllAsync(async () => {
+	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		({ closeIPC, coreInit, w3n } = s.runner.startCore());
 		token = await s.server.createSingleUserSignupCtx(userId);
 	});
 
-	afterAllAsync(async () => {
+	afterAllCond(async () => {
 		closeIPC();
 	});
 
-	itAsync('creates user account, allowing caps for apps', async () => {
+	itCond('creates user account, allowing caps for apps', async () => {
 
 		await w3n.signUp.createUserParams(pass, () => {});
 

@@ -51,22 +51,22 @@ it.func = async function(s) {
 	let stat = await testFS.stat(fName);
 	expect(typeof stat).toBe('object');
 	expect(stat).not.toBeNull();		
-	expect(stat.isFile).toBe(true, 'flag indicating that path points to file');
-	expect(stat.size).toBe(originalFileSize, 'file size');
+	expect(stat.isFile).withContext('flag indicating that path points to file').toBe(true);
+	expect(stat.size).withContext('file size').toBe(originalFileSize);
 	expect(stat.writable).toBe(true);
 	
 	let sndTxt = 'I better work!';
 	let sndVersionFileSize = sndTxt.length;
 	await testFS.writeTxtFile(fName, sndTxt);
 	stat = await testFS.stat(fName);
-	expect(stat.isFile).toBe(true, 'flag indicating that path points to file');
-	expect(stat.size).toBe(sndVersionFileSize, 'file size');
+	expect(stat.isFile).withContext('flag indicating that path points to file').toBe(true);
+	expect(stat.size).withContext('file size').toBe(sndVersionFileSize);
 	expect(stat.writable).toBe(true);
 
 	const roFS = await testFS.readonlySubRoot('');
 	stat = await roFS.stat(fName);
-	expect(stat.isFile).toBe(true, 'flag indicating that path points to file');
-	expect(stat.size).toBe(sndVersionFileSize, 'file size');
+	expect(stat.isFile).withContext('flag indicating that path points to file').toBe(true);
+	expect(stat.size).withContext('file size').toBe(sndVersionFileSize);
 	expect(stat.writable).toBe(false);
 
 };
@@ -80,12 +80,12 @@ it.func = async function(s) {
 	let stat = await testFS.stat(fName);
 	expect(typeof stat).toBe('object');
 	expect(stat).not.toBeNull();
-	expect(stat.isFolder).toBe(true, 'flag indicating that path points to folder');
+	expect(stat.isFolder).withContext('flag indicating that path points to folder').toBe(true);
 	expect(stat.writable).toBe(true);
 
 	const roFS = await testFS.readonlySubRoot('');
 	stat = await roFS.stat(fName);
-	expect(stat.isFolder).toBe(true, 'flag indicating that path points to folder');
+	expect(stat.isFolder).withContext('flag indicating that path points to folder').toBe(true);
 	expect(stat.writable).toBe(false);
 
 };

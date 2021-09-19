@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itAsync } from './libs-for-tests/async-jasmine';
+import { itCond } from './libs-for-tests/jasmine-utils';
 import { setupWithUsers, serviceWithMailerIdLogin } from './libs-for-tests/setups';
 import { assert } from '../lib-common/assert';
 import { User } from './libs-for-tests/core-runner';
@@ -36,12 +36,12 @@ describe('MailerId', () => {
 		w3n = s.testAppCapsByUser(user);
 	});
 
-	itAsync('gets current user id', async () => {
+	itCond('gets current user id', async () => {
 		const userId = await w3n.mailerid!.getUserId();
 		expect(userId).toBe(user.userId);
 	}, undefined, s);
 
-	itAsync('performs MailerId login', async () => {
+	itCond('performs MailerId login', async () => {
 		const sessionId = await w3n.mailerid!.login(srv.serviceUrl);
 		expect(await srv.isSessionValid(sessionId)).toBe(true);
 	}, undefined, s);
