@@ -23,10 +23,10 @@ import { platform } from 'os';
 import { reverseDomain } from '../core/storage';
 import { testApp } from './libs-for-tests/core-runner';
 import { clearFS, SetupWithTestFS, SetupWithTwoFSs } from './fs-checks/test-utils';
-import { StorageException } from '../core/storage';
 
 type AppFSSetting = web3n.caps.common.AppFSSetting;
 type commonW3N = web3n.caps.common.W3N;
+type StorageException = web3n.storage.StorageException;
 
 const allowedAppFS = (testApp.capsRequested.storage!.appFS as AppFSSetting[])
 .map(s => reverseDomain(s.domain));

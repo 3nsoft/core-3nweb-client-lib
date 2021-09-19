@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2021 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,7 +19,7 @@
  * This is a namespace for things used by storage and any file functionality.
  */
 declare namespace web3n.storage {
-	
+
 	interface Service {
 
 		/**
@@ -56,5 +56,14 @@ declare namespace web3n.storage {
 
 	type StorageType = 'device'|'synced'|'local';
 	type StorageUse = 'user'|'system'|'app';
+
+	interface StorageException extends web3n.RuntimeException {
+		type: 'storage';
+		appName?: string;
+		badAppName?: boolean;
+		notAllowedToOpenFS?: boolean;
+		storageType?: StorageType;
+		storageSegment: StorageUse;
+	}
 
 }

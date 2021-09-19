@@ -17,20 +17,16 @@
 
 import { GetSigner } from '../id-manager';
 import { GenerateKey } from '../sign-in';
-import { SyncedStorage, Storage, StorageGetter }
-	from '../../lib-client/3nstorage/xsp-fs/common';
+import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
 import { XspFS as xspFS } from '../../lib-client/3nstorage/xsp-fs/fs';
-import { StorageException as BaseExc }
-	from '../../lib-client/3nstorage/exceptions';
+import { StorageException as BaseStorageExc } from '../../lib-client/3nstorage/exceptions';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
 import { ServiceLocator } from '../../lib-client/service-locator';
 import { ScryptGenParams } from '../../lib-client/key-derivation';
-import { FileException, makeFileException, Code as excCode }
-	from '../../lib-common/exceptions/file';
+import { FileException, makeFileException, Code as excCode } from '../../lib-common/exceptions/file';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { makeFSCollection, readonlyWrapFSCollection }
-	from '../../lib-client/fs-collection';
+import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-collection';
 import { asyncFind } from '../../lib-common/async-iter';
 import { DeviceFS } from '../../lib-client/local-files/device-fs';
 import { join } from 'path';
@@ -47,14 +43,7 @@ type FSType = web3n.files.FSType;
 type StorageType = web3n.storage.StorageType;
 type FSCollection = web3n.files.FSCollection;
 type FSItem = web3n.files.FSItem;
-
-export interface StorageException extends BaseExc {
-	appName?: string;
-	badAppName?: boolean;
-	notAllowedToOpenFS?: boolean;
-	storageType?: StorageType;
-	storageSegment: 'app'|'system'|'user';
-}
+type StorageException = web3n.storage.StorageException;
 
 function makeBadAppNameExc(appName: string): StorageException {
 	return {
@@ -76,8 +65,9 @@ function makeNotAllowedToOpenAppFSExc(appName: string): StorageException {
 	};
 }
 
-function makeNotAllowedToOpenUserFSExc(storageType: StorageType):
-		StorageException {
+function makeNotAllowedToOpenUserFSExc(
+	storageType: StorageType
+): StorageException {
 	return {
 		runtimeException: true,
 		type: 'storage',
@@ -87,8 +77,9 @@ function makeNotAllowedToOpenUserFSExc(storageType: StorageType):
 	};
 }
 
-function makeNotAllowedToOpenSysFSExc(storageType: StorageType):
-		StorageException {
+function makeNotAllowedToOpenSysFSExc(
+	storageType: StorageType
+): StorageException {
 	return {
 		runtimeException: true,
 		type: 'storage',
@@ -197,7 +188,7 @@ class StorageAndFS<T extends Storage> {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
 			return s;
 		} catch (err) {
-			if ((err as StorageException).objNotFound) {
+			if ((err as BaseStorageExc).objNotFound) {
 				s.rootFS = await xspFS.makeNewRoot(s.storage, key);
 				await initSysFolders(s.rootFS);
 				return s;
