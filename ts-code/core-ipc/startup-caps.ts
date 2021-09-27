@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,6 +16,7 @@
 */
 
 import { ExposedObj, W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
+import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../ipc-via-protobuf/startup-cap";
 
 type W3N = web3n.startup.W3N;
@@ -25,15 +26,23 @@ export function exposeStartupW3N(coreSide: ExposedServices, w3n: W3N): void {
 		signIn: wrapSignInCAP(w3n.signIn),
 		signUp: wrapSignUpCAP(w3n.signUp)
 	};
+	if (w3n.log) {
+		expW3N.log = exposeLogger(w3n.log);
+	}
 	coreSide.exposeW3NService(expW3N);
 }
 
 export function makeStartupW3Nclient(clientSide: Caller): W3N {
 	const objPath = [ W3N_NAME ];
-	return {
+	const lstOfCAPs = clientSide.listObj(objPath) as (keyof W3N)[];
+	const w3n: W3N = {
 		signIn: makeSignInCaller(clientSide, objPath.concat('signIn')),
 		signUp: makeSignUpCaller(clientSide, objPath.concat('signUp'))
 	};
+	if (lstOfCAPs.includes('log')) {
+		w3n.log = makeLogCaller(clientSide, objPath.concat('log'));
+	}
+	return w3n;
 }
 
 

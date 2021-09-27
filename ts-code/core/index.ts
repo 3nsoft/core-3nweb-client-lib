@@ -32,6 +32,7 @@ import { ServiceLocatorMaker } from '../lib-client/service-locator';
 
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
+const STARTUP_APP_DOMAIN = 'startup.3nweb.computer';
 
 type AppManifest = web3n.caps.common.AppManifest;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
@@ -82,7 +83,9 @@ export class Core {
 		return core;
 	}
 
-	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
+	start(
+		logCAP = false
+	): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
 		const signUp = new SignUp(
 			this.signUpUrl, this.cryptor.cryptor, this.makeNet,
 			this.appDirs.getUsersOnDisk, this.logger.logError);
@@ -96,6 +99,10 @@ export class Core {
 			signUp: signUp.exposedService(),
 			signIn: signIn.exposedService()
 		};
+		if (logCAP) {
+			capsForStartup.log = (type, msg, e) => this.logger.appLog(
+				type, STARTUP_APP_DOMAIN, msg, e);
+		}
 		Object.freeze(capsForStartup);
 
 		const initFromSignUp$ = signUp.newUser$
