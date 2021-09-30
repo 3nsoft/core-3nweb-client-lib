@@ -113,7 +113,7 @@ export class ServerEvents {
 	}
 
 	private restartObservation<T>(event: string): Observable<T> {
-		return from(sleep(this.restartWaitSecs))
+		return from(sleep(this.restartWaitSecs * 1000))
 		.pipe(
 			mergeMap(() => this.observe<T>(event))
 		);
