@@ -68,6 +68,7 @@ it.func = async function(s) {
 	await u1_w3n.mail!.delivery.rmMsg(idForSending);
 	expect(await u1_w3n.mail!.delivery.currentState(idForSending)).toBeFalsy();
 	const recInfo = lastInfo!.recipients[recipient];
+	expect(typeof recInfo.bytesSent).toBe('number');
 	expect(typeof recInfo.idOnDelivery).toBe('string');
 	const msgId = recInfo.idOnDelivery!;
 

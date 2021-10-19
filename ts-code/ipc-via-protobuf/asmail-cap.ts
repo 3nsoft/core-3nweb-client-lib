@@ -588,7 +588,7 @@ function unpackDeliveryProgress(m: DeliveryProgressMsg): DeliveryProgress {
 		p.recipients[address] = {
 			done: info.done,
 			idOnDelivery: valOfOpt(info.idOnDelivery),
-			bytesSent: info.bytesSent,
+			bytesSent: fixInt(info.bytesSent),
 			err: (info.err ? errFromMsg(info.err) : undefined)
 		};
 	}
