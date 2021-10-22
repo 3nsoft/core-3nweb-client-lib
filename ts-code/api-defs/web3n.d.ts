@@ -19,7 +19,6 @@
 /// <reference path="common-caps.d.ts" />
 /// <reference path="files.d.ts" />
 /// <reference path="mailerid.d.ts" />
-/// <reference path="rpc.d.ts" />
 /// <reference path="startup.d.ts" />
 /// <reference path="storage.d.ts" />
 
