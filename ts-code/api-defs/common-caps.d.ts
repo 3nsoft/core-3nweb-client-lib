@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2020 - 2021 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -35,6 +35,7 @@ declare namespace web3n.caps.common {
 			mail?: MailCAPSetting;
 			storage?: StorageCAPSetting;
 			mailerid?: true;
+			log?: LogCAPSetting;
 		};
 	}
 
@@ -68,6 +69,8 @@ declare namespace web3n.caps.common {
 		receivingFrom?: 'all' | { whitelist: string[]; };
 	}
 
+	type LogCAPSetting = 'all';
+
 	interface W3N {
 		mail?: asmail.Service;
 		storage?: storage.Service;
@@ -75,7 +78,8 @@ declare namespace web3n.caps.common {
 		mailerid?: mailerid.Service;
 	}
 
-	type Logger = (type: 'error'|'info'|'warning', msg: string, err?: any
+	type Logger = (
+		type: 'error'|'info'|'warning', msg: string, err?: any
 	) => Promise<void>;
 
 }

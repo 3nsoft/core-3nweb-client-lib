@@ -254,8 +254,12 @@ export class Core {
 	}
 
 	private makeLogCAP(m: AppManifest): W3N['log'] {
-		return (type, msg, e) => this.logger.appLog(
-			type, m.appDomain, msg, e);
+		if (m.capsRequested.log === 'all') {
+			return (type, msg, e) => this.logger.appLog(
+				type, m.appDomain, msg, e);
+		} else {
+			return undefined;
+		}
 	}
 
 	private makeMailerIdCAP(m: AppManifest): W3N['mailerid'] {

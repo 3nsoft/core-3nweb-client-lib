@@ -51,7 +51,8 @@ export const testApp: web3n.caps.common.AppManifest = {
 			userFS: 'all',
 			sysFS: 'all'
 		},
-		mailerid: true
+		mailerid: true,
+		log: 'all'
 	}
 };
 
