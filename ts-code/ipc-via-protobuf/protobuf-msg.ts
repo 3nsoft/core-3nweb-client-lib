@@ -136,7 +136,7 @@ export function fixInt(uint64: number): number {
 					message: 'Integer is greater than 2^53-1'
 				});
 		}
-		const fixedInt = (high * 0xffffffff + low);
+		const fixedInt = 0x100000000*high + ((low < 0) ? 0x100000000+low : low);
 		if (isNaN(fixedInt)) {
 				throw new TypeError(`Can't construct integer from a given object`);
 		} else {
