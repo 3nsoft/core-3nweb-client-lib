@@ -29,9 +29,10 @@ export class ProtoType<T extends object> {
 	}
 
 	static makeFrom<T extends object>(
-		searchDir: string, protoFile: string, typeName: string
+		searchDir: string, protoFile: string, typeName: string,
+		fallbackMod?: { protos: object; }
 	): ProtoType<T> {
-		const root = loadRoot(searchDir, protoFile);
+		const root = loadRoot(searchDir, protoFile, fallbackMod);
 		const type = root.lookupType(typeName);
 		return new ProtoType<T>(type);
 	}
@@ -68,7 +69,10 @@ Object.freeze(ProtoType);
 
 const roots = new Map<string, protobuf.Root>();
 
-function loadRoot(searchDir: string, fileName: string): protobuf.Root {
+function loadRoot(
+	searchDir: string, fileName: string,
+	fallbackMod: { protos: object; }|undefined
+): protobuf.Root {
 	const filePath = resolve(searchDir, 'protos', fileName);
 	let root = roots.get(filePath);
 	if (!root) {
@@ -76,9 +80,8 @@ function loadRoot(searchDir: string, fileName: string): protobuf.Root {
 		try {
 			root = protobuf.loadSync(filePath);
 		} catch (err) {
-			// make sure to generate proto-defs with compile step (use npm script)
-			const fallbackMod = join(relative(__dirname, searchDir), 'proto-defs');
-			const protos = require(fallbackMod).protos;
+			if (!fallbackMod) { throw err; }
+			const protos = fallbackMod.protos;
 			if (!protos || (typeof protos !== 'object')) { throw new Error(
 				`proto-defs doesn't have expected object`); }
 			const initFunc = fs.readFileSync;

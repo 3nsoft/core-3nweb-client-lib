@@ -31,8 +31,8 @@ export function makeProtobufTypeFrom<T extends object>(
 	} catch (err) {
 		// we won't get here if referenced  module exists, but metro packager
 		// in LiqudCore needs static path require
-		require('./proto-defs');
-		return ProtoType.makeFrom(__dirname, protoFile, typeName);
+		const fallback = require('./proto-defs');
+		return ProtoType.makeFrom(__dirname, protoFile, typeName, fallback);
 	}
 }
 
