@@ -16,12 +16,13 @@
 */
 
 import { ExposedFn, Caller } from "../ipc-via-protobuf/connector";
-import { ProtoType, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
+import { ProtoType } from "../lib-client/protobuf-loader";
+import { makeProtobufTypeFrom, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
 
 type Logger = web3n.caps.common.Logger;
 
 function loggerType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('logger.proto', `logger.${type}`);
+	return makeProtobufTypeFrom('logger.proto', `logger.${type}`);
 }
 
 interface LogRequest {

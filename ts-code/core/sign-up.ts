@@ -25,7 +25,7 @@ import * as keyDeriv from '../lib-client/key-derivation';
 import { GetUsersOnDisk } from './app-files';
 import * as random from '../lib-common/random-node';
 import { Cryptor } from '../lib-client/cryptor/cryptor';
-import { secret_box as sbox, box, arrays } from 'ecma-nacl';
+import { box } from 'ecma-nacl';
 import { makeKeyGenProgressCB } from './sign-in';
 import { Subject } from 'rxjs';
 import { LogError } from '../lib-client/logging/log-to-file';
@@ -52,21 +52,22 @@ Object.freeze(defaultDerivParams);
 const SALT_LEN = 32;
 const KEY_ID_LEN = 10;
 
-function makeLabeledMidLoginKey(): { skey: JsonKey; pkey: JsonKey } {
-	const sk = random.bytesSync(sbox.KEY_LENGTH);
+async function makeLabeledMidLoginKey(
+	cryptor: Cryptor
+): Promise<{ skey: JsonKey; pkey: JsonKey }> {
+	const sk = await random.bytes(box.KEY_LENGTH);
 	const skey = keyToJson({
 		k: sk,
 		alg: box.JWK_ALG_NAME,
 		use: keyUse.MID_PKLOGIN,
-		kid: random.stringOfB64CharsSync(KEY_ID_LEN)
+		kid: await random.stringOfB64Chars(KEY_ID_LEN)
 	});
 	const pkey = keyToJson({
-		k: box.generate_pubkey(sk),
+		k: await cryptor.box.generate_pubkey(sk),
 		alg: skey.alg,
 		use: skey.use,
 		kid: skey.kid
 	});
-	arrays.wipe(sk);
 	return { skey, pkey };
 }
 
@@ -139,9 +140,10 @@ export class SignUp {
 		await this.genStorageParams(pass, 51, 100, progressCB);
 	};
 
-	private async genStorageParams(pass: string,
-			progressStart: number, progressEnd: number,
-			originalProgressCB: (progress: number) => void): Promise<void> {
+	private async genStorageParams(
+		pass: string, progressStart: number, progressEnd: number,
+		originalProgressCB: (progress: number) => void
+	): Promise<void> {
 		const derivParams: keyDeriv.ScryptGenParams = {
 			logN: defaultDerivParams.logN,
 			r: defaultDerivParams.r,
@@ -160,9 +162,10 @@ export class SignUp {
 		};
 	}
 
-	private async genMidParams(pass: string,
-			progressStart: number, progressEnd: number,
-			originalProgressCB: (progress: number) => void): Promise<void> {
+	private async genMidParams(
+		pass: string, progressStart: number, progressEnd: number,
+		originalProgressCB: (progress: number) => void
+	): Promise<void> {
 		const derivParams: keyDeriv.ScryptGenParams = {
 			logN: defaultDerivParams.logN,
 			r: defaultDerivParams.r,
@@ -173,7 +176,7 @@ export class SignUp {
 			progressStart, progressEnd, originalProgressCB);
 		const defaultPair = await keyDeriv.deriveMidKeyPair(this.cryptor,
 			pass, derivParams, progressCB, keyUse.MID_PKLOGIN, '_');
-		const labeledKey = makeLabeledMidLoginKey();
+		const labeledKey = await makeLabeledMidLoginKey(this.cryptor);
 		this.mid = {
 			defaultSKey: defaultPair.skey,
 			labeledSKey: labeledKey.skey,

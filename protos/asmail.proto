@@ -77,7 +77,7 @@ message AddMsgRequestBody {
 	repeated string recipients = 1;
 	OutgoingMessageMsg msg = 2;
 	string id = 3;
-	common.BooleanValue send_immeditely = 4;
+	common.BooleanValue send_immediately = 4;
 	common.AnyValue local_meta = 5;
 }
 

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, ProtoType, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, makeProtobufTypeFrom, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
 import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
 import { packStats, unpackStats, packXAttrValue, unpackXAttrValue, exposeFileService, FileMsg, makeFileCaller, packJSON, unpackJSON, fileMsgType, unpackFileEvent, packFileEvent } from "./file";
 import * as file from "./file";
@@ -24,6 +24,7 @@ import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } fr
 import { Subject } from "rxjs";
 import { defer, Deferred } from "../lib-common/processes";
 import { map } from "rxjs/operators";
+import { ProtoType } from "../lib-client/protobuf-loader";
 
 type ReadonlyFS = web3n.files.ReadonlyFS;
 type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
@@ -219,7 +220,7 @@ export interface FSMsg {
 }
 
 function makeFSType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('fs.proto', `fs.${type}`);
+	return makeProtobufTypeFrom('fs.proto', `fs.${type}`);
 }
 
 export const fsMsgType = makeFSType<FSMsg>('FS');

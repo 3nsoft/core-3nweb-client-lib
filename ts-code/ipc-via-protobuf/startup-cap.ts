@@ -16,10 +16,11 @@
 */
 
 import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
-import { ProtoType, strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal } from "./protobuf-msg";
+import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal, makeProtobufTypeFrom } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { defer } from "../lib-common/processes";
+import { ProtoType } from "../lib-client/protobuf-loader";
 
 type SignInService = web3n.startup.SignInService;
 type SignUpService = web3n.startup.SignUpService;
@@ -71,7 +72,7 @@ export function makeSignUpCaller(
 }
 
 function startupType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('startup.proto', `startup.${type}`);
+	return makeProtobufTypeFrom<T>('startup.proto', `startup.${type}`);
 }
 
 

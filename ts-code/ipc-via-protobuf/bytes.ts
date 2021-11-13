@@ -15,8 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
+import { makeProtobufTypeFrom, ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
 import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from './connector';
+import { ProtoType } from '../lib-client/protobuf-loader';
 
 type FileByteSink = web3n.files.FileByteSink;
 type FileLayout = web3n.files.FileLayout;
@@ -82,7 +83,7 @@ export function exposeSrcService(
 }
 
 function bytesType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('bytes.proto', `bytes.${type}`);
+	return makeProtobufTypeFrom('bytes.proto', `bytes.${type}`);
 }
 
 

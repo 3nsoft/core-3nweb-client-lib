@@ -15,9 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, Value, valOfOpt, toOptVal } from './protobuf-msg';
+import { Value, valOfOpt, toOptVal, makeProtobufTypeFrom } from './protobuf-msg';
 import { ExposedObj, ExposedFn, Caller, ExposedServices } from './connector';
 import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from './fs';
+import { ProtoType } from '../lib-client/protobuf-loader';
 
 type Storage = web3n.storage.Service;
 type StorageType = web3n.storage.StorageType;
@@ -58,7 +59,7 @@ export function makeStorageCaller(caller: Caller, objPath: string[]): Storage {
 }
 
 function storageType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('storage.proto', `storage.${type}`);
+	return makeProtobufTypeFrom<T>('storage.proto', `storage.${type}`);
 }
 
 

@@ -153,13 +153,17 @@ function makeMultiUserSetupObject(
 	function testAppCapsByUser(u: User, viaIPC = true): CommonW3N {
 		const r = runners.get(u.userId)!;
 		assert(!!r, `Core runner is missing for user ${u.userId}`);
-		return r.appCapsViaIPC;
+		if (viaIPC) {
+			return r.appCapsViaIPC;
+		} else {
+			return r.rawAppCaps;
+		}
 	}
 
 	function testAppCapsByUserIndex(i: number, viaIPC = true): CommonW3N {
 		const u = users[i];
 		assert(!!u, `Given index ${i} is not pointing to existing user`);
-		return testAppCapsByUser(u);
+		return testAppCapsByUser(u, viaIPC);
 	}
 
 	const s: MultiUserSetup = {

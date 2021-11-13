@@ -16,7 +16,7 @@
 */
 
 import { Observable, Observer, Subscription, Subject } from "rxjs";
-import { ProtoType, ObjectReference, ExposedObjType, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
+import { makeProtobufTypeFrom, ObjectReference, ExposedObjType, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
 
 
 export interface ExposedServices {
@@ -56,6 +56,10 @@ export interface ClientsSide {
 	processCallError(fnCallNum: number, body: EnvelopeBody): void;
 	stop(exc: IPCException): void;
 }
+
+// Note that make_?_Side functions could've been imported normally, but client
+// side uses weakrefs, while services side doesn't, and services side is used
+// in embedding without weakrefs, needing to hide require points.
 
 function makeServicesSide(sendMsg: (msg: Envelope) => void): ServicesSide {
 	const srvClassFn = require('./connector-services-side').ServicesSideImpl;
@@ -228,7 +232,7 @@ export type MsgType = ClientToService | ServiceToClient;
 export type ClientToService = 'start' | 'cancel' | 'drop' | 'list-obj';
 export type ServiceToClient = 'interim' | 'end' | 'error';
 
-export const msgProtoType = ProtoType.makeFrom<Envelope>(
+export const msgProtoType = makeProtobufTypeFrom<Envelope>(
 	'ipc.proto', 'ipc.Envelope');
 
 export type ExposedFn = (reqBody: EnvelopeBody) => ({

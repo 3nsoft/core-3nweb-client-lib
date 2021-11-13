@@ -188,7 +188,7 @@ export class Delivery {
 			attachments, localMeta);
 		
 		// add and schedule
-		const sendImmediately = (opts ? !!opts.sendImmeditely : false);
+		const sendImmediately = (opts ? !!opts.sendImmediately : false);
 		this.addMsgAndSchedule(msg, sendImmediately);
 	}
 	

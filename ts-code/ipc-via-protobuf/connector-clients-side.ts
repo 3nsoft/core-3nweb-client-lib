@@ -46,6 +46,7 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	stop(exc: IPCException): void {
+		if (this.isStopped) { return; }
 		this.isStopped = true;
 		for (const call of this.fnCalls.values()) {
 			if (call.deferred) {

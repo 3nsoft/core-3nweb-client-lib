@@ -15,8 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { ProtoType } from "../lib-client/protobuf-loader";
 import { ExposedFn, Caller, makeIPCException, ExposedObj } from "./connector";
-import { ProtoType } from "./protobuf-msg";
+import { makeProtobufTypeFrom } from "./protobuf-msg";
 
 type MailerId = web3n.mailerid.Service;
 
@@ -38,7 +39,7 @@ export function makeMailerIdCaller(
 
 
 function maileridType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('mailerid.proto', `mailerid.${type}`);
+	return makeProtobufTypeFrom('mailerid.proto', `mailerid.${type}`);
 }
 
 

@@ -16,7 +16,7 @@
 */
 
 import { signing } from 'ecma-nacl';
-import { LogWarning } from '../logging/log-to-file';
+import { LogError, LogWarning } from '../logging/log-to-file';
 import { AsyncSBoxCryptor } from 'xsp-files';
 
 export interface Cryptor {
@@ -42,19 +42,35 @@ export interface Cryptor {
 }
 
 export type makeCryptor = (
-	logWarning: LogWarning, maxThreads?: number
+	logErr: LogError, logWarning: LogWarning, maxThreads?: number
 ) => { cryptor: Cryptor; close: () => Promise<void>; };
 
-export function makeInWorkerCryptor(
-	logWarning: LogWarning, maxThreads?: number
-): ReturnType<makeCryptor> {
-	const { makeInWorkerCryptor } = require('./cryptor-in-worker');
-	return makeInWorkerCryptor(logWarning, maxThreads);
+export const makeInWorkerCryptor: makeCryptor = (
+	logErr, logWarning, maxThreads
+) => {
+	const mod = require('./cryptor-in-worker');
+	const makeInWorkerCryptor: makeCryptor = mod.makeInWorkerCryptor;
+	return makeInWorkerCryptor(logErr, logWarning, maxThreads);
+}
+
+export const makeInWorkerWasmCryptor: makeCryptor = (
+	logErr, logWarning, maxThreads
+) => {
+	const mod = require('./cryptor-in-worker');
+	const makeInWorkerWasmCryptor: makeCryptor = mod.makeInWorkerWasmCryptor;
+	return makeInWorkerWasmCryptor(logErr, logWarning, maxThreads);
 }
 
 export function makeInProcessCryptor(): ReturnType<makeCryptor> {
-	const { makeInProcessCryptor } = require('./cryptor-in-proc');
+	const mod = require('./in-proc-js');
+	const makeInProcessCryptor: () => Cryptor = mod.makeInProcessCryptor;
 	return { cryptor: makeInProcessCryptor(), close: async () => {} }
+}
+
+export function makeInProcessWasmCryptor(): ReturnType<makeCryptor> {
+	const mod = require('./in-proc-wasm');
+	const makeInProcessWasmCryptor: () => Cryptor = mod.makeInProcessWasmCryptor;
+	return { cryptor: makeInProcessWasmCryptor(), close: async () => {} }
 }
 
 type RuntimeException = web3n.RuntimeException;

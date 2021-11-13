@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { itCond, afterEachCond, beforeAllWithTimeoutLog, afterAllCond } from './libs-for-tests/jasmine-utils';
+import { itCond, afterEachCond, beforeAllWithTimeoutLog } from './libs-for-tests/jasmine-utils';
 import { setupWithUsers } from './libs-for-tests/setups';
 import { loadSpecs } from './libs-for-tests/spec-module';
 import { resolve } from 'path';

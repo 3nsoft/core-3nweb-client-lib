@@ -51,9 +51,9 @@ declare namespace web3n.asmail {
 
 	interface DeliveryOptions {
 		/**
-		 * sendImmeditely flag forces immediate delivery with true value.
+		 * sendImmediately flag forces immediate delivery with true value.
 		 */
-		sendImmeditely?: boolean;
+		sendImmediately?: boolean;
 		/**
 		 * localMeta is an optional data field that is attached to this message's
 		 * delivery progress. This data never leaves local machine and is

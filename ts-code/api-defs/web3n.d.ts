@@ -33,7 +33,8 @@ declare namespace web3n {
 	}
 
 	interface EncryptionException {
-		failedCipherVerification: true;
+		failedCipherVerification?: true;
+		failedSignatureVerification?: true;
 	}
 
 	interface AsyncIterator<T> {

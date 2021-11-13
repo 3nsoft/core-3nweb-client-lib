@@ -15,92 +15,29 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import * as protobuf from 'protobufjs';
-import { join, resolve } from 'path';
 import { makeIPCException, EnvelopeBody } from './connector';
 import { stringifyErr } from '../lib-common/exceptions/error';
-import * as fs from 'fs';
 import { toBuffer } from '../lib-common/buffer-utils';
+import { ProtoType } from '../lib-client/protobuf-loader';
 
 type RuntimeException = web3n.RuntimeException;
 
-
-export class ProtoType<T extends object> {
-
-	private constructor(
-		private type: protobuf.Type
-	) {
-		Object.freeze(this);
+export function makeProtobufTypeFrom<T extends object>(
+	protoFile: string, typeName: string
+): ProtoType<T> {
+	try {
+		// make sure to copy protos with compile step (use npm script)
+		return ProtoType.makeFrom(__dirname, protoFile, typeName);
+	} catch (err) {
+		// we won't get here if referenced  module exists, but metro packager
+		// in LiqudCore needs static path require
+		require('./proto-defs');
+		return ProtoType.makeFrom(__dirname, protoFile, typeName);
 	}
-
-	static makeFrom<T extends object>(
-		protoFile: string, typeName: string
-	): ProtoType<T> {
-		const root = loadRoot(protoFile);
-		const type = root.lookupType(typeName);
-		return new ProtoType<T>(type);
-	}
-
-	pack(msg: T): Buffer {
-		const err = this.type.verify(msg);
-		if (err) { throw new Error(err); }
-		return this.type.encode(msg).finish() as Buffer;
-	}
-
-	unpack(bytes: Buffer|void): T {
-		if (!bytes) { throw makeIPCException({ missingBodyBytes: true }); }
-		return this.type.decode(bytes) as T;
-	}
-
-	packToBase64(msg: T): string {
-		return this.pack(msg).toString('base64');
-	}
-
-	unpackFromBase64(str: string): T {
-		return this.unpack(Buffer.from(str, 'base64'));
-	}
-
-}
-Object.freeze(ProtoType.prototype);
-Object.freeze(ProtoType);
-
-
-// make sure to copy protos with compile step (use npm script)
-const protosDir = resolve(__dirname, './protos');
-
-const roots = new Map<string, protobuf.Root>();
-
-function loadRoot(fileName: string): protobuf.Root {
-	let root = roots.get(fileName);
-	if (!root) {
-		// if proto files file, we try to get definitions from the module
-		try {
-			root = protobuf.loadSync(join(protosDir, fileName));
-		} catch (err) {
-			// make sure to generate proto-defs with compile step (use npm script)
-			const protos = require('./proto-defs').protos;
-			if (!protos || (typeof protos !== 'object')) { throw new Error(
-				`proto-defs doesn't have expected object`); }
-			const initFunc = fs.readFileSync;
-			try {
-				(fs as any).readFileSync = (fName: string): Buffer => {
-					const protoDefsStr = protos[fName];
-					if (!protoDefsStr) { throw new Error(
-						`Don't have in module proto definition for ${fName}`); }
-					return Buffer.from(protoDefsStr, 'utf8');
-				}
-				root = protobuf.loadSync(fileName);
-			} finally {
-				(fs as any).readFileSync = initFunc;
-			}
-		}
-		roots.set(fileName, root);
-	}
-	return root;
 }
 
 function commonType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('common.proto', `common.${type}`);
+	return makeProtobufTypeFrom<T>('common.proto', `common.${type}`);
 }
 
 export type ExposedObjType = 'FileByteSink' | 'FileByteSource' |

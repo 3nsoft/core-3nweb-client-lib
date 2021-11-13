@@ -105,7 +105,7 @@ export class CoreRunner {
 						else { resolve(texts as any); }
 					}))
 			}),
-			cryptors.makeInWorkerCryptor);
+			cryptors.makeInWorkerWasmCryptor);
 	}
 
 	async close(): Promise<void> {

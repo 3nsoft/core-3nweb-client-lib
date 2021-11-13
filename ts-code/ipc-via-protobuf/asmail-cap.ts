@@ -15,11 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
+import { makeProtobufTypeFrom, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from './fs';
+import { ProtoType } from '../lib-client/protobuf-loader';
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -82,7 +83,7 @@ export function makeASMailCaller(
 }
 
 function asmailType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('asmail.proto', `asmail.${type}`);
+	return makeProtobufTypeFrom('asmail.proto', `asmail.${type}`);
 }
 
 
@@ -381,7 +382,7 @@ namespace addMsg {
 		recipients: string[];
 		msg: OutgoingMessageMsg;
 		id: string;
-		sendImmeditely?: Value<boolean>;
+		sendImmediately?: Value<boolean>;
 		localMeta?: AnyValue;
 	}
 
@@ -468,13 +469,13 @@ namespace addMsg {
 	): ExposedFn {
 		return (reqBody: Buffer) => {
 			const {
-				id, recipients, msg, localMeta, sendImmeditely
+				id, recipients, msg, localMeta, sendImmediately
 			} = requestType.unpack(reqBody);
 			const promise = fn(
 				fixArray(recipients), unpackMsg(msg, expServices), id,
 				{
 					localMeta: valOfOptAny(localMeta),
-					sendImmeditely: valOfOpt(sendImmeditely)
+					sendImmediately: valOfOpt(sendImmediately)
 				});
 			return { promise };
 		};
@@ -487,7 +488,7 @@ namespace addMsg {
 		return async (recipients, msg, id, opts) => {
 			const req: Request = { id, msg: packMsg(msg, caller), recipients };
 			if (opts) {
-				req.sendImmeditely = toOptVal(opts.sendImmeditely);
+				req.sendImmediately = toOptVal(opts.sendImmediately);
 				req.localMeta = toOptAny(opts.localMeta);
 			}
 			await caller.startPromiseCall(path, requestType.pack(req));

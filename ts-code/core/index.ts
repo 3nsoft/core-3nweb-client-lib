@@ -63,7 +63,7 @@ export class Core {
 		private readonly logger: Logger,
 		private readonly signUpUrl: string
 	) {
-		this.cryptor = makeCryptor(this.logger.logWarning);
+		this.cryptor = makeCryptor(this.logger.logError, this.logger.logWarning);
 		this.storages = new Storages(
 			this.cryptor.cryptor.sbox, this.appDirs.storagePathFor);
 		this.asmail = new ASMail(

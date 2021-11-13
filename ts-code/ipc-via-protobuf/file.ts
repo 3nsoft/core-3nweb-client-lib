@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, ProtoType, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, makeProtobufTypeFrom, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
 import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
+import { ProtoType } from "../lib-client/protobuf-loader";
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
@@ -146,7 +147,7 @@ export function exposeFileService(
 }
 
 function makeFileType<T extends object>(type: string): ProtoType<T> {
-	return ProtoType.makeFrom<T>('file.proto', `file.${type}`);
+	return makeProtobufTypeFrom('file.proto', `file.${type}`);
 }
 
 export const fileMsgType = makeFileType<FileMsg>('File');
