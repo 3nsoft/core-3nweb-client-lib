@@ -48,7 +48,14 @@ function wasmBytes(): Buffer {
 			__dirname.substring(asarInd+8)}`
 	);
 	const wasmPath = join(dirWithThis, 'cryptor.wasm');
-	return readFileSync(wasmPath);
+	try {
+		return readFileSync(wasmPath);
+	} catch (err) {
+		// chances are that error is due to wasm file not being packaged, so, we
+		// look for module with base64 form in a module, that must've been packed
+		const str = require('./cryptor-wasm.js').wasm;
+		return Buffer.from(str, 'base64');
+	}
 }
 
 function makeProtobufType<T extends object>(type: string): ProtoType<T> {
