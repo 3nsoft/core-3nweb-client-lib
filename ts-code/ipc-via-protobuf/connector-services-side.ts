@@ -131,7 +131,7 @@ export class ServicesSideImpl implements ServicesSide {
 		if (Array.isArray(path) && (path.length === 1)) {
 			this.exposedObjs.drop(path[0]);
 		} else {
-			throw makeIPCException({ invalidPath: true });
+			throw makeIPCException({ invalidPath: true, path });
 		}
 	}
 

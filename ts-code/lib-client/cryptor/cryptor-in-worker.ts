@@ -54,7 +54,7 @@ const wasmWorkerFName = 'worker-wasm.js';
 
 function workerScriptFor(impl: WorkerImpl): string {
 	// There is a bug with electrons 12, 13, that doesn't let
-	// worker_thread read this file from asar pack, even though main thread
+	// worker_thread read files from asar pack, even though main thread
 	// makes call from here.
 	// Therefore, in case this runs from asar pack, we should switch to
 	// unpacked in path that is given to worker thread.

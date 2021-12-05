@@ -25,16 +25,6 @@ import { defer, Deferred } from '../../lib-common/processes';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
 
-function inNextTick<T>(f: () => T): Promise<T> {
-	return new Promise((resolve, reject) => process.nextTick(() => {
-		try {
-			resolve(f());
-		} catch (err) {
-			reject(err);
-		}
-	}));
-}
-
 function wasmBytes(): Buffer {
 	// There is a bug with electrons 12, 13, that doesn't let
 	// worker_thread read this file from asar pack, even though main thread
@@ -137,11 +127,19 @@ export function makeInProcessWasmCryptor(): Cryptor {
 	let deferred: Deferred<Uint8Array>|undefined = undefined;
 	let interimSink: ((bytes: Uint8Array) => void)|undefined = undefined;
 
-	function call(
+	async function call(
 		req: WasmRequest, interim?: (m: Uint8Array) => void
 	): Promise<Uint8Array> {
+
+		// In LiquidCore on iOS call was able to get before completion of
+		// previous call, therefore, the following await loop is needed.
+		while (!!deferred) {
+			try {
+				await deferred.promise;
+			} catch (err) {}
+		}
+		
 		deferred = defer();
-		const promise = deferred.promise;
 		if (interim) {
 			interimSink = interim;
 		}
@@ -152,7 +150,7 @@ export function makeInProcessWasmCryptor(): Cryptor {
 				deferred?.reject(err);
 			}
 		});
-		return promise;
+		return deferred.promise;
 	}
 
 	wasmInstance.setMsgListener(msg => {
