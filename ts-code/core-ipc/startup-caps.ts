@@ -23,7 +23,8 @@ import { ClientCAPsWraps, exposeCAPs, makeClientSide, CAPsExposures } from "./ge
 type W3N = web3n.startup.W3N;
 
 export function exposeStartupW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T, extraCAPs?: CAPsExposures<T>
+	coreSide: ExposedServices, w3n: T,
+	extraCAPs?: Exclude<CAPsExposures<T>, CAPsExposures<W3N>>
 ): void {
 	const startupCAPsExposures: CAPsExposures<W3N> = {
 		signIn: wrapSignInCAP,

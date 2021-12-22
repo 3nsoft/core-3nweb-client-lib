@@ -25,7 +25,8 @@ import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures } from "./ge
 type W3N = web3n.caps.common.W3N;
 
 export function exposeW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T, extraCAPs?: CAPsExposures<T>
+	coreSide: ExposedServices, w3n: T,
+	extraCAPs?: Exclude<CAPsExposures<T>, CAPsExposures<W3N>>
 ): void {
 	const commonCAPsExposures: CAPsExposures<W3N> = {
 		log: exposeLogger,
