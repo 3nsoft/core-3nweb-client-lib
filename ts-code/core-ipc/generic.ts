@@ -22,15 +22,19 @@ export type CAPsExposures<T> = { [cap in keyof Required<T>]: (
 	cap: any, coreSide: ExposedServices
 ) => ExposedObj<any>|ExposedFn; }
 
+export type TypeDifference<T extends TExc, TExc extends object> = {
+	[cap in Exclude<keyof T, keyof TExc>]: T[cap];
+};
+
 export function exposeCAPs<T extends W3N, W3N extends object>(
 	coreSide: ExposedServices, w3n: T,
 	mainCAPs: CAPsExposures<W3N>,
-	extraCAPs: CAPsExposures<T>|undefined
+	extraCAPs: CAPsExposures<TypeDifference<T, W3N>>|undefined
 ): void {
 	const expW3N = {} as ExposedObj<T>;
 	addCAPsInExposure(expW3N, coreSide, w3n as W3N, mainCAPs);
 	if (extraCAPs) {
-		addCAPsInExposure(expW3N, coreSide, w3n, extraCAPs);
+		addCAPsInExposure(expW3N, coreSide, w3n as TypeDifference<T, W3N>, extraCAPs);
 	}
 	coreSide.exposeW3NService(expW3N);
 }
@@ -59,7 +63,7 @@ export type ClientCAPsWraps<T> = { [cap in keyof Required<T>]: MakeCapClient; };
 export function makeClientSide<T extends W3N, W3N extends object>(
 	clientSide: Caller,
 	mainCAPs: ClientCAPsWraps<W3N>,
-	extraCAPs: Exclude<ClientCAPsWraps<T>, ClientCAPsWraps<W3N>>|undefined
+	extraCAPs: ClientCAPsWraps<TypeDifference<T, W3N>>|undefined
 ): T {
 	const objPath = [ W3N_NAME ];
 	const lstOfCAPs = clientSide.listObj(objPath) as (keyof T)[];
@@ -72,7 +76,7 @@ export function makeClientSide<T extends W3N, W3N extends object>(
 			w3n[cap] = makeCap(clientSide, capObjPath);
 		} else if (extraCAPs) {
 			assert(!!exposeCAPs);
-			const makeCap = extraCAPs[cap];
+			const makeCap = extraCAPs[cap as keyof TypeDifference<T, W3N>];
 			assert(typeof makeCap === 'function');
 			w3n[cap] = makeCap(clientSide, capObjPath);
 		}
