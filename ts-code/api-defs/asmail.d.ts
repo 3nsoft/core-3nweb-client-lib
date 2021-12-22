@@ -254,7 +254,7 @@ declare namespace web3n.asmail {
 	
 	interface InboxException extends RuntimeException {
 		type: "inbox";
-		msgId?: string;
+		msgId: string;
 		msgNotFound?: true;
 		objNotFound?: true;
 		objId?: string;

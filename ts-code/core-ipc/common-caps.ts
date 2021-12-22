@@ -15,75 +15,42 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedObj, W3N_NAME, Caller, ExposedServices, ExposedFn } from "../ipc-via-protobuf/connector";
+import { W3N_NAME, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
 import { exposeStorageCAP, makeStorageCaller } from "../ipc-via-protobuf/storage-cap";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
-import { assert } from "../lib-common/assert";
+import { exposeCAPs, CapExposer, MakeCapClient, makeClientSide } from "./generic";
 
 type W3N = web3n.caps.common.W3N;
-
-export type CapExposer = (
-	cap: any, coreSide: ExposedServices
-) => ExposedObj<any>|ExposedFn;
-
-export type MakeCapClient = (
-	clientSide: Caller, objPath: string[]
-) => any;
 
 export function exposeW3N<T extends W3N>(
 	coreSide: ExposedServices, w3n: T,
 	extraCAPs?: { [cap in keyof T]: CapExposer; }
 ): void {
-	const expW3N = {} as ExposedObj<T>;
-	if (w3n.log) {
-		expW3N.log = exposeLogger(w3n.log);
-	}
-	if (w3n.mailerid) {
-		expW3N.mailerid = exposeMailerIdCAP(w3n.mailerid);
-	}
-	if (w3n.mail) {
-		expW3N.mail = exposeASMailCAP(w3n.mail, coreSide);
-	}
-	if (w3n.storage) {
-		expW3N.storage = exposeStorageCAP(w3n.storage, coreSide);
-	}
-	if (extraCAPs) {
-		for (const [ capName, expose ] of Object.entries(extraCAPs)) {
-			assert(typeof expose === 'function');
-			const cap = w3n[capName];
-			if (cap) {
-				expW3N[capName] = expose!(cap, coreSide);
-			}
-		}
-	}
-	coreSide.exposeW3NService(expW3N);
+	const commonCAPsExposures: { [cap in keyof W3N]: CapExposer; } = {
+		log: exposeLogger,
+		mail: exposeASMailCAP,
+		mailerid: exposeMailerIdCAP,
+		storage: exposeStorageCAP,
+	};
+	exposeCAPs(coreSide, w3n, commonCAPsExposures, extraCAPs);
 }
+
+// This is not used, but it ensures that some require runs, providing function
+// for protobuf-something.
+const unused = W3N_NAME;
 
 export function makeW3Nclient<T extends W3N>(
 	clientSide: Caller, extraCAPs?: { [cap in keyof T]: MakeCapClient; }
 ): T {
-	const objPath = [ W3N_NAME ];
-	const lstOfCAPs = clientSide.listObj(objPath) as (keyof T)[];
-	const w3n = {} as T;
-	for (const cap of lstOfCAPs) {
-		const capObjPath = objPath.concat(cap as string);
-		if (cap === 'log') {
-			w3n.log = makeLogCaller(clientSide, capObjPath);
-		} else if (cap === 'mailerid') {
-			w3n.mailerid = makeMailerIdCaller(clientSide, capObjPath);
-		} else if (cap === 'mail') {
-			w3n.mail = makeASMailCaller(clientSide, capObjPath);
-		} else if (cap === 'storage') {
-			w3n.storage = makeStorageCaller(clientSide, capObjPath);
-		} else if (extraCAPs && extraCAPs[cap]) {
-			const makeCap = extraCAPs[cap];
-			assert(typeof makeCap === 'function');
-			w3n[cap] = makeCap(clientSide, capObjPath);
-		}
-	}
-	return w3n;
+	const mainCAPs: { [cap in keyof W3N]: MakeCapClient; } = {
+		log: makeLogCaller,
+		mail: makeASMailCaller,
+		mailerid: makeMailerIdCaller,
+		storage: makeStorageCaller,
+	};
+	return makeClientSide(clientSide, mainCAPs, extraCAPs);
 }
 
 
