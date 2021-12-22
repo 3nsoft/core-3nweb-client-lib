@@ -18,32 +18,14 @@
 import { ExposedObj, ExposedFn, W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
 import { assert } from "../lib-common/assert";
 
-export type CapExposer = (
+export type CAPsExposures<T> = { [cap in keyof Required<T>]: (
 	cap: any, coreSide: ExposedServices
-) => ExposedObj<any>|ExposedFn;
-
-export type MakeCapClient = (
-	clientSide: Caller, objPath: string[]
-) => any;
-
-export function addCAPsInExposure<T extends object>(
-	expW3N: ExposedObj<T>, coreSide: ExposedServices, w3n: T,
-	capExposures: { [cap in keyof T]: CapExposer; }
-): void {
-	for (const [ capName, expose ] of Object.entries(capExposures)) {
-		assert(typeof expose === 'function');
-		assert(!expW3N[capName], `Capability ${capName} is already exposed, and we specifically have no shadowing.`);
-		const cap = w3n[capName];
-		if (cap) {
-			expW3N[capName] = (expose as CapExposer)(cap, coreSide);
-		}
-	}
-}
+) => ExposedObj<any>|ExposedFn; }
 
 export function exposeCAPs<T extends W3N, W3N extends object>(
 	coreSide: ExposedServices, w3n: T,
-	mainCAPs: { [cap in keyof W3N]: CapExposer; },
-	extraCAPs?: { [cap in keyof T]: CapExposer; }
+	mainCAPs: CAPsExposures<W3N>,
+	extraCAPs: CAPsExposures<T>|undefined
 ): void {
 	const expW3N = {} as ExposedObj<T>;
 	addCAPsInExposure(expW3N, coreSide, w3n as W3N, mainCAPs);
@@ -53,10 +35,31 @@ export function exposeCAPs<T extends W3N, W3N extends object>(
 	coreSide.exposeW3NService(expW3N);
 }
 
+function addCAPsInExposure<T extends object>(
+	expW3N: ExposedObj<T>, coreSide: ExposedServices, w3n: T,
+	capExposures: CAPsExposures<T>
+): void {
+	for (const capName in capExposures) {
+		const expose = capExposures[capName];
+		assert(typeof expose === 'function');
+		assert(!expW3N[capName], `Capability ${capName} is already exposed, and we specifically have no shadowing.`);
+		const cap = w3n[capName];
+		if (cap) {
+			expW3N[capName] = expose(cap, coreSide);
+		}
+	}
+}
+
+export type MakeCapClient = (
+	clientSide: Caller, objPath: string[]
+) => any;
+
+export type ClientCAPsWraps<T> = { [cap in keyof Required<T>]: MakeCapClient; };
+
 export function makeClientSide<T extends W3N, W3N extends object>(
 	clientSide: Caller,
-	mainCAPs: { [cap in keyof W3N]: MakeCapClient; },
-	extraCAPs?: { [cap in keyof T]: MakeCapClient; }
+	mainCAPs: ClientCAPsWraps<W3N>,
+	extraCAPs: Exclude<ClientCAPsWraps<T>, ClientCAPsWraps<W3N>>|undefined
 ): T {
 	const objPath = [ W3N_NAME ];
 	const lstOfCAPs = clientSide.listObj(objPath) as (keyof T)[];
@@ -67,7 +70,8 @@ export function makeClientSide<T extends W3N, W3N extends object>(
 			const makeCap = mainCAPs[cap as keyof W3N];
 			assert(typeof makeCap === 'function');
 			w3n[cap] = makeCap(clientSide, capObjPath);
-		} else if (extraCAPs && extraCAPs[cap]) {
+		} else if (extraCAPs) {
+			assert(!!exposeCAPs);
 			const makeCap = extraCAPs[cap];
 			assert(typeof makeCap === 'function');
 			w3n[cap] = makeCap(clientSide, capObjPath);

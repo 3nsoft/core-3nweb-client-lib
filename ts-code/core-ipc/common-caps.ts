@@ -20,15 +20,14 @@ import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
 import { exposeStorageCAP, makeStorageCaller } from "../ipc-via-protobuf/storage-cap";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
-import { exposeCAPs, CapExposer, MakeCapClient, makeClientSide } from "./generic";
+import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures } from "./generic";
 
 type W3N = web3n.caps.common.W3N;
 
 export function exposeW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T,
-	extraCAPs?: { [cap in keyof T]: CapExposer; }
+	coreSide: ExposedServices, w3n: T, extraCAPs?: CAPsExposures<T>
 ): void {
-	const commonCAPsExposures: { [cap in keyof W3N]: CapExposer; } = {
+	const commonCAPsExposures: CAPsExposures<W3N> = {
 		log: exposeLogger,
 		mail: exposeASMailCAP,
 		mailerid: exposeMailerIdCAP,
@@ -42,9 +41,10 @@ export function exposeW3N<T extends W3N>(
 const unused = W3N_NAME;
 
 export function makeW3Nclient<T extends W3N>(
-	clientSide: Caller, extraCAPs?: { [cap in keyof T]: MakeCapClient; }
+	clientSide: Caller,
+	extraCAPs?: Exclude<ClientCAPsWraps<T>, ClientCAPsWraps<W3N>>
 ): T {
-	const mainCAPs: { [cap in keyof W3N]: MakeCapClient; } = {
+	const mainCAPs: ClientCAPsWraps<W3N> = {
 		log: makeLogCaller,
 		mail: makeASMailCaller,
 		mailerid: makeMailerIdCaller,

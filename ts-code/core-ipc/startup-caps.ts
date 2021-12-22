@@ -18,15 +18,14 @@
 import { W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../ipc-via-protobuf/startup-cap";
-import { CapExposer, exposeCAPs, MakeCapClient, makeClientSide } from "./generic";
+import { ClientCAPsWraps, exposeCAPs, makeClientSide, CAPsExposures } from "./generic";
 
 type W3N = web3n.startup.W3N;
 
 export function exposeStartupW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T,
-	extraCAPs?: { [cap in keyof T]: CapExposer; }
+	coreSide: ExposedServices, w3n: T, extraCAPs?: CAPsExposures<T>
 ): void {
-	const startupCAPsExposures: { [cap in keyof W3N]: CapExposer; } = {
+	const startupCAPsExposures: CAPsExposures<W3N> = {
 		signIn: wrapSignInCAP,
 		signUp: wrapSignUpCAP,
 		log: exposeLogger,
@@ -39,9 +38,10 @@ export function exposeStartupW3N<T extends W3N>(
 const unused = W3N_NAME;
 
 export function makeStartupW3Nclient<T extends W3N>(
-	clientSide: Caller, extraCAPs?: { [cap in keyof T]: MakeCapClient; }
+	clientSide: Caller,
+	extraCAPs?: Exclude<ClientCAPsWraps<T>, ClientCAPsWraps<W3N>>
 ): W3N {
-	const mainCAPs: { [cap in keyof W3N]: MakeCapClient; } = {
+	const mainCAPs: ClientCAPsWraps<W3N> = {
 		log: makeLogCaller,
 		signIn: makeSignInCaller,
 		signUp: makeSignUpCaller,
