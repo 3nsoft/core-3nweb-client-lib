@@ -116,7 +116,6 @@ declare namespace web3n.startup {
 	interface W3N {
 		signIn: startup.SignInService;
 		signUp: startup.SignUpService;
-		log?: caps.common.Logger;
 	}
 	
 }

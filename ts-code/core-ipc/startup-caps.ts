@@ -16,7 +16,6 @@
 */
 
 import { W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
-import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../ipc-via-protobuf/startup-cap";
 import { ClientCAPsWraps, exposeCAPs, makeClientSide, CAPsExposures, TypeDifference } from "./generic";
 
@@ -29,7 +28,6 @@ export function exposeStartupW3N<T extends W3N>(
 	const startupCAPsExposures: CAPsExposures<W3N> = {
 		signIn: wrapSignInCAP,
 		signUp: wrapSignUpCAP,
-		log: exposeLogger,
 	};
 	exposeCAPs(coreSide, w3n, startupCAPsExposures, extraCAPs);
 }
@@ -42,7 +40,6 @@ export function makeStartupW3Nclient<T extends W3N>(
 	clientSide: Caller, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
 ): W3N {
 	const mainCAPs: ClientCAPsWraps<W3N> = {
-		log: makeLogCaller,
 		signIn: makeSignInCaller,
 		signUp: makeSignUpCaller,
 	};
