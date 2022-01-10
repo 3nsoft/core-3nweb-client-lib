@@ -30,7 +30,6 @@ declare namespace web3n.caps.common {
 
 	interface AppManifest {
 		appDomain: string;
-		name: string;
 		capsRequested: {
 			mail?: MailCAPSetting;
 			storage?: StorageCAPSetting;

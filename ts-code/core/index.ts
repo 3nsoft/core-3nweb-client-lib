@@ -32,9 +32,8 @@ import { ServiceLocatorMaker } from '../lib-client/service-locator';
 
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
-const STARTUP_APP_DOMAIN = 'startup.3nweb.computer';
 
-type AppManifest = web3n.caps.common.AppManifest;
+type RequestedCAPs = web3n.caps.common.AppManifest['capsRequested'];
 type StoragePolicy = web3n.caps.common.StoragePolicy;
 type AppFSSetting = web3n.caps.common.AppFSSetting;
 type FSSetting = web3n.caps.common.FSSetting;
@@ -204,20 +203,16 @@ export class Core {
 	};
 
 	makeCAPsForApp(
-		appDomain: string, manifest: AppManifest
+		appDomain: string, requestedCAPs: RequestedCAPs
 	): { caps: W3N; close: () => void; } {
 		if (!this.isInitialized || this.closingProc) {
 			throw new Error(`Core is either not yet initialized, or is already closed.`);
 		}
 
-		if (appDomain !== manifest.appDomain) {
-			throw new Error(`App manifest is for domain ${manifest.appDomain}, while app's domain is ${appDomain}`);
-		}
-
-		const { storage, close } = this.makeStorageCAP(manifest);
-		const mail = this.makeMailCAP(manifest);
-		const log = this.makeLogCAP(manifest);
-		const mailerid = this.makeMailerIdCAP(manifest);
+		const { storage, close } = this.makeStorageCAP(appDomain, requestedCAPs);
+		const mail = this.makeMailCAP(requestedCAPs);
+		const log = this.makeLogCAP(appDomain, requestedCAPs);
+		const mailerid = this.makeMailerIdCAP(requestedCAPs);
 
 		const caps: W3N = { mail, log, mailerid, storage };
 
@@ -225,39 +220,42 @@ export class Core {
 	};
 
 	private makeStorageCAP(
-		m: AppManifest
+		appDomain: string, requestedCAPs: RequestedCAPs
 	): { storage?: W3N['storage']; close: () => void; } {
-		if (m.capsRequested.storage) {
+		if (requestedCAPs.storage) {
 			const {
 				cap: storage, close
-			} = this.storages.makeStorageCAP(m.appDomain, makeStoragePolicy(m));
+			} = this.storages.makeStorageCAP(
+				appDomain, makeStoragePolicy(appDomain, requestedCAPs));
 			return { storage, close };
 		} else {
 			return { close: () => {} };
 		}
 	}
 
-	private makeMailCAP(m: AppManifest): W3N['mail'] {
-		if (m.capsRequested.mail
-		&& (m.capsRequested.mail.receivingFrom === 'all')
-		&& (m.capsRequested.mail.sendingTo === 'all')) {
+	private makeMailCAP(requestedCAPs: RequestedCAPs): W3N['mail'] {
+		if (requestedCAPs.mail
+		&& (requestedCAPs.mail.receivingFrom === 'all')
+		&& (requestedCAPs.mail.sendingTo === 'all')) {
 			return this.asmail.makeASMailCAP();
 		} else {
 			return undefined;
 		}
 	}
 
-	private makeLogCAP(m: AppManifest): W3N['log'] {
-		if (m.capsRequested.log === 'all') {
+	private makeLogCAP(
+		appDomain: string, requestedCAPs: RequestedCAPs
+	): W3N['log'] {
+		if (requestedCAPs.log === 'all') {
 			return (type, msg, e) => this.logger.appLog(
-				type, m.appDomain, msg, e);
+				type, appDomain, msg, e);
 		} else {
 			return undefined;
 		}
 	}
 
-	private makeMailerIdCAP(m: AppManifest): W3N['mailerid'] {
-		if (m.capsRequested.mailerid === true) {
+	private makeMailerIdCAP(requestedCAPs: RequestedCAPs): W3N['mailerid'] {
+		if (requestedCAPs.mailerid === true) {
 			return this.idManager!.makeMailerIdCAP();
 		} else {
 			return undefined;
@@ -313,24 +311,26 @@ Object.freeze(Core.prototype);
 Object.freeze(Core);
 
 
-function makeStoragePolicy(manifest: AppManifest): StoragePolicy {
-	if (!manifest.capsRequested.storage) { throw new Error(
+function makeStoragePolicy(
+	appDomain: string, requestedCAPs: RequestedCAPs
+): StoragePolicy {
+	if (!requestedCAPs.storage) { throw new Error(
 		`Missing storage setting in app's manifest`); }
-	const capReq = manifest.capsRequested.storage;
+	const capReq = requestedCAPs.storage;
 
 	let policy: StoragePolicy;
 	if (capReq.appFS === 'default') {
 		policy = {
 			canOpenAppFS: singleDomainAppFSChecker({
-				domain: manifest.appDomain,
+				domain: appDomain,
 				storage: 'synced-n-local'
 			})
 		};
 	} else if (Array.isArray(capReq.appFS)) {
 		const okDomains = capReq.appFS
 		.filter(fsInfo =>
-			(fsInfo.domain === manifest.appDomain) ||
-			fsInfo.domain.endsWith('.'+manifest.appDomain))
+			(fsInfo.domain === appDomain) ||
+			fsInfo.domain.endsWith('.'+appDomain))
 		.map(fsInfo => jsonCopy(fsInfo));
 		policy = {
 			canOpenAppFS: severalDomainsAppFSChecker(okDomains)

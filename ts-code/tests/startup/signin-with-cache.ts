@@ -60,7 +60,7 @@ describe('signIn process (with cache)', () => {
 	itCond('starts with correct pass', async () => {
 		const core = s.runners.get(user.userId)!.core;
 		try {
-			core.makeCAPsForApp(testApp.appDomain, testApp);
+			core.makeCAPsForApp(testApp.appDomain, testApp.capsRequested);
 			fail(`Attempt to make app CAPs before core initialization should throw up`);
 		} catch (err) {}
 
@@ -76,7 +76,7 @@ describe('signIn process (with cache)', () => {
 
 		try {
 			const { caps, close } = core.makeCAPsForApp(
-				testApp.appDomain, testApp);
+				testApp.appDomain, testApp.capsRequested);
 			expect(typeof caps).toBe('object');
 			expect(typeof close).toBe('function');
 			close();

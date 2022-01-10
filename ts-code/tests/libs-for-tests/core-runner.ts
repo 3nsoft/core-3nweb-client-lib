@@ -29,7 +29,6 @@ import { resolveTxt as resolveDnsTxt } from 'dns';
 
 export const testApp: web3n.caps.common.AppManifest = {
 	appDomain: 'test.3nweb.computer',
-	name: 'Test app',
 	capsRequested: {
 		mail: {
 			receivingFrom: 'all',
@@ -192,7 +191,7 @@ export class CoreRunner {
 	setupTestAppCaps(): void {
 		if (this.appCaps) { throw new Error(`App CAPs have already been set.`); }
 		const { caps, close: closeCAPs } = this.core.makeCAPsForApp(
-			testApp.appDomain, testApp);
+			testApp.appDomain, testApp.capsRequested);
 		const { clientW3N, close } = wrapCommonW3N(caps);
 		this.appCaps = {
 			raw: caps,

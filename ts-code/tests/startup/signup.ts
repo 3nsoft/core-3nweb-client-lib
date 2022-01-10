@@ -59,7 +59,7 @@ describe('signUp process', () => {
 
 	itCond('creates user account, allowing caps for apps', async () => {
 		try {
-			s.runner.core.makeCAPsForApp(testApp.appDomain, testApp);
+			s.runner.core.makeCAPsForApp(testApp.appDomain, testApp.capsRequested);
 			fail(`Attempt to make app CAPs before core initialization should throw up`);
 		} catch (err) {}
 
@@ -72,7 +72,7 @@ describe('signUp process', () => {
 
 		try {
 			const { caps, close } = s.runner.core.makeCAPsForApp(
-				testApp.appDomain, testApp);
+				testApp.appDomain, testApp.capsRequested);
 			expect(typeof caps).toBe('object');
 			expect(typeof close).toBe('function');
 			close();
