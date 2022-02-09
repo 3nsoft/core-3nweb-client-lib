@@ -1409,7 +1409,7 @@ namespace vGetXAttr {
 		const ipcPath = objPath.concat('getXAttr');
 		return (path, xaName) => caller
 		.startPromiseCall(ipcPath, getXAttr.requestType.pack({ path, xaName }))
-		.then(unpackXAttrValue);
+		.then(file.vGetXAttr.unpackReply);
 	}
 
 }

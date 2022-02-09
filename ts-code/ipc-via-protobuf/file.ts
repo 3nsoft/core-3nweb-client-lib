@@ -280,8 +280,8 @@ namespace getXAttr {
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['getXAttr'] {
 		const path = objPath.concat('getXAttr');
-		return () => caller
-		.startPromiseCall(path, undefined)
+		return xaName => caller
+		.startPromiseCall(path, requestType.pack({ xaName }))
 		.then(unpackXAttrValue);
 	}
 
@@ -543,6 +543,20 @@ export namespace vGetXAttr {
 
 	export const replyType = makeFileType<Reply>('VersionedGetXAttrReplyBody');
 
+	export function unpackReply(buf: EnvelopeBody): {
+		attr: any; version: number;
+	} {
+		const { json, str, bytes, version: v } = replyType.unpack(buf);
+		const version = fixInt(v);
+		if (bytes) {
+			return { version, attr: valOf(bytes) };
+		} else if (str) {
+			return { version, attr: valOf(str) };
+		} else {
+			return { version, attr: valOfOptJson(json) };
+		}
+	}
+
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['getXAttr']
 	): ExposedFn {
@@ -568,17 +582,7 @@ export namespace vGetXAttr {
 		const path = objPath.concat('getXAttr');
 		return () => caller
 		.startPromiseCall(path, undefined)
-		.then(buf => {
-			const { json, str, bytes, version: v } = replyType.unpack(buf);
-			const version = fixInt(v);
-			if (bytes) {
-				return { version, attr: valOf(bytes) };
-			} else if (str) {
-				return { version, attr: valOf(str) };
-			} else {
-				return { version, attr: valOfOptJson(json) };
-			}
-		});
+		.then(unpackReply);
 	}
 
 }
