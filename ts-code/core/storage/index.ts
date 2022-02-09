@@ -55,13 +55,13 @@ function makeBadAppNameExc(appName: string): StorageException {
 	};
 }
 
-function makeNotAllowedToOpenAppFSExc(appName: string): StorageException {
+function makeNotAllowedToOpenAppFSExc(appFolder: string): StorageException {
 	return {
 		runtimeException: true,
 		type: 'storage',
 		storageSegment: 'app',
 		notAllowedToOpenFS: true,
-		appName
+		appName: reverseDomain(appFolder)
 	};
 }
 

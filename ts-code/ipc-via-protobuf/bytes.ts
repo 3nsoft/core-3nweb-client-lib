@@ -192,7 +192,7 @@ namespace sinkShowLayout {
 
 	function unpackLayout(msg: FileLayoutMsg): FileLayout {
 		return {
-			base: valOfOpt(msg.base),
+			base: valOfOptInt(msg.base),
 			sections: fixArray(msg.sections).map(({ src, ofs, len }) => ({
 				src, ofs: fixInt(ofs), len: fixInt(len) }))
 		};

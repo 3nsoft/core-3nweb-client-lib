@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,14 +12,15 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { ScryptGenParams } from '../../key-derivation';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { objChanged, objRemoved } from '../../../lib-common/service-api/3nstorage/owner';
 
 export { AsyncSBoxCryptor } from 'xsp-files';
-export { FolderInfoWithAttrs } from './folder-node'; 
+export { FolderInJSON } from './folder-node'; 
 
 type StorageType = web3n.files.FSType;
 

@@ -33,7 +33,6 @@ it.func = async function(s) {
 
 // XXX This is WIP. This catches bug, presumably in writing stage.
 
-(global as any).logOut = true;
 
 	const fileName = 'big file';
 	const sink = await testFS.getByteSink(fileName, {create:true});

@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { Subscribe, EncrEvent, HeaderEncrEvent, SegEncrEvent } from 'xsp-files';
 import { PressureValve } from '../../lib-common/processes';
@@ -40,8 +41,9 @@ export class FileWritingProc {
 		Object.seal(this);
 	}
 
-	static makeFor(objFile: ObjVersionFile, encSub: Subscribe):
-			Observable<FileWrite[]> {
+	static makeFor(
+		objFile: ObjVersionFile, encSub: Subscribe
+	): Observable<FileWrite[]> {
 		const p = new FileWritingProc(objFile);
 		return p.assembleProc(encSub);
 	}
@@ -154,9 +156,9 @@ function combineSegsFrom(segs: SegEncrEvent[]): SegsWrite[] {
 			chunkSegs.push(seg);
 		} else if (chunkEnd < sOfs) {
 			chunks.push({ ofs: chunkStart, bytes: joinByteArrs(chunkSegs) });
+			chunkSegs = [ seg ];
 			chunkStart = sOfs;
 			chunkEnd = chunkStart + seg.length;
-			chunkSegs.push(seg);
 		} else {
 			throw new Error(`Got missorted segment`);
 		}

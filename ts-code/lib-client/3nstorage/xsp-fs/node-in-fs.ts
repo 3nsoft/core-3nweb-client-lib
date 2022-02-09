@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,155 +12,23 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
  * reliance set.
  */
 
-import { AsyncSBoxCryptor, SegmentsWriter, makeSegmentsWriter, SegmentsReader, makeSegmentsReader, compareVectors, calculateNonce, makeDecryptedByteSource, Subscribe, ObjSource, makeDecryptedByteSourceWithAttrs, ByteSource } from 'xsp-files';
-import { base64 } from '../../../lib-common/buffer-utils';
 import { SingleProc } from '../../../lib-common/processes';
-import * as random from '../../../lib-common/random-node';
 import { Node, NodeType, Storage, RemoteEvent } from './common';
 import { makeFileException, Code as excCode, Code } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { StorageException } from '../exceptions';
 import { Observable, Subject } from 'rxjs';
-import { encryptBytesToSinkProc, encryptAttrsToSinkProc } from '../../../lib-common/obj-streaming/sink-utils';
 import { share } from 'rxjs/operators';
-import { AttrsHolder, EntityAttrs } from '../../files/file-attrs';
-
-const SEG_SIZE = 16;	// in 256-byte blocks = 4K in bytes
-
-const EMPTY_BYTE_ARR = new Uint8Array(0);
-
-export abstract class NodeCrypto {
-
-	protected constructor(
-		private zerothHeaderNonce: Uint8Array,
-		private key: Uint8Array,
-		private cryptor: AsyncSBoxCryptor
-	) {}
-	
-	wipe(): void {
-		if (this.key) {
-			this.key.fill(0);
-			this.key = (undefined as any);
-			this.zerothHeaderNonce.fill(0);
-			this.zerothHeaderNonce = (undefined as any);
-		}
-	}
-
-	compareKey(keyB64: string): boolean {
-		const k = base64.open(keyB64);
-		return compareVectors(k, this.key);
-	}
-
-	fileKeyInBase64(): string {
-		if (!this.key) { throw new Error("Cannot use wiped object."); }
-		return base64.pack(this.key);
-	}
-
-	protected segWriter(version: number): Promise<SegmentsWriter> {
-		if (!this.key) { throw new Error("Cannot use wiped object."); }
-		return makeSegmentsWriter(
-			this.key, this.zerothHeaderNonce, version,
-			{ type: 'new', segSize: SEG_SIZE, formatWithSections: true },
-			random.bytes, this.cryptor);
-	}
-
-	protected async segWriterWithBase(
-		newVersion: number, base: ObjSource
-	): Promise<SegmentsWriter> {
-		if (!this.key) { throw new Error("Cannot use wiped object."); }
-		return makeSegmentsWriter(
-			this.key, this.zerothHeaderNonce, newVersion,
-			{ type: 'update', base, formatWithSections: true },
-			random.bytes, this.cryptor);
-	}
-
-	protected async segReader(src: ObjSource): Promise<SegmentsReader> {
-		if (!this.key) { throw new Error("Cannot use wiped object."); }
-		const version = src.version;
-		const header = await src.readHeader();
-		return makeSegmentsReader(this.key, this.zerothHeaderNonce,
-			version, header, this.cryptor);
-	}
-
-	async saveBytes(
-		bytes: Uint8Array|Uint8Array[], version: number, attrs: AttrsHolder<any>
-	): Promise<Subscribe> {
-		attrs.mtime = Date.now();
-		const segWriter = await this.segWriter(version);
-		const sub = encryptBytesToSinkProc(bytes, attrs.toBytes(), segWriter);
-		return sub;
-	}
-
-	async saveAttrs<T extends EntityAttrs>(
-		attrs: AttrsHolder<T>, version: number, base: ObjSource|undefined
-	): Promise<Subscribe> {
-		if (base) {
-			const writer = await this.segWriterWithBase(version, base);
-			const { attrsBytes } = await this.getAttrsAndByteSrc(base);
-			const baseAttrsSize = (attrsBytes ? attrsBytes.length : 0);
-			return encryptAttrsToSinkProc(attrs.toBytes(), writer, baseAttrsSize);
-		} else {
-			const writer = await this.segWriter(version);
-			return encryptAttrsToSinkProc(attrs.toBytes(), writer, undefined);
-		}
-	}
-
-	async getAttrsAndByteSrc(
-		src: ObjSource
-	): Promise<{ attrsBytes?: Uint8Array; byteSrc: ByteSource; }> {
-		const segReader = await this.segReader(src);
-		if (segReader.formatVersion === 2) {
-			const byteSrc = await makeDecryptedByteSourceWithAttrs(
-				src.segSrc, segReader);
-			const attrsBytes = await byteSrc.readAttrs();
-			return { byteSrc, attrsBytes };
-		} else if (segReader.formatVersion === 1) {
-			const byteSrc = makeDecryptedByteSource(src.segSrc, segReader);
-			return { byteSrc };
-		} else {
-			throw new Error(`XSP segments format ${segReader.formatVersion} is unknown`);
-		}
-	}
-
-	async readBytes(
-		src: ObjSource
-	): Promise<{ content: Uint8Array; attrs?: Uint8Array; }> {
-		const segReader = await this.segReader(src);
-		if (segReader.formatVersion === 2) {
-			const decSrc = await makeDecryptedByteSourceWithAttrs(
-				src.segSrc, segReader);
-			const attrs = await decSrc.readAttrs();
-			const bytes = await decSrc.read(undefined);
-			return { attrs, content: (bytes ? bytes : EMPTY_BYTE_ARR) };
-		} else if (segReader.formatVersion === 1) {
-			const decSrc = makeDecryptedByteSource(src.segSrc, segReader);
-			const bytes = await decSrc.read(undefined);
-			return { content: (bytes ? bytes : EMPTY_BYTE_ARR) };
-		} else {
-			throw new Error(`XSP segments format ${segReader.formatVersion} is unknown`);
-		}
-	}
-
-	reencryptHeader = async (
-		initHeader: Uint8Array, newVersion: number
-	): Promise<Uint8Array> => {
-		if (!this.key) { throw new Error("Cannot use wiped object."); }
-		const headerContent = await this.cryptor.formatWN.open(
-			initHeader, this.key);
-		const n = calculateNonce(this.zerothHeaderNonce, newVersion);
-		return this.cryptor.formatWN.pack(headerContent, n, this.key);
-	};
-
-}
-Object.freeze(NodeCrypto.prototype);
-Object.freeze(NodeCrypto);
+import { CommonAttrs, XAttrs } from './attrs';
+import { NodePersistance } from './node-persistence';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
@@ -168,12 +36,12 @@ type FileChangeEvent = web3n.files.FileChangeEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 
-export abstract class NodeInFS<
-	TCrypto extends NodeCrypto, TAttrs extends EntityAttrs> implements Node {
+export abstract class NodeInFS<P extends NodePersistance> implements Node {
 
-	protected crypto: TCrypto = (undefined as any);
+	protected crypto: P = (undefined as any);
 
-	protected attrs: AttrsHolder<TAttrs> = (undefined as any);
+	protected attrs: CommonAttrs = (undefined as any);
+	protected xattrs: XAttrs|undefined = undefined;
 	
 	private writeProc: SingleProc|undefined = undefined;
 
@@ -189,38 +57,62 @@ export abstract class NodeInFS<
 	private remoteEvents: RemoteEvent[]|undefined = undefined;
 
 	protected constructor(
-		protected storage: Storage,
-		public type: NodeType,
+		protected readonly storage: Storage,
+		public readonly type: NodeType,
 		public name: string,
-		public objId: string,
+		public readonly objId: string,
 		private currentVersion: number,
 		public parentId: string | undefined
 	) {}
 
+	private updatedXAttrs(changes: XAttrsChanges|undefined): XAttrs|undefined {
+		return (this.xattrs ?
+			(changes ? this.xattrs.makeUpdated(changes) : this.xattrs) :
+			(changes ? XAttrs.makeEmpty().makeUpdated(changes) : undefined));
+	}
+
+	protected setUpdatedParams(
+		version: number, attrs: CommonAttrs|undefined, xattrs: XAttrs|undefined
+	): void {
+		if (attrs) {
+			this.attrs = attrs;
+		}
+		this.xattrs = xattrs;
+		this.setCurrentVersion(version);
+	}
+
+	protected getParamsForUpdate(changes: XAttrsChanges|undefined): {
+		newVersion: number; attrs: CommonAttrs; xattrs?: XAttrs;
+	} {
+		return {
+			newVersion: this.version + 1,
+			attrs: this.attrs.copy(),
+			xattrs: this.updatedXAttrs(changes)
+		}
+	}
+
 	async updateXAttrs(changes: XAttrsChanges): Promise<number> {
 		if (Object.keys(changes).length === 0) { return this.version; }
 		return this.doChange(true, async () => {
-			const newVersion = this.version + 1;
-			const attrs = this.attrs.modifiableCopy();
-			attrs.updateXAttrs(changes);
-			const base = ((this.version === 0) ?
-				undefined :
-				await this.storage.getObj(this.objId));
-			const sub = await this.crypto.saveAttrs(attrs, newVersion, base);
+			const { xattrs, newVersion } = this.getParamsForUpdate(changes);
+			const base = await this.storage.getObj(this.objId);
+			const sub = await this.crypto.writeXAttrs(xattrs!, newVersion, base);
 			await this.storage.saveObj(this.objId, newVersion, sub);
-			this.setCurrentVersion(newVersion);
-			attrs.setReadonly();
-			this.attrs = attrs;
+			this.setUpdatedParams(newVersion, undefined, xattrs);
 			return this.version;
 		});
 	}
 
 	getXAttr(xaName: string): any {
-		return this.attrs.getXAttr(xaName);
+		return (this.xattrs ? this.xattrs.get(xaName) : undefined);
 	}
 
 	listXAttrs(): string[] {
-		return this.attrs.listXAttrs();
+		return (this.xattrs ? this.xattrs.list() : []);
+	}
+
+	getAttrs(): CommonAttrs {
+		return this.attrs;
 	}
 
 	processRemoteEvent(event: RemoteEvent): Promise<void> {

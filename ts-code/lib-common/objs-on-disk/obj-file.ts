@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../async-fs-node';
 import { errWithCause } from '../exceptions/error';
@@ -26,7 +27,6 @@ import { ObjVersionBytesLayout, FiniteSegsChunk } from './file-layout';
 import { FileException } from '../exceptions/file';
 import { uintFrom8Bytes, packUintTo8Bytes } from '../big-endian';
 
-(global as any).log = false;
 
 export class ObjVersionFile {
 

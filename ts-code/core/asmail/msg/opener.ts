@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,15 +12,15 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
-import { MsgEnvelope, MainBody, SuggestedNextKeyPair, SendingParams }
-	from './common';
+import { MsgEnvelope, MainBody, SuggestedNextKeyPair, SendingParams } from './common';
 import { makeSegmentsReader, AsyncSBoxCryptor, idToHeaderNonce, makeDecryptedByteSource, ObjSource } from 'xsp-files';
-import { FolderInfoWithAttrs } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { MsgKeyRole } from '../keyring';
 
 export { SuggestedNextKeyPair } from './common';
@@ -81,7 +81,7 @@ export class OpenedMsg {
 		return certs;
 	}
 
-	get attachmentsJSON(): FolderInfoWithAttrs|undefined {
+	get attachmentsJSON(): FolderInJSON|undefined {
 		return this.getSection('Attachments');
 	}
 	
@@ -108,5 +108,6 @@ export async function openMsg(msgId: string, mainObjId: string,
 		throw errWithCause(err, `Cannot open main object of message ${msgId}`);
 	}
 }
+
 
 Object.freeze(exports);

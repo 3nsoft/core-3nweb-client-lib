@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,16 +12,16 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
  * reliance set.
  */
 
-import { NodeInFS, NodeCrypto } from './node-in-fs';
-import { utf8, toBuffer } from '../../../lib-common/buffer-utils';
-import { errWithCause } from '../../../lib-common/exceptions/error';
+import { NodeInFS } from './node-in-fs';
+import { utf8 } from '../../../lib-common/buffer-utils';
 import { LinkParameters } from '../../files';
 import { DeviceFS } from '../../local-files/device-fs';
 import { FileLinkParams } from './file-node';
@@ -29,40 +29,39 @@ import { FolderLinkParams } from './folder-node';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { FileObject } from './file';
 import { XspFS } from './fs';
-import { idToHeaderNonce, ObjSource } from 'xsp-files';
-import { LinkAttrs, AttrsHolder } from '../../files/file-attrs';
+import { idToHeaderNonce, ObjSource, Subscribe } from 'xsp-files';
+import { CommonAttrs, XAttrs } from './attrs';
+import { NodePersistance } from './node-persistence';
 
-class LinkCrypto extends NodeCrypto {
+class LinkPersistance extends NodePersistance {
 	
 	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
 		super(zNonce, key, cryptor);
 		Object.seal(this);
 	}
-	
-	async readLinkParams(
-		src: ObjSource
-	): Promise<{ params: LinkParameters<any>; attrs?: AttrsHolder<LinkAttrs> }> {
-		try {
-			const { content, attrs } = await this.readBytes(src);
-			const params = JSON.parse(utf8.open(content));
-			if (attrs) {
-				return {
-					params,
-					attrs: AttrsHolder.fromBytesReadonly<LinkAttrs>(attrs)
-				};
-			} else {
-				return { params };
-			}
-		} catch (exc) {
-			throw errWithCause(exc, `Cannot open link object`);
-		}
+
+	async read(src: ObjSource): Promise<{
+		params: LinkParameters<any>; attrs: CommonAttrs; xattrs?: XAttrs;
+	}> {
+		const { content, attrs, xattrs } = await super.readAll(src);
+		if (!content) { throw `Cannot open link object`; }
+		const params = formatV1.parse(content);
+		return { params, xattrs, attrs: CommonAttrs.fromAttrs(attrs) };
+	}
+
+	async write(
+		params: LinkParameters<any>, version: number,
+		attrs: CommonAttrs, xattrs: XAttrs|undefined
+	): Promise<Subscribe> {
+		return super.writeWhole(formatV1.pack(params), version, attrs, xattrs);
 	}
 
 }
-Object.freeze(LinkCrypto.prototype);
-Object.freeze(LinkCrypto);
+Object.freeze(LinkPersistance.prototype);
+Object.freeze(LinkPersistance);
 
 type SymLink = web3n.files.SymLink;
+type XAttrsChanges = web3n.files.XAttrsChanges;
 
 function makeFileSymLink(
 	storage: Storage, params: LinkParameters<FileLinkParams>
@@ -98,9 +97,9 @@ function makeLinkToStorage(
 	}
 }
 
-export class LinkNode extends NodeInFS<LinkCrypto, LinkAttrs> {
+export class LinkNode extends NodeInFS<LinkPersistance> {
 
-	private linkParams: any = (undefined as any);
+	private linkParams: LinkParameters<any> = (undefined as any);
 
 	constructor(
 		storage: Storage, name: string, objId: string, version: number,
@@ -109,9 +108,8 @@ export class LinkNode extends NodeInFS<LinkCrypto, LinkAttrs> {
 		super(storage, 'link', name, objId, version, parentId);
 		if (!name || !objId || !parentId) { throw new Error(
 			"Bad link parameter(s) given"); }
-		this.crypto = new LinkCrypto(
+		this.crypto = new LinkPersistance(
 			idToHeaderNonce(this.objId), key, this.storage.cryptor);
-		this.attrs = AttrsHolder.makeReadonlyForLink(Date.now());
 		Object.seal(this);
 	}
 
@@ -120,7 +118,7 @@ export class LinkNode extends NodeInFS<LinkCrypto, LinkAttrs> {
 	): Promise<LinkNode> {
 		const objId = await storage.generateNewObjId();
 		const link = new LinkNode(storage, name, objId, 0, parentId, key);
-		link.attrs = AttrsHolder.makeReadonlyForLink(Date.now());
+		link.attrs = CommonAttrs.makeForTimeNow();
 		return link;
 	}
 
@@ -131,25 +129,33 @@ export class LinkNode extends NodeInFS<LinkCrypto, LinkAttrs> {
 		const src = await storage.getObj(objId);
 		const link = new LinkNode(
 			storage, name, objId, src.version, parentId, key);
-		const { params, attrs } = await link.crypto.readLinkParams(src);
-		link.linkParams = params;
-		link.attrs = (attrs ? attrs : AttrsHolder.makeReadonlyForLink(0));
+		const { params, attrs, xattrs } = await link.crypto.read(src);
+		link.setUpdatedState(params, src.version, attrs, xattrs);
 		return link;
 	}
 
-	async setLinkParams(params: LinkParameters<any>): Promise<void> {
+	private setUpdatedState(
+		params: LinkParameters<any>,
+		version: number, attrs: CommonAttrs, xattrs: XAttrs|undefined
+	): void {
+		this.linkParams = params;
+		super.setUpdatedParams(version, attrs, xattrs);
+	}
+
+	async save(
+		params: LinkParameters<any>, changes?: XAttrsChanges
+	): Promise<void> {
 		if (this.linkParams) { throw new Error(
 			'Cannot set link parameters second time'); }
 		return this.doChange(false, async () => {
-			const newVersion = this.version + 1;
-			this.linkParams = params;
-			const bytes = utf8.pack(JSON.stringify(params));
-			const attrs = this.attrs.modifiableCopy();
-			const sinkSub = await this.crypto.saveBytes(bytes, newVersion, attrs);
+			// prepare data for recording
+			const { attrs, xattrs, newVersion } = this.getParamsForUpdate(changes);
+			// save/record
+			const sinkSub = await this.crypto.write(
+				params, newVersion, attrs, xattrs);
 			await this.storage.saveObj(this.objId, newVersion, sinkSub);
-			this.setCurrentVersion(newVersion);
-			attrs.setReadonly();
-			this.attrs = attrs;
+			// set updated data in the node
+			this.setUpdatedState(params, newVersion, attrs, xattrs);
 		});
 	}
 
@@ -226,5 +232,23 @@ export class LinkNode extends NodeInFS<LinkCrypto, LinkAttrs> {
 }
 Object.freeze(LinkNode.prototype);
 Object.freeze(LinkNode);
+
+
+namespace formatV1 {
+
+	// XXX make proper type version check
+
+	export function pack(params: LinkParameters<any>): Uint8Array {
+		return utf8.pack(JSON.stringify(params));
+	}
+
+	export function parse(bytes: Uint8Array): LinkParameters<any> {
+		const params = JSON.parse(utf8.open(bytes)) as LinkParameters<any>;
+		return params;
+	}
+
+}
+Object.freeze(formatV1);
+
 
 Object.freeze(exports);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,10 +12,11 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { JsonKeyShort } from '../../../lib-common/jwkeys';
-import { FolderInfoWithAttrs } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
 
 /**
@@ -43,7 +44,7 @@ export interface MsgEnvelope {
 	'Msg Type': string;
 	'Subject'?: string;
 	'Body': MainBody;
-	'Attachments'?: FolderInfoWithAttrs;
+	'Attachments'?: FolderInJSON;
 
 	'Flow Params': FlowParams;
 

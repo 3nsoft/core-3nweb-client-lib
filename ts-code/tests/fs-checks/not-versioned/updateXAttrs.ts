@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -51,6 +51,7 @@ it.func = async function(s) {
 	const { testFS } = s;
 
 	async function testforPath(path: string) {
+		const initStats = await testFS.stat(path);
 		let xattrNames = await testFS.listXAttrs(path);
 		expect(xattrNames.length).toBe(0);
 
@@ -72,6 +73,9 @@ it.func = async function(s) {
 		expect(await testFS.getXAttr(path, attr1Name)).toBe(attr1Value);
 		expect(await testFS.getXAttr(path, attr2Name)).toBe(attr2Value);
 
+		let stats = await testFS.stat(path);
+		expect(stats.mtime!.valueOf()).withContext(`Update of xattrs shouldn't change mtime, part of common attrs`).toBe(initStats.mtime!.valueOf());
+
 		const newAttr2Value = { a: 123, b: 'sdf', c: [1,2] };
 
 		await testFS.updateXAttrs(path, {
@@ -87,15 +91,23 @@ it.func = async function(s) {
 		expect(deepEqual(await testFS.getXAttr(path, attr2Name), newAttr2Value)).toBe(true);
 	}
 
-	const file = 'file1';
-	await testFS.writeTxtFile(file, '');
+	const file1 = 'file1';
+	await testFS.writeTxtFile(file1, '');
+	await testforPath(file1);
+	expect((await testFS.stat(file1)).size).toBe(0);
+	expect(await testFS.readTxtFile(file1)).toBe('');
 
-	await testforPath(file);
+	const file2 = 'file2';
+	const file2txt = 'non-empty content';
+	await testFS.writeTxtFile(file2, file2txt);
+	await testforPath(file2);
+	expect((await testFS.stat(file2)).size).toBe(file2txt.length);
+	expect(await testFS.readTxtFile(file2)).toBe(file2txt);
 
 	const folder = 'folder1';
 	await testFS.makeFolder(folder);
-
 	await testforPath(folder);
+	expect((await testFS.listFolder(folder)).length).toBe(0);
 
 };
 specs.its.push(it);

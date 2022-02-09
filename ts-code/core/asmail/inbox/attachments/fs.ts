@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 3NSoft Inc.
+ Copyright (C) 2016 - 2019, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,16 +12,17 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { Storage, NodesContainer, StorageGetter, FolderInfoWithAttrs }
-	from '../../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage, NodesContainer, StorageGetter, FolderInJSON } from '../../../../lib-client/3nstorage/xsp-fs/common';
 import { XspFS } from '../../../../lib-client/3nstorage/xsp-fs/fs';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { MsgOnDisk } from '../msg-on-disk';
 
 type FSType = web3n.files.FSType;
 type ReadonlyFS = web3n.files.ReadonlyFS;
+
 
 class AttachmentStore implements Storage {
 
@@ -70,13 +71,15 @@ class AttachmentStore implements Storage {
 Object.freeze(AttachmentStore.prototype);
 Object.freeze(AttachmentStore);
 
+
 export function fsForAttachments(
-	msg: MsgOnDisk, rootJson: FolderInfoWithAttrs, storages: StorageGetter,
+	msg: MsgOnDisk, rootJson: FolderInJSON, storages: StorageGetter,
 	cryptor: AsyncSBoxCryptor
 ): ReadonlyFS {
 	const storage = new AttachmentStore(msg, storages, cryptor);
 	const fs = XspFS.fromASMailMsgRootFromJSON(storage, rootJson, 'attachments');
 	return fs;
 }
+
 
 Object.freeze(exports);

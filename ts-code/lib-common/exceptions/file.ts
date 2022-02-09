@@ -28,7 +28,8 @@ export const Code: web3n.files.exceptionCode = {
 	ioError: 'EIO',
 	concurrentUpdate: 'concurrent-update',
 	parsingError: 'parsing-error',
-	notImplemented: 'ENOSYS'
+	notImplemented: 'ENOSYS',
+	isEndless: 'is-endless',
 };
 Object.freeze(Code);
 
@@ -72,6 +73,8 @@ export function makeFileException(
 		err.parsingError = true;
 	} else if (code === Code.notImplemented) {
 		err.notImplemented = true;
+	} else if (code === Code.isEndless) {
+		err.isEndless = true;
 	}
 	return err;
 }

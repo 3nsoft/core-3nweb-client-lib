@@ -166,17 +166,16 @@ export class LocalObj {
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, undefined,
 			this.objSegsGetterFromDisk);
-		// this.verObjs.set(version, obj);
-		await write$.pipe(
-			tap(undefined,
-				err => {
-					if (this.verObjs.get(version) === obj) {
-						this.verObjs.delete(version);
-					}
-				}),
-			flatTap(undefined, undefined,
-				() => this.status.setNewCurrentVersion(version, obj.getBaseVersion()))
-		).toPromise();
+		try {
+			await write$.toPromise();
+		} catch (err) {
+			if (this.verObjs.get(version) === obj) {
+				this.verObjs.delete(version);
+			}
+			throw err;
+		}
+		this.verObjs.set(version, obj);
+		await this.status.setNewCurrentVersion(version, obj.getBaseVersion());
 		this.scheduleGC(this);
 	}
 

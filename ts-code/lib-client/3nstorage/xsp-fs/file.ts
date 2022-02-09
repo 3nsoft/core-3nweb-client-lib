@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
@@ -37,34 +38,6 @@ type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 
-export async function readBytesFrom(
-	src: FileByteSource, start: number|undefined, end: number|undefined
-): Promise<Uint8Array|undefined> {
-	if ((typeof start === 'number') && (start < 0)) { throw new Error(
-		`Parameter start has bad value: ${start}`); }
-	if ((typeof end === 'number') && (end < 0)) { throw new Error(
-		`Parameter end has bad value: ${end}`); }
-	const size = await src.getSize();
-	if (typeof size !== 'number') { throw new Error(
-		'File size is not known.'); }
-	if (size === 0) { return; }
-	if (typeof start === 'number') {
-		if (start >= size) { return; }
-		if (typeof end === 'number') {
-			end = Math.min(size, end);
-			if (end <= start) { return; }
-		} else {
-			end = size;
-		}
-		if (!src.seek) { throw new Error('Byte source is not seekable.'); }
-		await src.seek(start);
-		const bytes = await src.read(end - start);
-		return bytes;
-	} else {
-		const bytes = await src.read(undefined);
-		return bytes;
-	}
-}
 
 export class FileObject implements WritableFile, Linkable {
 
@@ -114,11 +87,14 @@ export class FileObject implements WritableFile, Linkable {
 
 	async stat(): Promise<Stats> {
 		if (!this.v.node) { throw makeFileException(excCode.notFound, this.name); }
-		const { src } = await this.v.node.readSrc();
+		const attrs = this.v.node.getAttrs();
 		const stat: Stats = {
 			writable: this.writable,
-			size: await src.getSize(),
-			version: this.v.node.version
+			size: this.v.node.size,
+			version: this.v.node.version,
+			isFile: true,
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
 		};
 		return stat;
 	}
@@ -272,9 +248,8 @@ class V implements WritableFileVersionedAPI {
 	async readBytes(
 		start?: number, end?: number
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
-		const { src, version } = await this.getByteSource();
-		const bytes = await readBytesFrom(src, start, end);
-		return { bytes, version };
+		if (!this.node) { throw makeFileException(excCode.notFound, this.name); }
+		return await this.node.readBytes(start, end);
 	}
 
 	async readTxt(): Promise<{ txt: string; version: number; }> {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2018, 2020 3NSoft Inc.
+ Copyright (C) 2018, 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,9 +12,10 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { SegmentsWriter, Subscribe, makeEncryptingByteSinkWithAttrs, ByteSink } from "xsp-files";
+import { SegmentsWriter, Subscribe, ByteSink, makeEncryptingByteSink } from "xsp-files";
 import { byteLengthIn } from "../buffer-utils";
 
 type FileByteSink = web3n.files.FileByteSink;
@@ -63,76 +64,6 @@ export async function appendFiniteSink(
 	await sink.splice(initSize, 0, bytes);
 	if (closeSink) {
 		await sink.done();
-	}
-}
-
-export function encryptBytesToSinkProc(
-	bytes: Uint8Array|Uint8Array[], attrBytes: Buffer, segWriter: SegmentsWriter
-): Subscribe {
-	const { sink, sub } = makeEncryptingByteSinkWithAttrs(segWriter);
-	const writeToSink = async () => {
-		try {
-			await sink.writeAttrs(attrBytes);
-			if (Array.isArray(bytes)) {
-				await writeAllByteArrsToSink(bytes, sink);
-			} else {
-				await writeByteArrToSink(bytes, sink);
-			}
-			await sink.done();
-		} catch (err) {
-			await sink.done(err);
-		} finally {
-			segWriter.destroy();
-		}
-	};
-	return (obs, backpressure) => {
-		const unsub = sub(obs, backpressure);
-		writeToSink();
-		return unsub;
-	};
-}
-
-export function encryptAttrsToSinkProc(
-	attrBytes: Buffer, segWriter: SegmentsWriter,
-	baseAttrsSize: number|undefined
-): Subscribe {
-	const { sink, sub } = makeEncryptingByteSinkWithAttrs(
-		segWriter, baseAttrsSize);
-	const writeToSink = async () => {
-		try {
-			await sink.writeAttrs(attrBytes);
-			await sink.done();
-		} catch (err) {
-			await sink.done(err);
-		} finally {
-			segWriter.destroy();
-		}
-	};
-	return (obs, backpressure) => {
-		const unsub = sub(obs, backpressure);
-		writeToSink();
-		return unsub;
-	};
-}
-
-async function writeByteArrToSink(
-	bytes: Uint8Array, sink: ByteSink
-): Promise<void> {
-	await sink.setSize(bytes.length);
-	await sink.freezeLayout();
-	await sink.write(0, bytes);
-}
-
-async function writeAllByteArrsToSink(
-	bytes: Uint8Array[], sink: ByteSink
-): Promise<void> {
-	await sink.setSize(byteLengthIn(bytes));
-	await sink.freezeLayout();
-	let pos = 0;
-	for (const arr of bytes) {
-		if (arr.length === 0) { continue; }
-		await sink.write(pos, arr);
-		pos += arr.length;
 	}
 }
 

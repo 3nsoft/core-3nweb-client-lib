@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 3NSoft Inc.
+ Copyright (C) 2017, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,10 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { deserializeFolderInfo, serializeFolderInfo }
-	from '../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
-import { FolderInfo, NodeInfo }
-	from '../../lib-client/3nstorage/xsp-fs/folder-node';
+import { parseFolderInfo, serializeFolderInfo } from '../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
+import { FolderInfo, NodeInfo } from '../../lib-client/3nstorage/xsp-fs/folder-node';
 import * as random from '../../lib-common/random-node';
 import { BytesFIFOBuffer } from '../../lib-common/byte-streaming/bytes-fifo-buffer';
 import { bytesEqual } from '../libs-for-tests/bytes-equal';
@@ -63,20 +61,20 @@ describe('Folder node serialization', () => {
 		expect(bytes.length).toBeGreaterThan(1);
 	});
 
-	it('function deserializeFolderInfo assembles empty folder info', () => {
+	it('function parseFolderInfo assembles empty folder info', () => {
 		const buf = new BytesFIFOBuffer();
 		serializeFolderInfo(emptyFI)
 		.forEach(chunk => buf.push(chunk));
-		let info = deserializeFolderInfo(buf.getBytes(undefined)!);
+		let info = parseFolderInfo(buf.getBytes(undefined)!);
 		expect(typeof info.nodes).toBe('object');
 		expect(Object.values(info.nodes).length).toBe(0);
 	});
 
-	it('function deserializeFolderInfo assembles non-empty folder info', () => {
+	it('function parseFolderInfo assembles non-empty folder info', () => {
 		const buf = new BytesFIFOBuffer();
 		serializeFolderInfo(f1)
 		.forEach(chunk => buf.push(chunk));
-		let info = deserializeFolderInfo(buf.getBytes(undefined)!);
+		let info = parseFolderInfo(buf.getBytes(undefined)!);
 		expect(typeof info.nodes).toBe('object');
 		expect(Object.values(info.nodes).length).toBe(2);
 		compareNodeInfos(info.nodes[fileNode1.name], fileNode1);

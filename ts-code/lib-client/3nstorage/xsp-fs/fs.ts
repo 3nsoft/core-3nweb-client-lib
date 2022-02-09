@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,9 +21,9 @@
  */
 
 import { makeFileException, Code as excCode, FileException } from '../../../lib-common/exceptions/file';
-import { FolderNode, FolderLinkParams, FolderInfoWithAttrs } from './folder-node';
+import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
-import { FileObject, readBytesFrom } from './file';
+import { FileObject } from './file';
 import { Storage, NodeType } from './common';
 import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../../files';
 import { selectInFS } from '../../files-select';
@@ -33,7 +33,6 @@ import { utf8 } from '../../../lib-common/buffer-utils';
 import { Observer as RxObserver, from } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 import { NodeInFS } from './node-in-fs';
-import { EntityAttrs } from '../../files/file-attrs';
 
 function splitPathIntoParts(path: string): string[] {
 	return posix.resolve('/', path).split('/').filter(part => !!part);
@@ -41,7 +40,8 @@ function splitPathIntoParts(path: string): string[] {
 
 function setExcPath(path: string): (exc: FileException) => never {
 	return (exc: FileException): never => {
-		if (exc.notFound || exc.notDirectory || exc.alreadyExists || exc.notFile) {
+		if (exc.notFound || exc.notDirectory || exc.alreadyExists
+		|| exc.notFile) {
 			exc.path = path;
 		}
 		throw exc;
@@ -151,7 +151,7 @@ export class XspFS implements WritableFS {
 	}
 
 	static fromASMailMsgRootFromJSON(
-		storage: Storage, folderJson: FolderInfoWithAttrs, rootName?: string
+		storage: Storage, folderJson: FolderInJSON, rootName?: string
 	): ReadonlyFS {
 		const fs = new XspFS(storage, false, rootName);
 		fs.v.root = FolderNode.rootFromJSON(storage, rootName, folderJson);
@@ -241,25 +241,23 @@ export class XspFS implements WritableFS {
 
 	async stat(path: string): Promise<Stats> {
 		const node = await this.v.get(path);
+		const attrs = node.getAttrs();
+		const stats: Stats = {
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
+			version: node.version,
+			writable: this.writable,
+		};
 		if (node.type === 'file') {
-			const { src, version } = await (node as FileNode).readSrc();
-			return {
-				isFile: true,
-				writable: this.writable,
-				size: await src.getSize(),
-				version
-			};
+			stats.size = (node as FileNode).size;
+			stats.isFile = true;
+			return stats;
 		} else if (node.type === 'folder') {
-			return {
-				isFolder: true,
-				writable: this.writable,
-				version: (node as FolderNode).version
-			};
+			stats.isFolder = true;
+			return stats;
 		} else if (node.type === 'link') {
-			return {
-				writable: false,
-				isLink: true
-			};
+			stats.isLink = true;
+			return stats;
 		} else {
 			throw new Error(`Unknown type of fs node`);
 		}
@@ -573,14 +571,14 @@ class V implements WritableFSVersionedAPI {
 		return file;
 	}
 
-	async get(path: string): Promise<NodeInFS<any, EntityAttrs>> {
+	async get(path: string): Promise<NodeInFS<any>> {
 		const { fileName, folderPath } = split(path);
 		const folder = await this.root.getFolderInThisSubTree(folderPath, false)
 		.catch(setExcPath(path));
 		if (fileName === undefined) { return this.root; }
 		const node = await folder.getNode(undefined, fileName)
 		.catch(setExcPath(path));
-		return node! as NodeInFS<any, EntityAttrs>;
+		return node! as NodeInFS<any>;
 	}
 
 	async updateXAttrs(path: string, changes: XAttrsChanges): Promise<number> {
@@ -625,9 +623,7 @@ class V implements WritableFSVersionedAPI {
 		path: string, start?: number, end?: number
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
 		const file = await this.getOrCreateFile(path, {});
-		const { src, version } = await file.readSrc();
-		const bytes = await readBytesFrom(src, start, end);
-		return { bytes, version };
+		return await file.readBytes(start, end);
 	}
 
 	writeTxtFile(

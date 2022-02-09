@@ -39,9 +39,9 @@ it.func = async function(s) {
 	): void {
 		const section = l.sections[sectionInd];
 		if (section) {
-			expect(section.src).toBe(src, `wrong source in section ${sectionInd}`);
-			expect(section.ofs).toBe(ofs, `wrong offset in section ${sectionInd}`);
-			expect(section.len).toBe(len, `wrong length in section ${sectionInd}`);
+			expect(section.src).withContext(`wrong source in section ${sectionInd}`).toBe(src);
+			expect(section.ofs).withContext(`wrong offset in section ${sectionInd}`).toBe(ofs);
+			expect(section.len).withContext(`wrong length in section ${sectionInd}`).toBe(len);
 		} else {
 			fail(`section index ${sectionInd} is not in layout with ${l.sections.length} sections`);
 		}
@@ -55,7 +55,6 @@ it.func = async function(s) {
 	expect(size).toBe(0);
 
 	let layout = await sink.showLayout();
-	expect(layout.base).toBeFalsy();
 	expect(Array.isArray(layout.sections)).toBeTruthy();
 	expect(layout.sections.length).toBe(0);
 
@@ -88,7 +87,7 @@ it.func = async function(s) {
 	expect(bytesEqual(content!.subarray(0, 10000), chunk1)).toBe(true);
 	expect(bytesEqual(content!.subarray(11000), chunk2)).toBe(true);
 
-};
+}; 
 specs.its.push(it);
 
 

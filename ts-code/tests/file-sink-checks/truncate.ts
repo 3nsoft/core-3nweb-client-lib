@@ -54,7 +54,6 @@ it.func = async function(s) {
 	expect(size).toBe(0);
 
 	let layout = await sink.showLayout();
-	expect(layout.base).toBeFalsy();
 	expect(Array.isArray(layout.sections)).toBeTruthy();
 	expect(layout.sections.length).toBe(0);
 

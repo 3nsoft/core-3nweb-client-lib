@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,11 +12,12 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { SingleProc, DeduppedRunner } from '../../../lib-common/processes';
+import { DeduppedRunner } from '../../../lib-common/processes';
 import { join } from 'path';
 import { makeStorageException } from '../../../lib-client/3nstorage/exceptions';
 import { readJSONInfoFileIn } from '../common/obj-info-file';
@@ -105,7 +106,6 @@ export class ObjStatus {
 	async setNewCurrentVersion(
 		newVersion: number, baseVer: number|undefined
 	): Promise<void> {
-		this.status.currentVersion = newVersion;
 		if (baseVer !== undefined) {
 			// base->diff links should be added before removals
 			addBaseToDiffLinkInStatus(this.status, newVersion, baseVer);
@@ -113,6 +113,7 @@ export class ObjStatus {
 		if (typeof this.status.currentVersion === 'number') {
 			rmNonArchVersionsIn(this.status, this.status.currentVersion);
 		}
+		this.status.currentVersion = newVersion;
 		await this.saveProc.trigger();
 	}
 

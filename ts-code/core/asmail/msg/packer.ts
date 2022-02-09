@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { secret_box as sbox } from 'ecma-nacl';
 import { SegmentsWriter, KEY_LENGTH, makeSegmentsWriter, AsyncSBoxCryptor, idToHeaderNonce, makeObjSourceFromArrays, makeEncryptingObjSource, ObjSource, ByteSource }
@@ -20,9 +21,8 @@ import { SegmentsWriter, KEY_LENGTH, makeSegmentsWriter, AsyncSBoxCryptor, idToH
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
 import * as random from '../../../lib-common/random-node';
 import { base64, base64urlSafe, utf8 } from '../../../lib-common/buffer-utils';
-import { FolderInfoWithAttrs } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { serializeFolderInfo }
-	from '../../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
+import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { serializeFolderInfo } from '../../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
 import { copy } from '../../../lib-common/json-utils';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
 import { MsgEnvelope, SuggestedNextKeyPair, MetaForNewKey,
@@ -53,7 +53,7 @@ export interface PackJSON {
 
 export interface MsgObj {
 	json?: any;
-	folder?: FolderInfoWithAttrs;
+	folder?: FolderInJSON;
 	file?: PathInMsg;
 	/**
 	 * This is object's id in the message
@@ -183,7 +183,7 @@ export class MsgPacker {
 	}
 
 	private addFileInto(
-		folderInfo: FolderInfoWithAttrs, fName: string, file: PathInMsg
+		folderInfo: FolderInJSON, fName: string, file: PathInMsg
 	): void {
 		const id = this.generateObjId();
 		const key = random.bytesSync(KEY_LENGTH);
@@ -197,9 +197,9 @@ export class MsgPacker {
 	}
 
 	private async addFolderInto(
-		outerFolder: FolderInfoWithAttrs, fName: string, fs: FS, fsPath: PathInMsg
+		outerFolder: FolderInJSON, fName: string, fs: FS, fsPath: PathInMsg
 	): Promise<void> {
-		const folder: FolderInfoWithAttrs = { nodes: {} };
+		const folder: FolderInJSON = { nodes: {}, ctime: outerFolder.ctime };
 		const list = await fs.listFolder('.');
 		for (const entry of list) {
 			const fName = entry.name;
@@ -355,7 +355,7 @@ export class MsgPacker {
 			`Attachments are already set.`); }
 
 		// attachments folder json to insert into main
-		const attachments: FolderInfoWithAttrs = { nodes: {} };
+		const attachments: FolderInJSON = { nodes: {}, ctime: Date.now() };
 
 		// populate attachments json
 		const path: PathInMsg = { start: 'attachments', path: [] };
@@ -420,7 +420,8 @@ export class MsgPacker {
 
 		const segWriter = await makeSegmentsWriter(
 			obj.key, idToHeaderNonce(obj.id), 0,
-			{ type: 'new', segSize: this.segSizeIn256bs }, random.bytes, cryptor);
+			{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
+			random.bytes, cryptor);
 
 		// make source that inserts message key pack into header
 		return makeMainObjSrc(msgKeyPack, bytes, segWriter);
@@ -493,7 +494,7 @@ export class MsgPacker {
 		} else {
 			segWriter = await makeSegmentsWriter(
 				obj.key, idToHeaderNonce(obj.id), 0,
-				{ type: 'new', segSize: this.segSizeIn256bs },
+				{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
 				random.bytes, cryptor);
 		}
 

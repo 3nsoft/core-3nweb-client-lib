@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { HeaderChunkInfo, SegsChunk } from "./file-layout";
 import { uintFrom4Bytes, packUintTo4Bytes, uintFrom8Bytes, packUintTo8Bytes } from "../big-endian";
@@ -28,8 +29,9 @@ namespace headerChunkInfo {
 		return buf;
 	}
 
-	export function fromBytes(b: Uint8Array, i: number):
-			{ hInfo: HeaderChunkInfo; bytesRead: number; } {
+	export function fromBytes(
+		b: Uint8Array, i: number
+	): { hInfo: HeaderChunkInfo; bytesRead: number; } {
 		let bytesRead = 0;
 		const len = uintFrom4Bytes(b, i + bytesRead);
 		bytesRead += 4;
@@ -79,8 +81,9 @@ namespace segsChunkInfo {
 		return buf;
 	}
 
-	export function fromBytes(b: Uint8Array, i: number):
-			{ sInfo: SegsChunk; bytesRead: number; } {
+	export function fromBytes(
+		b: Uint8Array, i: number
+	): { sInfo: SegsChunk; bytesRead: number; } {
 		let bytesRead = 0
 		const flag = b[i + bytesRead];
 		bytesRead += 1;

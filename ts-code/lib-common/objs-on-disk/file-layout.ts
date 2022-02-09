@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { V1_FILE_START, layoutV1 } from "./v1-obj-file-format";
 import { assert } from "../assert";
@@ -83,8 +84,9 @@ export class ObjVersionBytesLayout {
 		return new ObjVersionBytesLayout(V1_FILE_START.length + 8);
 	}
 
-	static fromV1Bytes(layoutOfs: number, layoutBytes: Buffer):
-			ObjVersionBytesLayout {
+	static fromV1Bytes(
+		layoutOfs: number, layoutBytes: Buffer
+	): ObjVersionBytesLayout {
 		const attrs = layoutV1.fromBytes(layoutBytes, 0);
 		const layout = new ObjVersionBytesLayout(layoutOfs);
 		layout.headerChunk = attrs.headerChunk;
@@ -241,8 +243,9 @@ export class ObjVersionBytesLayout {
 		this.bytesEnd += len;
 	}
 
-	addBaseSegsOnFile(thisVerOfs: number, baseVerOfs: number, len: number,
-			fileOfs: number): void {
+	addBaseSegsOnFile(
+		thisVerOfs: number, baseVerOfs: number, len: number, fileOfs: number
+	): void {
 		this.ensureExpectedFileOfs(fileOfs);
 		assert(Number.isInteger(thisVerOfs) && (thisVerOfs >= 0));
 		assert(Number.isInteger(baseVerOfs) && (baseVerOfs >= 0));
@@ -261,8 +264,9 @@ export class ObjVersionBytesLayout {
 Object.freeze(ObjVersionBytesLayout.prototype);
 Object.freeze(ObjVersionBytesLayout);
 
-function layoutSectionsToSegsChunks(sections: Layout['sections']):
-		SegsChunk[] {
+function layoutSectionsToSegsChunks(
+	sections: Layout['sections']
+): SegsChunk[] {
 	let expectedThisVerOfs = 0;
 	const chunks: SegsChunk[] = [];
 	for (const section of sections) {
@@ -280,8 +284,9 @@ function layoutSectionsToSegsChunks(sections: Layout['sections']):
 	return chunks;
 }
 
-function layoutSectionToSegsChunk(section: LayoutBaseSection|LayoutNewSection):
-		SegsChunk {
+function layoutSectionToSegsChunk(
+	section: LayoutBaseSection|LayoutNewSection
+): SegsChunk {
 	if (section.src === 'base') {
 		return {
 			type: 'base',
@@ -321,8 +326,9 @@ function combineChunksOnDiskWithLayout(
 	return layout;
 }
 
-function addNewSegsChunkTo(segsChunks: SegsChunk[],
-		newChunk: NewSegsChunkOnDisk): void {
+function addNewSegsChunkTo(
+	segsChunks: SegsChunk[], newChunk: NewSegsChunkOnDisk
+): void {
 	const newChunkEnd = newChunk.thisVerOfs + newChunk.len;
 	// find insertion index
 	let insertInd = 0;
@@ -377,8 +383,9 @@ function addNewSegsChunkTo(segsChunks: SegsChunk[],
 	insertOrMergeChunkAt(segsChunks, insertInd, newChunk);
 }
 
-function insertOrMergeChunkAt(segsChunks: SegsChunk[], insertInd: number,
-		chunk: OnDiskChunk): void {
+function insertOrMergeChunkAt(
+	segsChunks: SegsChunk[], insertInd: number, chunk: OnDiskChunk
+): void {
 	let left = ((insertInd > 0) ? segsChunks[insertInd-1] : undefined);
 	let right = ((insertInd < segsChunks.length) ?
 		segsChunks[insertInd] : undefined);
@@ -407,8 +414,9 @@ function canMergeChunks(a: SegsChunk, b: SegsChunk): boolean {
 	return true;
 }
 
-function addBaseSegsChunkTo(segsChunks: SegsChunk[],
-		baseChunk: BaseSegsChunkOnDisk): void {
+function addBaseSegsChunkTo(
+	segsChunks: SegsChunk[], baseChunk: BaseSegsChunkOnDisk
+): void {
 	const baseChunkEnd = baseChunk.thisVerOfs + baseChunk.len;
 	// find insertion index
 	let insertInd = 0;

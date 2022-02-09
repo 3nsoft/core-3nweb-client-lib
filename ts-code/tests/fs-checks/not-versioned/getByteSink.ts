@@ -17,8 +17,7 @@
 
 import { SpecDescribe } from '../../libs-for-tests/spec-module';
 import { bytesSync as randomBytes } from '../../../lib-common/random-node';
-import { bytesEqual }
-	from '../../libs-for-tests/bytes-equal';
+import { bytesEqual } from '../../libs-for-tests/bytes-equal';
 import { makeContinuousSink } from '../../../lib-common/obj-streaming/sink-utils';
 import { SpecIt } from '../test-utils';
 

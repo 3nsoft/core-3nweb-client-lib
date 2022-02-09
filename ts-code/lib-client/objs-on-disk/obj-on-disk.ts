@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { joinByteArrs } from '../../lib-common/buffer-utils';
 import { ObjId } from '../3nstorage/xsp-fs/common';
@@ -84,8 +85,10 @@ export class ObjOnDisk {
 			objId, version, objFile, downloader, false, getBase);
 		const write$ = FileWritingProc.makeFor(objFile, encSub)
 		.pipe(
-			tap(undefined, undefined, () => {
-				obj.readable = true;
+			tap({
+				complete: () => {
+					obj.readable = true;
+				}
 			}),
 			flatTap(undefined, () => objFile.removeFile()),
 			allowOnlySingleStart()
@@ -136,12 +139,11 @@ export class ObjOnDisk {
 		for (const chunk of segsLocations) {
 			if ((chunk.type === 'new-on-disk')
 			|| (chunk.type === 'base-on-disk')) {
-				const chunkBytes = await this.objFile.readSegs(
-					chunk.thisVerOfs, chunk.len);
-					bytesAndChunks.push(...chunkBytes);
+				bytesAndChunks.push(...(
+					await this.objFile.readSegs(chunk.thisVerOfs, chunk.len)));
 			} else if (chunk.type === 'base') {
-				const baseBytesAndChunks = await this.readBaseBytesFromOtherFilesOnDisk(chunk);
-				bytesAndChunks.push(...baseBytesAndChunks);
+				bytesAndChunks.push(...(
+					await this.readBaseBytesFromOtherFilesOnDisk(chunk)));
 			} else {
 				bytesAndChunks.push(chunk);
 			}

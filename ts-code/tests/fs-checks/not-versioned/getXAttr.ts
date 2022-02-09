@@ -75,6 +75,11 @@ it.func = async function(s) {
 
 	await testforPath(file);
 
+	const file2 = 'file2';
+	await testFS.writeTxtFile(file2, 'non-empty');
+
+	await testforPath(file2);
+
 	const folder = 'folder1';
 	await testFS.makeFolder(folder);
 

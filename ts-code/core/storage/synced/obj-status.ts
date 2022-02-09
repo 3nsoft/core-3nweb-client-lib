@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,9 +12,10 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { SingleProc, DeduppedRunner } from '../../../lib-common/processes';
+import { DeduppedRunner } from '../../../lib-common/processes';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import * as fs from '../../../lib-common/async-fs-node';
 import { join } from 'path';
@@ -259,7 +260,6 @@ function rmNonArchVersionsIn(status: ObjStatusInfo, ver: number): void {
 // 	status: ObjStatusInfo, newVersion: number, baseVer: number|undefined
 // ): void {
 // 	if (status.isArchived) { return; }
-// 	status.versions.current = newVersion;
 // 	if (status.syncState === 'synced') {
 // 		status.syncState = 'unsynced';
 // 	}
@@ -270,6 +270,7 @@ function rmNonArchVersionsIn(status: ObjStatusInfo, ver: number): void {
 // 	if (status.versions.current) {
 // 		rmNonArchVersionsIn(status, status.versions.current);
 // 	}
+// 	status.versions.current = newVersion;
 // }
 
 // export function addConflictingRemoteVersionTo(

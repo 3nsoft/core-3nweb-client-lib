@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,125 +12,112 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
  * reliance set.
  */
 
-import { NodeInFS, NodeCrypto } from './node-in-fs';
+import { NodeInFS } from './node-in-fs';
 import { LinkParameters } from '../../files';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { base64, byteLengthIn } from '../../../lib-common/buffer-utils';
-import { defer, sleep } from '../../../lib-common/processes';
-import { idToHeaderNonce, Subscribe, ObjSource, makeEncryptingByteSinkWithAttrs, SegmentsWriter, ByteSource } from 'xsp-files';
+import { defer } from '../../../lib-common/processes';
+import { idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import { assert } from '../../../lib-common/assert';
-import { FileBytes } from '../../files/file-source';
-import { FileSink } from '../../files/file-sink';
-import { FileAttrs, AttrsHolder } from '../../files/file-attrs';
-import { RWFileLayout } from '../../files/file-layout';
+import { CommonAttrs, XAttrs } from './attrs';
 import { makeVersionMismatchExc } from '../../../lib-common/exceptions/file';
+import { NodePersistance, ReadonlyPayload } from './node-persistence';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
+type XAttrsChanges = web3n.files.XAttrsChanges;
 
-class FileCrypto extends NodeCrypto {
+interface FileAttrs {
+	attrs: CommonAttrs;
+	size: number;
+	xattrs?: XAttrs;
+}
+
+async function fileAttrsFrom(payload: ReadonlyPayload): Promise<FileAttrs> {
+	const attrs = payload.getAttrs();
+	const xattrs = await payload.getXAttrs();
+	return { attrs: CommonAttrs.fromAttrs(attrs), size: attrs.size, xattrs };
+}
+
+
+class FilePersistance extends NodePersistance {
 
 	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
 		super(zNonce, key, cryptor);
 		Object.seal(this);
 	}
 
-	async getAttrsAndByteSrc(
-		src: ObjSource
-	): Promise<{ attrs?: AttrsHolder<FileAttrs>; attrsByteSize?: number;
-			byteSrc: ByteSource; }> {
-		const { byteSrc, attrsBytes } = await super.getAttrsAndByteSrc(src);
-		if (attrsBytes) {
-			return {
-				byteSrc,
-				attrs: AttrsHolder.fromBytesReadonly(attrsBytes),
-				attrsByteSize: attrsBytes.length
-			};
-		} else {
-			return { byteSrc };
-		}
+	async getAttrs(objSrc: ObjSource): Promise<FileAttrs> {
+		const payload = await super.readonlyPayload(objSrc);
+		return await fileAttrsFrom(payload);
 	}
 
-	async decryptedBytesSource(
-		src: ObjSource
-	): Promise<{ fileSrc: FileByteSource; attrs?: AttrsHolder<FileAttrs>; }> {
-		const { byteSrc, attrs } = await this.getAttrsAndByteSrc(src);
-		const fileSrc = await FileBytes.from(byteSrc, attrs);
+	async getFileSource(objSrc: ObjSource, getAttrs = false): Promise<{
+		src: FileByteSource; fileAttrs?: FileAttrs;
+	}> {
+		const payload = await this.readonlyPayload(objSrc);
+		const src = payload.makeFileByteSource();
+		return (getAttrs ?
+			{ src, fileAttrs: await fileAttrsFrom(payload) } :
+			{ src });
+	}
 
-		return { attrs, fileSrc };
+	async readBytes(
+		objSrc: ObjSource, start: number|undefined, end: number|undefined,
+		getAttrs = false
+	): Promise<{ bytes?: Uint8Array; fileAttrs?: FileAttrs; }> {
+		if ((typeof start === 'number') && (start < 0)) { throw new Error(
+			`Parameter start has bad value: ${start}`); }
+		if ((typeof end === 'number') && (end < 0)) { throw new Error(
+			`Parameter end has bad value: ${end}`); }
+		const payload = await this.readonlyPayload(objSrc);
+		const size = payload.getAttrs().size;
+		if (start === undefined) {
+			start = 0;
+			end = size;
+		} else if (start >= size) {
+			return (getAttrs ? { fileAttrs: await fileAttrsFrom(payload) } : {});
+		}
+		if (typeof end === 'number') {
+			end = Math.min(size, end);
+			if (end <= start) {
+				return (getAttrs ?
+					{ fileAttrs: await fileAttrsFrom(payload) } : {});
+			}
+		} else {
+			end = size;
+		}
+		const bytes = await payload.readSomeContentBytes(start, end);
+		return (getAttrs ?
+			{ bytes, fileAttrs: await fileAttrsFrom(payload) } :
+			{ bytes });
 	}
 
 	async saveBytes(
-		bytes: Uint8Array|Uint8Array[], version: number, attrs: AttrsHolder<any>
+		bytes: Uint8Array|Uint8Array[], version: number,
+		attrs: CommonAttrs, xattrs: XAttrs|undefined
 	): Promise<Subscribe> {
-		attrs.setContinuousFileSize(Array.isArray(bytes) ?
-			byteLengthIn(bytes) : bytes.length);
-		return super.saveBytes(bytes, version, attrs);
+		return super.writeWhole(bytes, version, attrs, xattrs);
 	}
 
-	async encryptingByteSink(
-		version: number, attrs: AttrsHolder<FileAttrs>, base: ObjSource|undefined
-	): Promise<{ sinkDef: Promise<FileByteSink>;
-			cancelSinkDef: (err: any) => void; sub: Subscribe; }> {
-		attrs.mtime = Date.now();
-		let writer: SegmentsWriter;
-		let baseAttrsSize: number|undefined;
-		let layout: RWFileLayout;
-		let initLayoutOfs: number|undefined;
-		if (base) {
-			writer = await this.segWriterWithBase(version, base);
-			const { byteSrc: baseSrc, attrs: baseAttrs, attrsByteSize } =
-				await this.getAttrsAndByteSrc(base);
-			baseAttrsSize = (baseAttrs ? attrsByteSize : 0);
-			if (baseAttrs) {
-				initLayoutOfs = baseAttrs.getFileSize();
-				if (typeof initLayoutOfs === 'number') {
-					layout = RWFileLayout.orderedWithBaseSize(initLayoutOfs);
-				} else {
-					initLayoutOfs = baseAttrs.getFileLayoutOfs();
-					if (typeof initLayoutOfs !== 'number') {
-						throw new Error(`File attributes have neither file size, nor pointer to layout`);
-					}
-					layout = await RWFileLayout.readFromSrc(
-						baseSrc, initLayoutOfs);
-				}
-			} else {
-				const { size } = await baseSrc.getSize();
-				initLayoutOfs = size;
-				layout = RWFileLayout.orderedWithBaseSize(size);
-			}
-		} else {
-			writer = await this.segWriter(version);
-			baseAttrsSize = undefined;
-			initLayoutOfs = undefined;
-			layout = RWFileLayout.orderedWithBaseSize(0);
-		}
-		const { sink, sub: originalSub } = makeEncryptingByteSinkWithAttrs(
-			writer, baseAttrsSize);
-		const deferredFileSink = defer<FileByteSink>();
-		return {
-			sub: obs => {
-				const unsub = originalSub(obs);
-				FileSink.from(sink, attrs, layout).then(
-					sink => deferredFileSink.resolve(sink),
-					err => deferredFileSink.reject(err));
-				return unsub;
-			},
-			sinkDef: deferredFileSink.promise,
-			cancelSinkDef: deferredFileSink.reject
-		};
+	async getFileSink(
+		version: number, attrs: CommonAttrs, xattrs: XAttrs|undefined,
+		base: ObjSource|undefined
+	): Promise<{ sinkPromise: Promise<FileByteSink>; sub: Subscribe; }> {
+		return await super.writableSink(version, attrs, xattrs, base);
 	}
 
 }
-Object.freeze(FileCrypto.prototype);
-Object.freeze(FileCrypto);
+Object.freeze(FilePersistance.prototype);
+Object.freeze(FilePersistance);
 
 
 export interface FileLinkParams {
@@ -140,7 +127,9 @@ export interface FileLinkParams {
 }
 
 
-export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
+export class FileNode extends NodeInFS<FilePersistance> {
+
+	private fileSize = 0;
 
 	private constructor(
 		storage: Storage, fileName: string, objId: string, version: number,
@@ -149,7 +138,7 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 		super(storage, 'file', fileName, objId, version, parentId);
 		if (!fileName || !objId) { throw new Error(
 			"Bad file parameter(s) given"); }
-		this.crypto = new FileCrypto(
+		this.crypto = new FilePersistance(
 			idToHeaderNonce(this.objId), key, this.storage.cryptor);
 		Object.seal(this);
 	}
@@ -160,7 +149,7 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 		if (!parentId) { throw new Error("Bad parent id"); }
 		const objId = await storage.generateNewObjId();
 		const file = new FileNode(storage, name, objId, 0, parentId, key);
-		file.attrs = AttrsHolder.makeReadonlyForFile(Date.now());
+		file.attrs = CommonAttrs.makeForTimeNow();
 		return file;
 	}
 
@@ -191,57 +180,94 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 		const src = await storage.getObj(objId);
 		const file = new FileNode(
 			storage, fileName, objId, src.version, parentId, key);
-		const { attrs } = await file.crypto.getAttrsAndByteSrc(src);
-		file.attrs = (attrs ?
-			attrs : AttrsHolder.makeReadonlyForFile(Date.now()));
+		const fileAttrs = await file.crypto.getAttrs(src);
+		file.setUpdatedState(src.version, fileAttrs);
 		return file;
+	}
+
+	private setUpdatedState(version: number, fileAttrs: FileAttrs): void {
+		this.fileSize = fileAttrs.size;
+		super.setUpdatedParams(version, fileAttrs.attrs, fileAttrs.xattrs);
+	}
+
+	get size(): number {
+		return this.fileSize;
 	}
 
 	async readSrc(): Promise<{ src: FileByteSource; version: number; }> {
 		const objSrc = await this.storage.getObj(this.objId);
-		const { fileSrc: src } = await this.crypto.decryptedBytesSource(objSrc);
-		let version: number;
 		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
-			version = objSrc.version;
+			const version = objSrc.version;
 			if (this.version < version) {
-				this.setCurrentVersion(version);
+				const {
+					src, fileAttrs
+				} = await this.crypto.getFileSource(objSrc, true);
+				this.setUpdatedState(version, fileAttrs!);
+				return { src, version };
+			} else {
+				const { src } = await this.crypto.getFileSource(objSrc);
+				return { src, version };
 			}
 		} else {
+			const { src } = await this.crypto.getFileSource(objSrc);
 			// unversioned storage passes undefined version
-			version = (undefined as any);
+			return { src, version: (undefined as any) };
 		}
-		return { src, version };
+	}
+
+	async readBytes(
+		start: number|undefined, end: number|undefined
+	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
+		const objSrc = await this.storage.getObj(this.objId);
+		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
+			const version = objSrc.version;
+			if (this.version < version) {
+				const {
+					bytes, fileAttrs
+				} = await this.crypto.readBytes(objSrc, start, end, true);
+				this.setUpdatedState(version, fileAttrs!);
+				return { bytes, version };
+			} else {
+				const { bytes } = await this.crypto.readBytes(objSrc, start, end);
+				return { bytes, version };
+			}
+		} else {
+			const { bytes } = await this.crypto.readBytes(objSrc, start, end);
+			// unversioned storage passes undefined version
+			return { bytes, version: (undefined as any) };
+		}
 	}
 
 	async writeSink(
-		truncate: boolean|undefined, currentVersion: number|undefined
+		truncate: boolean|undefined, currentVersion: number|undefined,
+		changes?: XAttrsChanges
 	): Promise<{ sink: FileByteSink; version: number; }> {
-		const deferredSink = defer<{ sinkPromise: Promise<FileByteSink>; }>();
-		let newVersion = 0;	// need to set any value to satisfy compiler
+		const deferredSink = defer<Promise<FileByteSink>>();
+		const newSize = defer<number>();
+		let version = 0;	// need to set any value to satisfy compiler
 
 		const completion = this.doChange(false, async () => {
-			const step1 = await this.startMakingSinkInsideChange(
-				truncate, currentVersion
-			).catch(err => {
-				deferredSink.reject(err);
-				throw err;
-			});
-			newVersion = step1.newVersion;
-			deferredSink.resolve({ sinkPromise: step1.sinkDef });
+			const {
+				attrs, xattrs, newVersion, sinkPromise, sub
+			} = await this.startMakingSinkInsideChange(
+				truncate, currentVersion, changes
+			);
+			version = newVersion;
+			deferredSink.resolve(sinkPromise);
 			await this.savingObjInsideChange(
-				step1.attrs, step1.newVersion, step1.sub
-			).catch(err => {
-				step1.cancelSinkDef(err);
-				throw err;
-			});
+				attrs, newSize.promise, xattrs, newVersion, sub
+			);
 		});
 
-		// in case overall completion is never waited, if early error comes
-		completion.catch(noop);
-
-		// explicitly await two steps to get all possible errors
-		const sDef = await deferredSink.promise;	// after await newVersion is set
-		const sink = await sDef.sinkPromise;
+		let sink: FileByteSink = (undefined as any);
+		// race allows to either get sink or threw possible errors from completion
+		await Promise.race([
+			deferredSink.promise.then(async sinkPromise => {
+				sink = await sinkPromise;
+			}),
+			completion
+		]);
+		assert(!!sink);
 
 		// sink's done should await completion of obj saving, and
 		// error in obj saving should cancel sink
@@ -250,44 +276,47 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 		assert(!Object.isFrozen(sink), `Can't mutate frozen sink`);
 		sink.done = async (err?: any): Promise<void> => {
 			if (err) {
+				newSize.resolve(0);
 				await originalDone(err);
+				await completion.catch(noop);
 			} else {
+				const size = await sink.getSize();
+				newSize.resolve(size);
 				await originalDone();
 				await completion;
 			}
 		};
-		return {
-			sink,
-			version: newVersion
-		};
+		return { sink, version };
 	}
 
 	private async startMakingSinkInsideChange(
-		truncate: boolean|undefined, currentVersion: number|undefined
-	): Promise<{ attrs: AttrsHolder<FileAttrs>; newVersion: number;
-			sinkDef: Promise<FileByteSink>; sub: Subscribe;
-			cancelSinkDef: (err: any) => void; }> {
+		truncate: boolean|undefined, currentVersion: number|undefined,
+		changes?: XAttrsChanges
+	): Promise<{
+		attrs: CommonAttrs; xattrs?: XAttrs; newVersion: number; sub: Subscribe;
+		sinkPromise: Promise<FileByteSink>;
+	}> {
 		if ((typeof currentVersion === 'number')
 		&& (this.version !== currentVersion)) {
 			throw makeVersionMismatchExc(this.name);
 		}
-		const newVersion = this.version + 1;
-		const attrs = this.attrs.modifiableCopy();
+		const { attrs, xattrs, newVersion } = super.getParamsForUpdate(changes);
 		const base = ((truncate || (this.version === 0)) ?
 			undefined :
 			await this.storage.getObj(this.objId));
-		const { sinkDef, sub, cancelSinkDef } =
-			await this.crypto.encryptingByteSink(newVersion, attrs, base);
-		return { attrs, newVersion, sinkDef, sub, cancelSinkDef };
+		const {
+			sinkPromise, sub
+		} = await this.crypto.getFileSink(newVersion, attrs, xattrs, base);
+		return { attrs, xattrs, newVersion, sinkPromise, sub };
 	}
 
 	private async savingObjInsideChange(
-		attrs: AttrsHolder<FileAttrs>, newVersion: number, encSub: Subscribe
+		attrs: CommonAttrs, newSize: Promise<number>, xattrs: XAttrs|undefined,
+		newVersion: number, encSub: Subscribe
 	): Promise<void> {
 		await this.storage.saveObj(this.objId, newVersion, encSub);
-		this.setCurrentVersion(newVersion);
-		attrs.setReadonly();
-		this.attrs = attrs;
+		const size = await newSize;
+		this.setUpdatedState(newVersion, { attrs, size, xattrs });
 		this.broadcastEvent({
 			type: 'file-change',
 			path: this.name,
@@ -295,12 +324,19 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 		});
 	}
 
-	save(bytes: Uint8Array|Uint8Array[]): Promise<number> {
+	save(
+		bytes: Uint8Array|Uint8Array[], changes?: XAttrsChanges
+	): Promise<number> {
 		return this.doChange(false, async () => {
-			const newVersion = this.version + 1;
-			const attrs = this.attrs.modifiableCopy();
-			const encSub = await this.crypto.saveBytes(bytes, newVersion, attrs);
-			await this.savingObjInsideChange(attrs, newVersion, encSub);
+			const {
+				attrs, xattrs, newVersion
+			} = super.getParamsForUpdate(changes);
+			const encSub = await this.crypto.saveBytes(
+				bytes, newVersion, attrs, xattrs);
+			const newSize = Promise.resolve(Array.isArray(bytes) ?
+				byteLengthIn(bytes) : bytes.length);
+			await this.savingObjInsideChange(
+				attrs, newSize, xattrs, newVersion, encSub);
 			return this.version;
 		});
 	}
@@ -325,6 +361,7 @@ export class FileNode extends NodeInFS<FileCrypto, FileAttrs> {
 }
 Object.freeze(FileNode.prototype);
 Object.freeze(FileNode);
+
 
 function noop () {}
 

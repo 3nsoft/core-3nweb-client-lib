@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -39,6 +39,7 @@ declare namespace web3n.files {
 		notImplemented?: true;
 		attrsNotEnabledInFS?: true;
 		versionMismatch?: true;
+		isEndless?: true;
 	}
 
 	interface exceptionCode {
@@ -56,6 +57,7 @@ declare namespace web3n.files {
 		concurrentUpdate: 'concurrent-update';
 		parsingError: 'parsing-error';
 		notImplemented: 'ENOSYS';
+		isEndless: 'is-endless';
 	}
 
 	/**
@@ -98,6 +100,11 @@ declare namespace web3n.files {
 		 * File size in bytes.
 		 */
 		size?: number;
+
+		/**
+		 * Flag indicating if file is an endless (unknown place of end) stream.
+		 */
+		isEndless?: boolean;
 
 		/**
 		 * Last content modification time stamp.
@@ -150,12 +157,6 @@ declare namespace web3n.files {
 		 * This returns a promise, resolvable to current read position.
 		 */
 		getPosition(): Promise<number>;
-	}
-
-	interface FileSection {
-		hasContent: boolean;
-		ofs: number;
-		len: number;
 	}
 
 	interface LayoutSection {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,7 +29,6 @@ import { utf8 } from '../../lib-common/buffer-utils';
 import { pipe } from '../../lib-common/byte-streaming/pipe';
 import { DevFileByteSource } from './dev-file-src';
 import { DevFileByteSink } from './dev-file-sink';
-import { fileSrcFromContinuousSrc } from '../files/file-source';
 
 /**
  * This recursively creates folder, or ensures its presence with non-exclusive
@@ -437,7 +436,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			if (fd !== undefined) { await fs.close(fd); }
 		}
 	}
-	
+
 	async getByteSource(path: string): Promise<FileByteSource> {
 		const pathStr = this.fullPath(path);
 		const stats = await fs.lstat(pathStr).catch((e) => {
@@ -445,9 +444,14 @@ export class DeviceFS implements WritableFS, Linkable {
 		});
 		const byteSrc = DevFileByteSource.make(
 			pathStr, this.root.length, stats);
-		return fileSrcFromContinuousSrc(byteSrc);
+		return {
+			getPosition: byteSrc.getPosition,
+			getSize: async () => (await byteSrc.getSize()).size,
+			read: byteSrc.read,
+			seek: byteSrc.seek
+		};
 	}
-	
+
 	async writeBytes(
 		path: string, bytes: Uint8Array, flags = WRITE_NONEXCL_FLAGS
 	): Promise<void> {
@@ -480,7 +484,7 @@ export class DeviceFS implements WritableFS, Linkable {
 		const bytes = utf8.pack(txt);
 		return this.writeBytes(path, bytes, flags);
 	}
-	
+
 	async readTxtFile(path: string): Promise<string> {
 		const bytes = await this.readBytes(path);
 		try {
@@ -490,7 +494,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw makeFileException(excCode.parsingError, path, err);
 		}
 	}
-	
+
 	writeJSONFile(
 		path: string, json: any, flags = WRITE_NONEXCL_FLAGS
 	): Promise<void> {
@@ -507,7 +511,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw makeFileException(excCode.parsingError, path, err);
 		}
 	}
-	
+
 	async deleteFile(path: string): Promise<void> {
 		const pathStr = this.fullPath(path);
 		await fs.unlink(pathStr)
@@ -518,22 +522,22 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw maskPathInExc(this.root.length, e);
 		});
 	}
-	
+
 	makeFolder(path: string, exclusive = false): Promise<void> {
 		const pathSections = splitPathIntoParts(path);
 		return makeFolder(this.root, pathSections, exclusive);
 	}
-	
+
 	checkFolderPresence(path: string, throwIfMissing = false): Promise<boolean> {
 		return checkPresence('folder', this.root,
 			splitPathIntoParts(path), throwIfMissing);
 	}
-	
+
 	checkFilePresence(path: string, throwIfMissing = false): Promise<boolean> {
 		return checkPresence('file', this.root,
 			splitPathIntoParts(path), throwIfMissing);
 	}
-	
+
 	async deleteFolder(path: string, removeContent = false): Promise<void> {
 		const pathStr = this.fullPath(path);
 		try {
@@ -546,7 +550,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw maskPathInExc(this.root.length, e);
 		}
 	}
-	
+
 	async listFolder(folder: string): Promise<ListingEntry[]> {
 		try {
 			const pathStr = this.fullPath(folder, true);
@@ -576,7 +580,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw maskPathInExc(this.root.length, exc);
 		}
 	}
-	
+
 	async move(initPath: string, newPath: string): Promise<void> {
 		const src = splitPathIntoParts(initPath);
 		const dst = splitPathIntoParts(newPath);
@@ -608,7 +612,7 @@ export class DeviceFS implements WritableFS, Linkable {
 		return checkPresence('link', this.root,
 			splitPathIntoParts(path), throwIfMissing);
 	}
-	
+
 	async deleteLink(path: string): Promise<void> {
 		path = this.fullPath(path);
 		const pathsOnDisk = [ linkPath.make(path, false),
@@ -678,7 +682,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			throw maskPathInExc(this.root.length, e);
 		}
 	}
-	
+
 	async link(path: string, target: File | FS): Promise<void> {
 		// do sanity checks
 		if (!target ||
@@ -1000,7 +1004,7 @@ class FileObject implements WritableFile, Linkable {
 			throw maskPathInExc(this.pathPrefixMaskLen, e);
 		}
 	}
-	
+
 	getByteSource(): Promise<FileByteSource> {
 		try {
 			return this.fs.getByteSource(this.path);

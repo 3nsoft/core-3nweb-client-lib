@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * Everything in this module is assumed to be inside of a file system
@@ -20,29 +21,28 @@
  */
 
 import { base64 } from '../../../lib-common/buffer-utils';
-import { makeFileException, Code as excCode, FileException }
-	from '../../../lib-common/exceptions/file';
+import { makeFileException, Code as excCode, FileException } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { Storage, Node, NodeType } from './common';
-import { NodeInFS, NodeCrypto } from './node-in-fs';
+import { FSEvent, NodeInFS } from './node-in-fs';
 import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
 import { LinkParameters } from '../../files';
 import { StorageException } from '../exceptions';
 import { defer, Deferred } from '../../../lib-common/processes';
 import { copy } from '../../../lib-common/json-utils';
-import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource }
-	from 'xsp-files';
+import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import * as random from '../../../lib-common/random-node';
-import { deserializeFolderInfo, serializeFolderInfo }
-	from './folder-node-serialization';
-import { FolderAttrs, AttrsHolder, EntityAttrs } from '../../files/file-attrs';
+import { parseFolderInfo, serializeFolderInfo } from './folder-node-serialization';
+import { CommonAttrs, XAttrs } from './attrs';
+import { NodePersistance } from './node-persistence';
 
 type ListingEntry = web3n.files.ListingEntry;
 type EntryAdditionEvent = web3n.files.EntryAdditionEvent;
 type EntryRemovalEvent = web3n.files.EntryRemovalEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
 type EntryRenamingEvent = web3n.files.EntryRenamingEvent;
+type XAttrsChanges = web3n.files.XAttrsChanges;
 
 export interface NodeInfo {
 	/**
@@ -80,13 +80,14 @@ export interface FolderInfo {
 	};
 }
 
-export interface FolderInfoWithAttrs extends FolderInfo {
-	attrs?: FolderAttrs;
+export interface FolderInJSON extends FolderInfo {
+	ctime: number;
+	xattrs?: any;
 }
 
 function jsonToInfoAndAttrs(
-	json: FolderInfoWithAttrs
-): { folderInfo: FolderInfo; attrs?: AttrsHolder<FolderAttrs>; } {
+	json: FolderInJSON
+): { folderInfo: FolderInfo; attrs: CommonAttrs; xattrs?: XAttrs; } {
 	const folderInfo: FolderInfo = {
 		nodes: copy(json.nodes)
 	};
@@ -94,49 +95,36 @@ function jsonToInfoAndAttrs(
 		node.key = base64.open(node.key as any);
 	}
 	checkFolderInfo(folderInfo);
-	if (json.attrs) {
-		const attrs = AttrsHolder.fromJSONReadonly(json.attrs);
-		return { attrs, folderInfo };
-	} else {
-		return { folderInfo };
-	}
+	const attrs = new CommonAttrs(json.ctime, json.ctime);
+	return { attrs, folderInfo };
 }
 
-class FolderCrypto extends NodeCrypto {
+class FolderPersistance extends NodePersistance {
 
 	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
 		super(zNonce, key, cryptor);
 		Object.seal(this);
 	}
 
-	async pack(
-		folderInfo: FolderInfo, version: number, attrs: AttrsHolder<FolderAttrs>
+	async write(
+		folderInfo: FolderInfo, version: number,
+		attrs: CommonAttrs, xattrs: XAttrs|undefined
 	): Promise<Subscribe> {
-		return this.saveBytes(serializeFolderInfo(folderInfo), version, attrs);
+		const bytes = serializeFolderInfo(folderInfo);
+		return this.writeWhole(bytes, version, attrs, xattrs);
 	}
 
-	async open(
-		src: ObjSource
-	): Promise<{ folderInfo: FolderInfo; attrs?: AttrsHolder<FolderAttrs>; }> {
-		try {
-			const { attrs, content } = await this.readBytes(src);
-			const folderInfo = deserializeFolderInfo(content);
-			if (attrs) {
-				return {
-					folderInfo,
-					attrs: AttrsHolder.fromBytesReadonly<FolderAttrs>(attrs)
-				}
-			} else {
-				return { folderInfo };
-			}
-		} catch (err) {
-			throw errWithCause(err, `Cannot open folder object`);
-		}
+	async read(src: ObjSource): Promise<{
+		folderInfo: FolderInfo; attrs: CommonAttrs; xattrs?: XAttrs;
+	}> {
+		const { content, xattrs, attrs } = await this.readAll(src);
+		const folderInfo = parseFolderInfo(content);
+		return { folderInfo, xattrs, attrs: CommonAttrs.fromAttrs(attrs) };
 	}
 
 }
-Object.freeze(FolderCrypto.prototype);
-Object.freeze(FolderCrypto);
+Object.freeze(FolderPersistance.prototype);
+Object.freeze(FolderPersistance);
 
 export interface FolderLinkParams {
 	folderName: string;
@@ -144,12 +132,9 @@ export interface FolderLinkParams {
 	fKey: string;
 }
 
-export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
+export class FolderNode extends NodeInFS<FolderPersistance> {
 
 	private currentState: FolderInfo = { nodes: {} };
-	private transitionState: FolderInfo = (undefined as any);
-	private transitionVersion: number|undefined = undefined;
-	private transitionSaved = false;
 
 	private constructor(
 		storage: Storage, name: string|undefined,
@@ -168,9 +153,9 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 				`Missing object id for folder, when zeroth nonce is not given`); }
 			zNonce = idToHeaderNonce(objId);
 		}
-		this.crypto = new FolderCrypto(zNonce, key, storage.cryptor);
+		this.crypto = new FolderPersistance(zNonce, key, storage.cryptor);
 		if (setNewAttrs) {
-			this.attrs = AttrsHolder.makeReadonlyForFolder(Date.now());
+			this.attrs = CommonAttrs.makeForTimeNow();
 		}
 		Object.seal(this);
 	}
@@ -182,7 +167,7 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 		const rf = new FolderNode(
 			storage, undefined, null, zNonce, 0, undefined, key, true);
 		rf.storage.nodes.set(rf);
-		await rf.saveFirstVersion();
+		await rf.saveFirstVersion(undefined);
 		return rf;
 	}
 
@@ -208,9 +193,9 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	): Promise<FolderNode> {
 		const rf = new FolderNode(
 			storage, name, objId, zNonce, src.version, undefined, key, false);
-		const { folderInfo, attrs } = await rf.crypto.open(src);
+		const { folderInfo, attrs, xattrs } = await rf.crypto.read(src);
 		rf.currentState = folderInfo;
-		rf.attrs = (attrs ? attrs : AttrsHolder.makeReadonlyForFolder(0));
+		rf.setUpdatedParams(src.version, attrs, xattrs);
 		return rf;
 	}
 
@@ -236,14 +221,15 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	}
 
 	static rootFromJSON(
-		storage: Storage, name: string|undefined, folderJson: FolderInfoWithAttrs
+		storage: Storage, name: string|undefined,
+		folderJson: FolderInJSON
 	): FolderNode {
 		const rf = new FolderNode(
 			storage, name, 'readonly-root', EMPTY_ARR, 0,
 			undefined, (undefined as any), false);
-		const { folderInfo, attrs } = jsonToInfoAndAttrs(folderJson);
+		const { folderInfo, attrs, xattrs } = jsonToInfoAndAttrs(folderJson);
 		rf.currentState = folderInfo;
-		rf.attrs = (attrs ? attrs : AttrsHolder.makeReadonlyForFolder(0));
+		rf.setUpdatedParams(0, attrs, xattrs);
 		return rf;
 	}
 
@@ -375,15 +361,15 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	private async fixMissingChildAndThrow(
 		exc: StorageException, childInfo: NodeInfo
 	): Promise<never> {
-		await this.doTransition(true, async () => {
-			delete this.transitionState.nodes[childInfo.name];
+		await this.doTransition(async (state, version) => {
+			delete state.nodes[childInfo.name];
 			const event: EntryRemovalEvent = {
 				type: 'entry-removal',
 				path: this.name,
 				name: childInfo.name,
-				newVersion: this.transitionVersion
+				newVersion: version
 			};
-			this.broadcastEvent(event);
+			return event;
 		}).catch(noop);
 		const fileExc = makeFileException(excCode.notFound, childInfo.name, exc);
 		fileExc.inconsistentStateOfFS = true;
@@ -392,91 +378,38 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 
 	/**
 	 * This method prepares a transition state, runs given action, and completes
-	 * transition to a new version. Returned promise resolves to whatever given
-	 * action returns (promise is unwrapped).
+	 * transition to a new version.
 	 * Note that if there is already an ongoing change, this transition will
 	 * wait. Such behaviour is generally needed for folder as different processes
 	 * may be sharing same elements in a file tree. In contrast, file
 	 * operations should more often follow a throw instead wait approach.
-	 * @param autoSave true value turns on saving in of transition by this call,
-	 * while false value indicates that saving will be done within a given action
-	 * @param action is a function that is run when transition is started
+	 * @param change is a function that is run when transition is started
 	 */
-	private doTransition<T>(
-		autoSave: boolean, action: () => Promise<T>
-	): Promise<T> {
-		return this.doChange(true, this.wrapInTransition(autoSave, action));
+	private async doTransition(change: TransactionChange): Promise<void> {
+		await this.doChange(true, () => this.performTransition(change));
 	}
 
-	private wrapInTransition<T>(
-		autoSave: boolean, action: () => Promise<T>
-	): () => Promise<T> {
-		return async () => {
-			
-			// start transition and prepare transition state
-			// Note on copy: byte arrays are not cloned
-			this.transitionState = copy(this.currentState);
-			this.transitionVersion = this.version + 1;
-			
-			try {
-				
-				// do action within transition state
-				const result = await action();
+	private async performTransition(change: TransactionChange): Promise<void> {
+		// start transition and prepare transition state
+		// Note on copy: byte arrays are not cloned
+		const state = copy(this.currentState);
+		const version = this.version + 1;
+		const attrs = this.attrs.copy();
 
-				// return fast, if transaction was canceled
-				if (!this.transitionState) { return result; }
+		// do action within transition state
+		const event = await change(state, version);
 
-				// save transition state, if saving hasn't been done inside of action
-				if (autoSave) {
-					await this.saveTransitionState();
-				}
+		// save transition state
+		const encSub = await this.crypto.write(
+			state, version, attrs, this.xattrs);
+		await this.storage.saveObj(this.objId, version, encSub);
 
-				// complete transition
-				if (!this.transitionSaved) { throw new Error(
-					`Transition state has not been saved`); }
-				this.currentState = this.transitionState;
-				this.setCurrentVersion(this.transitionVersion);
-				
-				return result;
-
-			} finally {
-				// cleanup after both completion and fail
-				this.clearTransitionState();
-			}
-		};
-	}
-
-	private clearTransitionState(): void {
-		this.transitionState = (undefined as any);
-		this.transitionVersion = undefined;
-		this.transitionSaved = false;
-	}
-
-	private async saveTransitionState(): Promise<void> {
-		if (!this.transitionState || !this.transitionVersion) { throw new Error(
-			`Transition is not set correctly`); }
-		if (this.transitionSaved) { throw new Error(
-			`Transition has already been saved.`); }
-		const attrs = this.attrs.modifiableCopy();
-		const encSub = await this.crypto.pack(
-			this.transitionState, this.transitionVersion, attrs);
-		await this.storage.saveObj(this.objId, this.transitionVersion, encSub);
-		this.transitionSaved = true;
-		attrs.setReadonly();
+		// complete transition
+		this.currentState = state;
+		this.setCurrentVersion(version);
 		this.attrs = attrs;
-	}
 
-	private addToTransitionState(f: Node, key: Uint8Array): void {
-		const nodeInfo: NodeInfo = {
-			name: f.name,
-			objId: f.objId,
-			key
-		};
-		if (f.type === 'folder') { nodeInfo.isFolder = true; }
-		else if (f.type === 'file') { nodeInfo.isFile = true; }
-		else if (f.type === 'link') { nodeInfo.isLink = true; }
-		else { throw new Error(`Unknown type of file system entity: ${f.type}`); }
-		this.transitionState.nodes[nodeInfo.name] = nodeInfo;
+		this.broadcastEvent(event);
 	}
 
 	/**
@@ -484,31 +417,33 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	 * @param name
 	 */
 	private async makeAndSaveNewChildFolderNode(
-		name: string
+		name: string, changes: XAttrsChanges|undefined
 	): Promise<{ node: FolderNode; key: Uint8Array; }> {
 		const key = await random.bytes(KEY_LENGTH);
 		const childObjId = await this.storage.generateNewObjId();
 		const node = new FolderNode(
 			this.storage, name, childObjId, undefined, 0, this.objId, key, true);
-		await node.saveFirstVersion().catch((exc: StorageException) => {
+		await node.saveFirstVersion(changes).catch((exc: StorageException) => {
 			if (!exc.objExists) { throw exc; }
 			// call this method recursively, if obj id is already used in storage
-			return this.makeAndSaveNewChildFolderNode(name);
+			return this.makeAndSaveNewChildFolderNode(name, changes);
 		});
 		return { node, key };
 	}
 
-	private async saveFirstVersion(): Promise<void> {
+	private async saveFirstVersion(
+		changes: XAttrsChanges|undefined
+	): Promise<void> {
 		await this.doChange(false, async () => {
 			if (this.version > 0) { throw new Error(
 				`Can call this function only for zeroth version, not ${this.version}`); }
-			this.setCurrentVersion(1);
-			const attrs = this.attrs.modifiableCopy();
-			const encSub = await this.crypto.pack(
-				this.currentState, this.version, attrs);
-			await this.storage.saveObj(this.objId, this.version, encSub);
-			attrs.setReadonly();
-			this.attrs = attrs;
+			const {
+				attrs, xattrs, newVersion
+			} = super.getParamsForUpdate(changes);
+			const encSub = await this.crypto.write(
+				this.currentState, newVersion, attrs, xattrs);
+			await this.storage.saveObj(this.objId, newVersion, encSub);
+			super.setUpdatedParams(newVersion, attrs, xattrs);
 		});
 	}
 
@@ -540,7 +475,7 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 		const key = await random.bytes(KEY_LENGTH);
 		const node = await LinkNode.makeForNew(
 			this.storage, this.objId, name, key);
-		await node.setLinkParams(params).catch((exc: StorageException) => {
+		await node.save(params).catch((exc: StorageException) => {
 			if (!exc.objExists) { throw exc; }
 			// call this method recursively, if obj id is already used in storage
 			return this.makeAndSaveNewChildLinkNode(name, params);
@@ -550,18 +485,17 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 
 	private create<T extends Node>(
 		type: NodeType, name: string, exclusive: boolean,
-		linkParams?: LinkParameters<any>
+		changes?: XAttrsChanges, linkParams?: LinkParameters<any>
 	): Promise<T> {
-		return this.doTransition(false, async () => {
+		return this.doChange(true, async () => {
+
 			// do check for concurrent creation of a node
 			if (this.getNodeInfo(name, true)) {
 				if (exclusive) {
 					throw makeFileException(excCode.alreadyExists, name);
 				} else if (type === 'folder') {
-					this.clearTransitionState();
 					return (await this.getNode<T>('folder', name))!;
 				} else if (type === 'file') {
-					this.clearTransitionState();
 					return (await this.getNode<T>('file', name))!;
 				} else if (type === 'link') {
 					throw new Error(`Link is created in non-exclusive mode`);
@@ -570,40 +504,48 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 				}
 			}
 
-			// create new node
-			let node: Node;
-			let key: Uint8Array;
-			if (type === 'file') {
-				({ node, key } = await this.makeAndSaveNewChildFileNode(name));
-			} else if (type === 'folder') {
-				({ node, key } = await this.makeAndSaveNewChildFolderNode(name));
-			} else if (type === 'link') {
-				({ node, key } = await this.makeAndSaveNewChildLinkNode(
-					name, linkParams!));
-			} else {
-				throw new Error(`Unknown type of node: ${type}`);
-			}
-			this.addToTransitionState(node, key);
-			await this.saveTransitionState();	// manual save
-			this.storage.nodes.set(node);
-			const event: EntryAdditionEvent = {
-				type: 'entry-addition',
-				path: this.name,
-				newVersion: this.transitionVersion,
-				entry: {
-					name: node.name,
-					isFile: (node.type === 'file'),
-					isFolder: (node.type === 'folder'),
-					isLink: (node.type === 'link')
+			let node: Node = (undefined as any);
+
+			await this.performTransition(async (state, version) => {
+				// create new node
+				let key: Uint8Array;
+				if (type === 'file') {
+					({ node, key } = await this.makeAndSaveNewChildFileNode(name));
+				} else if (type === 'folder') {
+					({ node, key } = await this.makeAndSaveNewChildFolderNode(
+						name, changes));
+				} else if (type === 'link') {
+					({ node, key } = await this.makeAndSaveNewChildLinkNode(
+						name, linkParams!));
+				} else {
+					throw new Error(`Unknown type of node: ${type}`);
 				}
-			};
-			this.broadcastEvent(event);
+
+				addToTransitionState(state, node, key);
+				this.storage.nodes.set(node);
+
+				const event: EntryAdditionEvent = {
+					type: 'entry-addition',
+					path: this.name,
+					newVersion: version,
+					entry: {
+						name: node.name,
+						isFile: (node.type === 'file'),
+						isFolder: (node.type === 'folder'),
+						isLink: (node.type === 'link')
+					}
+				};
+				return event;
+			});
+
 			return node as T;
 		});
 	}
 
-	createFolder(name: string, exclusive: boolean): Promise<FolderNode> {
-		return this.create<FolderNode>('folder', name, exclusive);
+	createFolder(
+		name: string, exclusive: boolean, changes: XAttrsChanges|undefined
+	): Promise<FolderNode> {
+		return this.create<FolderNode>('folder', name, exclusive, changes);
 	}
 
 	createFile(name: string, exclusive: boolean): Promise<FileNode> {
@@ -611,22 +553,22 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	}
 
 	async createLink(name: string, params: LinkParameters<any>): Promise<void> {
-		await this.create<LinkNode>('link', name, true, params);
+		await this.create<LinkNode>('link', name, true, undefined, params);
 	}
 
-	async removeChild(f: NodeInFS<NodeCrypto, EntityAttrs>): Promise<void> {
-		await this.doTransition(true, async () => {
-			const childJSON = this.transitionState.nodes[f.name];
+	async removeChild(f: NodeInFS<any>): Promise<void> {
+		await this.doTransition(async (state, version) => {
+			const childJSON = state.nodes[f.name];
 			if (!childJSON || (childJSON.objId !== f.objId)) { throw new Error(
 				`Not a child given: name==${f.name}, objId==${f.objId}, parentId==${f.parentId}, this folder objId==${this.objId}`); }
-			delete this.transitionState.nodes[f.name];
+			delete state.nodes[f.name];
 			const event: EntryRemovalEvent = {
 				type: 'entry-removal',
 				path: this.name,
 				name: f.name,
-				newVersion: this.transitionVersion
+				newVersion: version
 			};
-			this.broadcastEvent(event);
+			return event;
 		});
 		// explicitly do not wait on a result of child's delete, cause if it fails
 		// we just get traceable garbage, yet, the rest of a live/non-deleted tree
@@ -635,10 +577,10 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	}
 
 	private changeChildName(initName: string, newName: string): Promise<void> {
-		return this.doTransition(true, async () => {
-			const child = this.transitionState.nodes[initName];
-			delete this.transitionState.nodes[child.name];
-			this.transitionState.nodes[newName] = child;
+		return this.doTransition(async (state, version) => {
+			const child = state.nodes[initName];
+			delete state.nodes[child.name];
+			state.nodes[newName] = child;
 			child.name = newName;
 			const childNode = this.storage.nodes.get(child.objId);
 			if (childNode) {
@@ -649,9 +591,9 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 				path: this.name,
 				newName,
 				oldName: initName,
-				newVersion: this.transitionVersion
+				newVersion: version
 			};
-			this.broadcastEvent(event);
+			return event;
 		});
 	}
 
@@ -673,23 +615,23 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 	}
 
 	private async moveChildOut(name: string): Promise<void> {
-		await this.doTransition(true, async () => {
-			delete this.transitionState.nodes[name];
+		await this.doTransition(async (state, version) => {
+			delete state.nodes[name];
 			const event: EntryRemovalEvent = {
 				type: 'entry-removal',
 				path: this.name,
 				name,
-				newVersion: this.transitionVersion
+				newVersion: version
 			};
-			this.broadcastEvent(event);
+			return event;
 		});
 	}
 
 	private async moveChildIn(newName: string, child: NodeInfo): Promise<void> {
 		child = copy(child);
-		await this.doTransition(true, async () => {
+		await this.doTransition(async (state, version) => {
 			child.name = newName;
-			this.transitionState.nodes[child.name] = child;
+			state.nodes[child.name] = child;
 			const event: EntryAdditionEvent = {
 				type: 'entry-addition',
 				path: this.name,
@@ -699,9 +641,9 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 					isFolder: child.isFolder,
 					isLink: child.isLink
 				},
-				newVersion: this.transitionVersion
+				newVersion: version
 			};
-			this.broadcastEvent(event);
+			return event;
 		});
 	}
 
@@ -724,7 +666,7 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 			if (!(err as FileException).notFound) { throw err; }
 			if (!createIfMissing) { throw err; }
 			try {
-				f = await this.createFolder(path[0], exclusiveCreate);
+				f = await this.createFolder(path[0], exclusiveCreate, undefined);
 			} catch (exc) {
 				if ((exc as FileException).alreadyExists && !exclusiveCreate) {
 					return this.getFolderInThisSubTree(path, createIfMissing);
@@ -747,11 +689,11 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 		return (Object.keys(this.currentState.nodes).length === 0);
 	}
 
-	private async getAllNodes(): Promise<NodeInFS<NodeCrypto, EntityAttrs>[]> {
+	private async getAllNodes(): Promise<NodeInFS<NodePersistance>[]> {
 		const lst = this.list().lst;
-		const content: NodeInFS<NodeCrypto, EntityAttrs>[] = [];
+		const content: NodeInFS<NodePersistance>[] = [];
 		for (const entry of lst) {
-			let node: NodeInFS<NodeCrypto, EntityAttrs>|undefined;
+			let node: NodeInFS<NodePersistance>|undefined;
 			if (entry.isFile) {
 				node = await this.getFile(entry.name, true);
 			} else if (entry.isFolder) {
@@ -824,7 +766,7 @@ export class FolderNode extends NodeInFS<FolderCrypto, FolderAttrs> {
 		const src = await this.storage.getObj(this.objId);
 		const newVersion = src.version;
 		if (newVersion <= this.version) { return; }
-		const { folderInfo, attrs } = await this.crypto.open(src);
+		const { folderInfo, attrs } = await this.crypto.read(src);
 		const initState = this.currentState;
 		this.currentState = checkFolderInfo(folderInfo);
 		this.setCurrentVersion(newVersion);
@@ -890,5 +832,25 @@ function checkFolderInfo(folderJson: FolderInfo): FolderInfo {
 
 	return folderJson;
 }
+
+function addToTransitionState(
+	state: FolderInfo, f: Node, key: Uint8Array
+): void {
+	const nodeInfo: NodeInfo = {
+		name: f.name,
+		objId: f.objId,
+		key
+	};
+	if (f.type === 'folder') { nodeInfo.isFolder = true; }
+	else if (f.type === 'file') { nodeInfo.isFile = true; }
+	else if (f.type === 'link') { nodeInfo.isLink = true; }
+	else { throw new Error(`Unknown type of file system entity: ${f.type}`); }
+	state.nodes[nodeInfo.name] = nodeInfo;
+}
+
+type TransactionChange = (
+	state: FolderInfo, version: number
+) => Promise<FSEvent>;
+
 
 Object.freeze(exports);
