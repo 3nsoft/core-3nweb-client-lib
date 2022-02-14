@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -28,14 +28,11 @@ declare namespace web3n.caps.common {
 
 	type DevPathChecker = (path: string) => 'w'|'r'|false;
 
-	interface AppManifest {
-		appDomain: string;
-		capsRequested: {
-			mail?: MailCAPSetting;
-			storage?: StorageCAPSetting;
-			mailerid?: true;
-			log?: LogCAPSetting;
-		};
+	interface RequestedCAPs {
+		mail?: MailCAPSetting;
+		storage?: StorageCAPSetting;
+		mailerid?: true;
+		log?: LogCAPSetting;
 	}
 
 	interface StorageCAPSetting {

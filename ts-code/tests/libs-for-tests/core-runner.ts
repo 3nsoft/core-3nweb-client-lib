@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -27,7 +27,7 @@ import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
 
-export const testApp: web3n.caps.common.AppManifest = {
+export const testApp = {
 	appDomain: 'test.3nweb.computer',
 	capsRequested: {
 		mail: {
@@ -52,7 +52,7 @@ export const testApp: web3n.caps.common.AppManifest = {
 		},
 		mailerid: true,
 		log: 'all'
-	}
+	} as web3n.caps.common.RequestedCAPs
 };
 
 let numOfRunningCores = 0;

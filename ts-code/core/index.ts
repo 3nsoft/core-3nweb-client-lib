@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2021 3NSoft Inc.
+ Copyright (C) 2015 - 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -33,7 +33,7 @@ import { ServiceLocatorMaker } from '../lib-client/service-locator';
 const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
 const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
 
-type RequestedCAPs = web3n.caps.common.AppManifest['capsRequested'];
+type RequestedCAPs = web3n.caps.common.RequestedCAPs;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
 type AppFSSetting = web3n.caps.common.AppFSSetting;
 type FSSetting = web3n.caps.common.FSSetting;
