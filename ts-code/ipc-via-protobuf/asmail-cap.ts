@@ -369,11 +369,11 @@ namespace addMsg {
 		attachments?: {
 			files?: {
 				name: string;
-				item: ObjectReference;
+				item: ObjectReference<'FileImpl'>;
 			}[];
 			folders?: {
 				name: string;
-				item: ObjectReference;
+				item: ObjectReference<'FSImpl'>;
 			}[];
 		};
 	}

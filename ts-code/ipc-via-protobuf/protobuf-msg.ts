@@ -40,14 +40,11 @@ function commonType<T extends object>(type: string): ProtoType<T> {
 	return makeProtobufTypeFrom<T>('common.proto', `common.${type}`);
 }
 
-export type ExposedObjType = 'FileByteSink' | 'FileByteSource' |
-	'FileImpl' | 'FSImpl' | 'SymLinkImpl' | 'FSCollection' | 'FSItemsIter';
-
-export interface ObjectReference {
-	objType: ExposedObjType;
+export interface ObjectReference<T> {
+	objType: T;
 	path: string[];
 }
-export const objRefType = commonType<ObjectReference>('ObjectReference');
+export const objRefType = commonType<ObjectReference<any>>('ObjectReference');
 
 export interface BooleanValue {
 	value: boolean;

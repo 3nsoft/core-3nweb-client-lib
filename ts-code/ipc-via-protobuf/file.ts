@@ -135,7 +135,8 @@ export function exposeFileService(
 				(file.v as WritableFileVersionedAPI).writeTxt);
 		}
 	}
-	const impl = expServices.exposeDroppableService('FileImpl', implExp, file);
+	const impl = expServices.exposeDroppableService<'FileImpl'>(
+		'FileImpl', implExp, file);
 	const fileMsg: FileMsg = {
 		impl,
 		isNew: file.isNew,
@@ -198,7 +199,7 @@ export interface FileMsg {
 	isVersioned: boolean;
 	name: string;
 	isNew: boolean;
-	impl: ObjectReference;
+	impl: ObjectReference<'FileImpl'>;
 }
 
 const fileType = makeFileType<FileMsg>('File');
@@ -761,7 +762,7 @@ export namespace vGetByteSource {
 
 	export interface Reply {
 		version: number;
-		src: ObjectReference;
+		src: ObjectReference<'FileByteSource'>;
 	}
 
 	export const replyType = makeFileType<Reply>(
@@ -1017,7 +1018,7 @@ Object.freeze(getByteSink);
 namespace copy {
 
 	interface Request {
-		file: ObjectReference;
+		file: ObjectReference<'FileImpl'>;
 	}
 
 	export const requestType = makeFileType<Request>('CopyRequestBody');
@@ -1212,7 +1213,7 @@ export namespace vGetByteSink {
 
 	export interface Reply {
 		version: number;
-		sink: ObjectReference;
+		sink: ObjectReference<'FileByteSink'>;
 	}
 
 	export const replyType = makeFileType<Reply>(

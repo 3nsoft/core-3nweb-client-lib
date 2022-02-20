@@ -16,14 +16,14 @@
 */
 
 import { Observable, Observer, Subscription, Subject } from "rxjs";
-import { makeProtobufTypeFrom, ObjectReference, ExposedObjType, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
+import { makeProtobufTypeFrom, ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
 
 
 export interface ExposedServices {
-	exposeDroppableService(
-		objType: ExposedObjType, exp: ExposedFn|ExposedObj<any>, original: any
-	): ObjectReference;
-	getOriginalObj<T>(ref: ObjectReference): T;
+	exposeDroppableService<T>(
+		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
+	): ObjectReference<T>;
+	getOriginalObj<T>(ref: ObjectReference<any>): T;
 	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
 	listObj(path: string[]): string[]|null;
 }
@@ -44,8 +44,8 @@ export interface Caller {
 	startObservableCall(
 		path: string[], req: EnvelopeBody, obs: Subject<EnvelopeBody>
 	): () => void;
-	registerClientDrop(o: any, srvRef: ObjectReference): void;
-	srvRefOf(clientObj: any): ObjectReference;
+	registerClientDrop(o: any, srvRef: ObjectReference<any>): void;
+	srvRefOf(clientObj: any): ObjectReference<any>;
 	listObj(path: string[]): string[];
 }
 
@@ -199,21 +199,6 @@ Object.freeze(ObjectsConnector);
 
 export const W3N_NAME = 'w3n';
 
-export function ensureCorrectRefObjType(objType: ExposedObjType): void {
-	switch (objType) {
-		case 'FileByteSink':
-		case 'FileByteSource':
-		case 'FileImpl':
-		case 'FSImpl':
-		case 'SymLinkImpl':
-		case 'FSCollection':
-		case 'FSItemsIter':
-			return;
-		default:
-			throw new Error(`Object type ${objType} is not known`);
-	}
-}
-
 /**
  * Envelope is a message form that is sent in IPC channel.
  */
@@ -274,8 +259,8 @@ export function makeIPCException(fields: Partial<IPCException>): IPCException {
 	return exc;
 }
 
-export function checkRefObjTypeIs(
-	expected: ExposedObjType, ref: ObjectReference
+export function checkRefObjTypeIs<T>(
+	expected: T, ref: ObjectReference<T>
 ): void {
 	if (ref.objType !== expected) { throw new TypeError(
 		`Expected reference to ${expected} type, instead got ${ref.objType}`); }

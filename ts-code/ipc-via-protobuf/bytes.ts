@@ -25,7 +25,7 @@ type LayoutSection = web3n.files.LayoutSection;
 type FileByteSource = web3n.files.FileByteSource;
 
 export function makeSinkCaller(
-	caller: Caller, ref: ObjectReference
+	caller: Caller, ref: ObjectReference<'FileByteSink'>
 ): FileByteSink {
 	checkRefObjTypeIs('FileByteSink', ref);
 	const objPath = ref.path;
@@ -42,7 +42,7 @@ export function makeSinkCaller(
 
 export function exposeSinkService(
 	sink: FileByteSink, expServices: ExposedServices
-): ObjectReference {
+): ObjectReference<'FileByteSink'> {
 	const wrap: ExposedObj<FileByteSink> = {
 		done: sinkDone.wrapService(sink.done),
 		getSize: sinkGetSize.wrapService(sink.getSize),
@@ -50,12 +50,13 @@ export function exposeSinkService(
 		splice: sinkSplice.wrapService(sink.splice),
 		truncate: sinkTruncate.wrapService(sink.truncate)
 	};
-	const ref = expServices.exposeDroppableService('FileByteSink', wrap, sink);
+	const ref = expServices.exposeDroppableService<'FileByteSink'>(
+		'FileByteSink', wrap, sink);
 	return ref;
 }
 
 export function makeSrcCaller(
-	caller: Caller, ref: ObjectReference
+	caller: Caller, ref: ObjectReference<'FileByteSource'>
 ): FileByteSource {
 	checkRefObjTypeIs('FileByteSource', ref);
 	const objPath = ref.path;
@@ -71,14 +72,15 @@ export function makeSrcCaller(
 
 export function exposeSrcService(
 	src: FileByteSource, expServices: ExposedServices
-): ObjectReference {
+): ObjectReference<'FileByteSource'> {
 	const wrap: ExposedObj<FileByteSource> = {
 		getPosition: srcGetPosition.wrapService(src.getPosition),
 		getSize: srcGetSize.wrapService(src.getSize),
 		read: srcRead.wrapService(src.read),
 		seek: srcSeek.wrapService(src.seek)
 	};
-	const ref = expServices.exposeDroppableService('FileByteSource', wrap, src);
+	const ref = expServices.exposeDroppableService<'FileByteSource'>(
+		'FileByteSource', wrap, src);
 	return ref;
 }
 

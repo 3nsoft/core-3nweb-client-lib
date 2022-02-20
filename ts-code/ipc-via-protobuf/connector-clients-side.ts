@@ -35,7 +35,7 @@ export class ClientsSideImpl implements ClientsSide {
 	private readonly fnCalls = new Map<number, FnCall>();
 	private fnCallCounter = 1;
 	private readonly weakRefs = new Set<WeakReference<any>>();
-	private readonly srvRefs = new WeakMap<any, ObjectReference>();
+	private readonly srvRefs = new WeakMap<any, ObjectReference<any>>();
 	private isStopped = false;
 
 	constructor(
@@ -174,7 +174,7 @@ export class ClientsSideImpl implements ClientsSide {
 		}
 	}
 
-	registerClientDrop(o: any, srvRef: ObjectReference): void {
+	registerClientDrop(o: any, srvRef: ObjectReference<any>): void {
 		const clientRef = makeWeakRefFor(o);
 		this.weakRefs.add(clientRef);
 		clientRef.addCallback(this.makeClientDropCB(clientRef, srvRef));
@@ -182,7 +182,7 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	private makeClientDropCB(
-		clientRef: WeakReference<any>, srvRef: ObjectReference
+		clientRef: WeakReference<any>, srvRef: ObjectReference<any>
 	): () => void {
 		return () => {
 			this.weakRefs.delete(clientRef);
@@ -190,12 +190,12 @@ export class ClientsSideImpl implements ClientsSide {
 		};
 	}
 
-	private sendObjDropMsg(srvRef: ObjectReference): void {
+	private sendObjDropMsg(srvRef: ObjectReference<any>): void {
 		if (this.isStopped) { return; }
 		this.sendMsg({ headers: { msgType: 'drop', path: srvRef.path } });
 	}
 
-	srvRefOf(clientObj: any): ObjectReference {
+	srvRefOf(clientObj: any): ObjectReference<any> {
 		const srvRef = this.srvRefs.get(clientObj);
 		if (srvRef) {
 			return srvRef;

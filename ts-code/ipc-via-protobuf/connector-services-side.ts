@@ -16,9 +16,9 @@
 */
 
 import { Subscription } from "rxjs";
-import { ObjectReference, ExposedObjType, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
+import { ObjectReference, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { stringOfB64CharsSync } from '../lib-common/random-node';
-import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, ensureCorrectRefObjType, W3N_NAME, ExposedServices } from "./connector";
+import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ExposedServices } from "./connector";
 
 
 interface FnCallProc {
@@ -174,10 +174,9 @@ export class ExposedObjs {
 		original: any;
 	}>();
 
-	exposeDroppableService(
-		objType: ExposedObjType, exp: ExposedFn|ExposedObj<any>, original: any
-	): ObjectReference {
-		ensureCorrectRefObjType(objType);
+	exposeDroppableService<T>(
+		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
+	): ObjectReference<T> {
 		let id: string;
 		do {
 			id = stringOfB64CharsSync(20);
@@ -186,7 +185,7 @@ export class ExposedObjs {
 		return { objType, path: [ id ] };
 	}
 
-	getOriginalObj<T>(ref: ObjectReference): T {
+	getOriginalObj<T>(ref: ObjectReference<any>): T {
 		const o = this.objs.get(ref.path[0]);
 		if (o) {
 			return o.original;

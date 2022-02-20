@@ -200,7 +200,8 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 				(fs.v as WritableFSVersionedAPI).updateXAttrs);
 		}
 	}
-	const impl = expServices.exposeDroppableService('FSImpl', implExp, fs);
+	const impl = expServices.exposeDroppableService<'FSImpl'>(
+		'FSImpl', implExp, fs);
 	const fsMsg: FSMsg = {
 		impl,
 		isVersioned: !!fs.v,
@@ -216,7 +217,7 @@ export interface FSMsg {
 	isVersioned: boolean;
 	writable: boolean;
 	name: string;
-	impl: ObjectReference;
+	impl: ObjectReference<'FSImpl'>;
 }
 
 function makeFSType<T extends object>(type: string): ProtoType<T> {
@@ -366,7 +367,7 @@ interface SymLinkMsg {
 	readonly: boolean;
 	isFile?: Value<boolean>;
 	isFolder?: Value<boolean>;
-	impl: ObjectReference;
+	impl: ObjectReference<'SymLinkImpl'>;
 }
 const symLinkMsgType = makeFSType<SymLinkMsg>('SymLink');
 
@@ -398,7 +399,8 @@ function exposeSymLink(
 			assert(false);
 		}
 	};
-	const ref = expServices.exposeDroppableService('SymLinkImpl', exp, link);
+	const ref = expServices.exposeDroppableService<'SymLinkImpl'>(
+		'SymLinkImpl', exp, link);
 	const msg: SymLinkMsg = {
 		readonly: link.readonly,
 		isFile: toOptVal(link.isFile),
@@ -976,20 +978,20 @@ namespace fsCollection {
 
 	export function exposeCollectionService(
 		collection: FSCollection, expServices: ExposedServices
-	): ObjectReference {
+	): ObjectReference<'FSCollection'> {
 		const exp: ExposedObj<FSCollection> = {
 			get: get.wrapService(collection.get, expServices),
 			getAll: getAll.wrapService(collection.getAll, expServices),
 			entries: entries.wrapService(collection.entries, expServices),
 			watch: watch.wrapService(collection.watch, expServices)
 		};
-		const ref = expServices.exposeDroppableService(
+		const ref = expServices.exposeDroppableService<'FSCollection'>(
 			'FSCollection', exp, collection);
 		return ref;
 	}
 
 	export function makeCollectionCaller(
-		ref: ObjectReference, caller: Caller
+		ref: ObjectReference<'FSCollection'>, caller: Caller
 	): FSCollection {
 		checkRefObjTypeIs('FSCollection', ref);
 		const objPath = ref.path;
@@ -1107,17 +1109,17 @@ namespace fsCollection {
 
 		function exposeIter(
 			iter: Iter, expServices: ExposedServices
-		): ObjectReference {
+		): ObjectReference<'FSItemsIter'> {
 			const exp: ExposedObj<Iter> = {
 				next: wrapIterNext(iter.next, expServices)
 			};
-			const ref = expServices.exposeDroppableService(
+			const ref = expServices.exposeDroppableService<'FSItemsIter'>(
 				'FSItemsIter', exp, iter);
 			return ref;
 		}
 
 		function makeIterCaller(
-			ref: ObjectReference, caller: Caller
+			ref: ObjectReference<'FSItemsIter'>, caller: Caller
 		): Iter {
 			checkRefObjTypeIs('FSItemsIter', ref);
 			const objPath = ref.path;
@@ -1296,7 +1298,7 @@ export namespace fsItem {
 		item?: {
 			fs?: FSMsg;
 			file?: FileMsg;
-			collection?: ObjectReference;
+			collection?: ObjectReference<'FSCollection'>;
 		};
 		location?: {
 			fs: FSMsg;
@@ -1858,7 +1860,7 @@ Object.freeze(copyFolder);
 namespace saveFile {
 
 	interface Request {
-		file: ObjectReference;
+		file: ObjectReference<'FileImpl'>;
 		dst: string;
 		overwrite?: Value<boolean>;
 	}
@@ -1893,7 +1895,7 @@ Object.freeze(saveFile);
 namespace saveFolder {
 
 	interface Request {
-		folder: ObjectReference;
+		folder: ObjectReference<'FSImpl'>;
 		dst: string;
 		overwrite?: Value<boolean>;
 	}
@@ -1929,7 +1931,7 @@ namespace link {
 
 	interface Request {
 		path: string;
-		target: ObjectReference;
+		target: ObjectReference<'FSImpl'>|ObjectReference<'FileImpl'>;
 	}
 
 	const requestType = makeFSType<Request>('LinkRequestBody');
