@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeProtobufTypeFrom, fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
+import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
+import { ProtoType } from '../lib-client/protobuf-type';
+import { asmail as pb } from '../protos/asmail.proto';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from './fs';
-import { ProtoType } from '../lib-client/protobuf-loader';
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -82,10 +83,6 @@ export function makeASMailCaller(
 	};
 }
 
-function asmailType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('asmail.proto', `asmail.${type}`);
-}
-
 
 namespace getUserId {
 
@@ -121,8 +118,8 @@ namespace inboxListMsgs {
 		infos: MsgInfo[];
 	}
 
-	const requestType = asmailType<Request>('ListMsgsRequestBody');
-	const replyType = asmailType<Reply>('ListMsgsInboxReplyBody');
+	const requestType = ProtoType.for<Request>(pb.ListMsgsRequestBody);
+	const replyType = ProtoType.for<Reply>(pb.ListMsgsInboxReplyBody);
 
 	function unpackMsgInfos(buf: EnvelopeBody): MsgInfo[] {
 		const msgs = fixArray(replyType.unpack(buf).infos);
@@ -163,7 +160,7 @@ namespace removeMsg {
 		msgId: string;
 	}
 
-	const requestType = asmailType<Request>('RemoveMsgRequestBody');
+	const requestType = ProtoType.for<Request>(pb.RemoveMsgRequestBody);
 
 	export function wrapService(fn: Inbox['removeMsg']): ExposedFn {
 		return (reqBody: Buffer) => {
@@ -192,7 +189,7 @@ namespace getMsg {
 		msgId: string;
 	}
 
-	const requestType = asmailType<Request>('GetMsgRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetMsgRequestBody);
 
 	export function wrapService(
 		fn: Inbox['getMsg'], expServices: ExposedServices
@@ -231,8 +228,8 @@ interface IncomingMessageMsg {
 	recipients?: string[];
 	attachments?: FSMsg;
 }
-const incomingMessageType = asmailType<IncomingMessageMsg>(
-	'IncomingMessageMsg');
+const incomingMessageType = ProtoType.for<IncomingMessageMsg>(
+	pb.IncomingMessageMsg);
 
 function packIncomingMessage(
 	m: IncomingMessage, expServices: ExposedServices
@@ -284,7 +281,7 @@ namespace inboxSubscribe {
 		event: string;
 	}
 
-	const requestType = asmailType<Request>('SubscribeStartCallBody');
+	const requestType = ProtoType.for<Request>(pb.SubscribeStartCallBody);
 
 	export function wrapService(
 		fn: Inbox['subscribe'], expServices: ExposedServices
@@ -331,7 +328,7 @@ namespace preFlight {
 		toAddress: string;
 	}
 
-	const requestType = asmailType<Request>('PreFlightRequestBody');
+	const requestType = ProtoType.for<Request>(pb.PreFlightRequestBody);
 
 	export function wrapService(fn: Delivery['preFlight']): ExposedFn {
 		return (reqBody: Buffer) => {
@@ -386,7 +383,7 @@ namespace addMsg {
 		localMeta?: AnyValue;
 	}
 
-	const requestType = asmailType<Request>('AddMsgRequestBody');
+	const requestType = ProtoType.for<Request>(pb.AddMsgRequestBody);
 
 	function packMsg(m: OutgoingMessage, caller: Caller): OutgoingMessageMsg {
 		const ipcMsg: OutgoingMessageMsg = {
@@ -505,7 +502,7 @@ namespace delivListMsgs {
 		msgs: { id: string; info: DeliveryProgressMsg; }[];
 	}
 
-	const replyType = asmailType<Reply>('ListMsgsDeliveryReplyBody');
+	const replyType = ProtoType.for<Reply>(pb.ListMsgsDeliveryReplyBody);
 
 	export function wrapService(fn: Delivery['listMsgs']): ExposedFn {
 		return () => {
@@ -552,8 +549,8 @@ interface DeliveryProgressMsg {
 	}[];
 }
 
-const deliveryProgressMsgType = asmailType<DeliveryProgressMsg>(
-	'DeliveryProgressMsg');
+const deliveryProgressMsgType = ProtoType.for<DeliveryProgressMsg>(
+	pb.DeliveryProgressMsg);
 
 function packDeliveryProgress(p: DeliveryProgress): DeliveryProgressMsg {
 	const m: DeliveryProgressMsg = {
@@ -603,7 +600,7 @@ namespace currentState {
 		id: string;
 	}
 
-	const requestType = asmailType<Request>('CurrentStateRequestBody');
+	const requestType = ProtoType.for<Request>(pb.CurrentStateRequestBody);
 
 	export function wrapService(fn: Delivery['currentState']): ExposedFn {
 		return (reqBody: Buffer) => {
@@ -644,7 +641,7 @@ namespace rmMsg {
 		cancelSending?: Value<boolean>;
 	}
 
-	const requestType = asmailType<Request>('RmMsgRequestBody');
+	const requestType = ProtoType.for<Request>(pb.RmMsgRequestBody);
 
 	export function wrapService(fn: Delivery['rmMsg']): ExposedFn {
 		return (reqBody: Buffer) => {
@@ -675,7 +672,7 @@ namespace observeAllDeliveries {
 		progress: DeliveryProgressMsg;
 	}
 
-	const notifType = asmailType<Notif>('DeliveryNotificationWithId');
+	const notifType = ProtoType.for<Notif>(pb.DeliveryNotificationWithId);
 
 	export function wrapService(
 		fn: Delivery['observeAllDeliveries']
@@ -727,7 +724,7 @@ namespace observeDelivery {
 		id: string;
 	}
 
-	const requestType = asmailType<Request>('ObserveDeliveryRequestBody');
+	const requestType = ProtoType.for<Request>(pb.ObserveDeliveryRequestBody);
 
 	export function wrapService(fn: Delivery['observeDelivery']): ExposedFn {
 		return buf => {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, makeProtobufTypeFrom, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { fs as pb } from '../protos/fs.proto';
 import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
 import { packStats, unpackStats, packXAttrValue, unpackXAttrValue, exposeFileService, FileMsg, makeFileCaller, packJSON, unpackJSON, fileMsgType, unpackFileEvent, packFileEvent } from "./file";
 import * as file from "./file";
@@ -24,7 +26,6 @@ import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } fr
 import { Subject } from "rxjs";
 import { defer, Deferred } from "../lib-common/processes";
 import { map } from "rxjs/operators";
-import { ProtoType } from "../lib-client/protobuf-loader";
 
 type ReadonlyFS = web3n.files.ReadonlyFS;
 type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
@@ -220,11 +221,7 @@ export interface FSMsg {
 	impl: ObjectReference<'FSImpl'>;
 }
 
-function makeFSType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('fs.proto', `fs.${type}`);
-}
-
-export const fsMsgType = makeFSType<FSMsg>('FS');
+export const fsMsgType = ProtoType.for<FSMsg>(pb.FS);
 
 
 namespace checkPresence {
@@ -234,7 +231,7 @@ namespace checkPresence {
 		throwIfMissing?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('CheckPresenceRequestBody');
+	const requestType = ProtoType.for<Request>(pb.CheckPresenceRequestBody);
 
 	export function wrapService(fn: ReadonlyFS['checkFilePresence']): ExposedFn {
 		return buf => {
@@ -281,7 +278,7 @@ interface RequestWithPath {
 	path: string;
 }
 
-const reqWithPathType = makeFSType<RequestWithPath>('PathOnlyRequestBody');
+const reqWithPathType = ProtoType.for<RequestWithPath>(pb.PathOnlyRequestBody);
 
 
 namespace stat {
@@ -315,7 +312,7 @@ namespace getXAttr {
 		xaName: string;
 	}
 
-	export const requestType = makeFSType<Request>('GetXAttrRequestBody');
+	export const requestType = ProtoType.for<Request>(pb.GetXAttrRequestBody);
 
 	export function wrapService(fn: ReadonlyFS['getXAttr']): ExposedFn {
 		return buf => {
@@ -369,13 +366,14 @@ interface SymLinkMsg {
 	isFolder?: Value<boolean>;
 	impl: ObjectReference<'SymLinkImpl'>;
 }
-const symLinkMsgType = makeFSType<SymLinkMsg>('SymLink');
+const symLinkMsgType = ProtoType.for<SymLinkMsg>(pb.SymLink);
 
 interface SymLinkTarget {
 	fs?: FSMsg;
 	file?: FileMsg;
 }
-const symLinkTargetType = makeFSType<SymLinkTarget>('SymLinkTargetReplyBody');
+const symLinkTargetType = ProtoType.for<SymLinkTarget>(
+	pb.SymLinkTargetReplyBody);
 
 function exposeSymLink(
 	link: SymLink, expServices: ExposedServices
@@ -481,7 +479,7 @@ interface FSEventMsg {
 	remoteVersion?: Value<number>;
 }
 
-const fsEventMsgType = makeFSType<FSEventMsg>('FSEventMsg');
+const fsEventMsgType = ProtoType.for<FSEventMsg>(pb.FSEventMsg);
 
 function packFSEvent(e: FSEvent): Buffer {
 	const m: FSEventMsg = {
@@ -672,7 +670,7 @@ namespace listFolder {
 		entries: ListingEntryMsg[];
 	}
 
-	const requestType = makeFSType<Reply>('ListFolderReplyBody');
+	const requestType = ProtoType.for<Reply>(pb.ListFolderReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFS['listFolder']
@@ -759,7 +757,7 @@ namespace readBytes {
 		end?: Value<number>;
 	}
 
-	export const requestType = makeFSType<Request>('ReadBytesRequestBody');
+	export const requestType = ProtoType.for<Request>(pb.ReadBytesRequestBody);
 
 	export function wrapService(
 		fn: ReadonlyFS['readBytes']
@@ -869,7 +867,7 @@ namespace select {
 		criteria: CriteriaMsg;
 	}
 
-	const requestType = makeFSType<Request>('SelectRequestBody');
+	const requestType = ProtoType.for<Request>(pb.SelectRequestBody);
 
 	function criteriaToMsg(sc: SelectCriteria): CriteriaMsg {
 		const c: CriteriaMsg = {
@@ -1012,13 +1010,13 @@ namespace fsCollection {
 			name: string;
 		}
 
-		const requestType = makeFSType<Request>('FSCGetRequestBody');
+		const requestType = ProtoType.for<Request>(pb.FSCGetRequestBody);
 
 		interface Reply {
 			item?: fsItem.FSItemMsg;
 		}
 
-		const replyType = makeFSType<Reply>('FSCGetReplyBody');
+		const replyType = ProtoType.for<Reply>(pb.FSCGetReplyBody);
 
 		export function wrapService(
 			fn: FSCollection['get'], expServices: ExposedServices
@@ -1063,7 +1061,7 @@ namespace fsCollection {
 			items: NameAndItem[];
 		}
 
-		const replyType = makeFSType<Reply>('FSCGetAllReplyBody');
+		const replyType = ProtoType.for<Reply>(pb.FSCGetAllReplyBody);
 
 		export function wrapService(
 			fn: FSCollection['getAll'], expServices: ExposedServices
@@ -1134,7 +1132,7 @@ namespace fsCollection {
 			done?: Value<boolean>;
 			value?: NameAndItem;
 		}
-		const iterResMsgType = makeFSType<IterResMsg>('IterResMsg');
+		const iterResMsgType = ProtoType.for<IterResMsg>(pb.IterResMsg);
 
 		function packIterRes(
 			res: IteratorResult<[string, FSItem]>, expServices: ExposedServices
@@ -1218,7 +1216,7 @@ namespace fsCollection {
 			item?: fsItem.FSItemMsg;
 		}
 
-		const eventType = makeFSType<CollectionEventMsg>('CollectionEvent');
+		const eventType = ProtoType.for<CollectionEventMsg>(pb.CollectionEvent);
 
 		export function wrapService(
 			fn: FSCollection['watch'], expServices: ExposedServices
@@ -1308,7 +1306,7 @@ export namespace fsItem {
 		};
 	}
 
-	export const msgType = makeFSType<FSItemMsg>('FSItem');
+	export const msgType = ProtoType.for<FSItemMsg>(pb.FSItem);
 
 	export function exposeFSItem(
 		expServices: ExposedServices, item: FSItem
@@ -1455,7 +1453,7 @@ namespace vListFolder {
 		entries: ListingEntryMsg[];
 	}
 
-	const replyType = makeFSType<Reply>('VersionedListFolderReplyBody');
+	const replyType = ProtoType.for<Reply>(pb.VersionedListFolderReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFSVersionedAPI['listFolder']
@@ -1616,7 +1614,7 @@ namespace updateXAttrs {
 		path: string;
 	}
 
-	const requestType = makeFSType<Request>('UpdateXAttrsRequestBody');
+	const requestType = ProtoType.for<Request>(pb.UpdateXAttrsRequestBody);
 
 	export function unpackRequest(
 		buf: EnvelopeBody
@@ -1659,7 +1657,7 @@ namespace makeFolder {
 		exclusive?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('MakeFolderRequestBody');
+	const requestType = ProtoType.for<Request>(pb.MakeFolderRequestBody);
 
 	export function wrapService(fn: WritableFS['makeFolder']): ExposedFn {
 		return buf => {
@@ -1690,7 +1688,7 @@ namespace deleteFolder {
 		removeContent?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('DeleteFolderRequestBody');
+	const requestType = ProtoType.for<Request>(pb.DeleteFolderRequestBody);
 
 	export function wrapService(fn: WritableFS['deleteFolder']): ExposedFn {
 		return buf => {
@@ -1769,7 +1767,7 @@ namespace move {
 		dst: string;
 	}
 
-	const requestType = makeFSType<Request>('MoveRequestBody');
+	const requestType = ProtoType.for<Request>(pb.MoveRequestBody);
 
 	export function wrapService(fn: WritableFS['move']): ExposedFn {
 		return buf => {
@@ -1801,7 +1799,7 @@ namespace copyFile {
 		overwrite?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('CopyFileRequestBody');
+	const requestType = ProtoType.for<Request>(pb.CopyFileRequestBody);
 
 	export function wrapService(fn: WritableFS['copyFile']): ExposedFn {
 		return buf => {
@@ -1833,7 +1831,7 @@ namespace copyFolder {
 		mergeAndOverwrite?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('CopyFolderRequestBody');
+	const requestType = ProtoType.for<Request>(pb.CopyFolderRequestBody);
 
 	export function wrapService(fn: WritableFS['copyFolder']): ExposedFn {
 		return buf => {
@@ -1865,7 +1863,7 @@ namespace saveFile {
 		overwrite?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('SaveFileRequestBody');
+	const requestType = ProtoType.for<Request>(pb.SaveFileRequestBody);
 
 	export function wrapService(
 		fn: WritableFS['saveFile'], expServices: ExposedServices
@@ -1900,7 +1898,7 @@ namespace saveFolder {
 		overwrite?: Value<boolean>;
 	}
 
-	const requestType = makeFSType<Request>('SaveFolderRequestBody');
+	const requestType = ProtoType.for<Request>(pb.SaveFolderRequestBody);
 
 	export function wrapService(
 		fn: WritableFS['saveFolder'], expServices: ExposedServices
@@ -1934,7 +1932,7 @@ namespace link {
 		target: ObjectReference<'FSImpl'>|ObjectReference<'FileImpl'>;
 	}
 
-	const requestType = makeFSType<Request>('LinkRequestBody');
+	const requestType = ProtoType.for<Request>(pb.LinkRequestBody);
 
 	export function wrapService(
 		fn: WritableFS['link'], expServices: ExposedServices
@@ -1971,7 +1969,7 @@ interface FileFlagsMsg {
 	exclusive?: Value<boolean>;
 }
 
-const pathAndFileOptsType = makeFSType<PathAndFileOpts>('PathAndOptFileFlags');
+const pathAndFileOptsType = ProtoType.for<PathAndFileOpts>(pb.PathAndOptFileFlags);
 
 function packPathAndFlags(path: string, flags: FileFlags|undefined): Buffer {
 	return pathAndFileOptsType.pack({ path, flags: optFlagsToMsg(flags) });
@@ -2073,7 +2071,7 @@ namespace writeJSONFile {
 		flags?: FileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('WriteJsonFileRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteJsonFileRequestBody);
 
 	export function wrapService(fn: WritableFS['writeJSONFile']): ExposedFn {
 		return buf => {
@@ -2105,7 +2103,7 @@ namespace writeTxtFile {
 		flags?: FileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('WriteTxtFileRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteTxtFileRequestBody);
 
 	export function wrapService(fn: WritableFS['writeTxtFile']): ExposedFn {
 		return buf => {
@@ -2137,7 +2135,7 @@ namespace writeBytes {
 		flags?: FileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('WriteBytesRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteBytesRequestBody);
 
 	export function wrapService(fn: WritableFS['writeBytes']): ExposedFn {
 		return buf => {
@@ -2250,7 +2248,8 @@ namespace vWriteJSONFile {
 		flags?: VerFileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('VersionedWriteJsonFileRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.VersionedWriteJsonFileRequestBody);
 
 	export function wrapService(
 		fn: WritableFSVersionedAPI['writeJSONFile']
@@ -2286,7 +2285,8 @@ namespace vWriteTxtFile {
 		flags?: VerFileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('VersionedWriteTxtFileRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.VersionedWriteTxtFileRequestBody);
 
 	export function wrapService(
 		fn: WritableFSVersionedAPI['writeTxtFile']
@@ -2322,7 +2322,8 @@ namespace vWriteBytes {
 		flags?: VerFileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('VersionedWriteBytesRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.VersionedWriteBytesRequestBody);
 
 	export function wrapService(
 		fn: WritableFSVersionedAPI['writeBytes']
@@ -2357,7 +2358,8 @@ namespace vGetByteSink {
 		flags?: VerFileFlagsMsg;
 	}
 
-	const requestType = makeFSType<Request>('VersionedGetByteSinkRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.VersionedGetByteSinkRequestBody);
 
 	export function wrapService(
 		fn: WritableFSVersionedAPI['getByteSink'], expServices: ExposedServices

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,9 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeProtobufTypeFrom, ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
+import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
+import { ProtoType } from '../lib-client/protobuf-type';
+import { bytes as pb } from '../protos/bytes.proto';
 import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from './connector';
-import { ProtoType } from '../lib-client/protobuf-loader';
 
 type FileByteSink = web3n.files.FileByteSink;
 type FileLayout = web3n.files.FileLayout;
@@ -84,10 +85,6 @@ export function exposeSrcService(
 	return ref;
 }
 
-function bytesType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('bytes.proto', `bytes.${type}`);
-}
-
 
 namespace sinkGetSize {
 
@@ -120,7 +117,7 @@ namespace sinkSplice {
 		bytes?: Value<Buffer>;
 	}
 
-	const requestType = bytesType<Request>('SpliceRequestBody');
+	const requestType = ProtoType.for<Request>(pb.SpliceRequestBody);
 
 	export function wrapService(fn: FileByteSink['splice']): ExposedFn {
 		return buf => {
@@ -152,7 +149,7 @@ namespace sinkTruncate {
 		size: number;
 	}
 
-	const requestType = bytesType<Request>('TruncateRequestBody');
+	const requestType = ProtoType.for<Request>(pb.TruncateRequestBody);
 
 	export function wrapService(fn: FileByteSink['truncate']): ExposedFn {
 		return buf => {
@@ -183,7 +180,7 @@ namespace sinkShowLayout {
 		sections: LayoutSection[];
 	}
 
-	const replyType = bytesType<FileLayoutMsg>('FileLayoutMsg');
+	const replyType = ProtoType.for<FileLayoutMsg>(pb.FileLayoutMsg);
 
 	function packLayout(l: FileLayout): FileLayoutMsg {
 		return {
@@ -227,7 +224,7 @@ namespace sinkDone {
 		err?: ErrorValue;
 	}
 
-	const requestType = bytesType<Request>('DoneRequestBody');
+	const requestType = ProtoType.for<Request>(pb.DoneRequestBody);
 
 	export function wrapService(fn: FileByteSink['done']): ExposedFn {
 		return buf => {
@@ -308,9 +305,9 @@ namespace srcRead {
 		bytes?: Value<Uint8Array>;
 	}
 
-	const requestType = bytesType<Request>('ReadRequestBody');
+	const requestType = ProtoType.for<Request>(pb.ReadRequestBody);
 
-	const replyType = bytesType<Reply>('ReadReplyBody');
+	const replyType = ProtoType.for<Reply>(pb.ReadReplyBody);
 
 	export function wrapService(fn: FileByteSource['read']): ExposedFn {
 		return buf => {
@@ -340,7 +337,7 @@ namespace srcSeek {
 		offset: number;
 	}
 
-	const requestType = bytesType<Request>('SeekRequestBody');
+	const requestType = ProtoType.for<Request>(pb.SeekRequestBody);
 
 	export function wrapService(fn: FileByteSource['seek']): ExposedFn {
 		return buf => {

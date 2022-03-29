@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,21 +16,18 @@
 */
 
 import { ExposedFn, Caller } from "../ipc-via-protobuf/connector";
-import { ProtoType } from "../lib-client/protobuf-loader";
-import { makeProtobufTypeFrom, ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
+import { ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { logger as pb } from '../protos/logger.proto';
 
 type Logger = web3n.caps.common.Logger;
-
-function loggerType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('logger.proto', `logger.${type}`);
-}
 
 interface LogRequest {
 	logType: string;
 	msg: string;
 	err?: ErrorValue;
 }
-const logReqType = loggerType<LogRequest>('LogRequestBody');
+const logReqType = ProtoType.for<LogRequest>(pb.LogRequestBody);
 
 export function exposeLogger(fn: Logger): ExposedFn {
 	return buf => {

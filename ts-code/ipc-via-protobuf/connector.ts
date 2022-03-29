@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,9 @@
 */
 
 import { Observable, Observer, Subscription, Subject } from "rxjs";
-import { makeProtobufTypeFrom, ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
+import { ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { ipc as pb } from '../protos/ipc.proto';
 
 
 export interface ExposedServices {
@@ -217,8 +219,7 @@ export type MsgType = ClientToService | ServiceToClient;
 export type ClientToService = 'start' | 'cancel' | 'drop' | 'list-obj';
 export type ServiceToClient = 'interim' | 'end' | 'error';
 
-export const msgProtoType = makeProtobufTypeFrom<Envelope>(
-	'ipc.proto', 'ipc.Envelope');
+export const msgProtoType = ProtoType.for<Envelope>(pb.Envelope);
 
 export type ExposedFn = (reqBody: EnvelopeBody) => ({
 	promise?: Promise<EnvelopeBody>;

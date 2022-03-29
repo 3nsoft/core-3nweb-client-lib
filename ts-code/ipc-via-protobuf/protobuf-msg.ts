@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,43 +18,29 @@
 import { makeIPCException, EnvelopeBody } from './connector';
 import { stringifyErr } from '../lib-common/exceptions/error';
 import { toBuffer } from '../lib-common/buffer-utils';
-import { ProtoType } from '../lib-client/protobuf-loader';
+import { common as pb } from '../protos/common.proto';
+import { ProtoType } from '../lib-client/protobuf-type';
 
 type RuntimeException = web3n.RuntimeException;
 
-export function makeProtobufTypeFrom<T extends object>(
-	protoFile: string, typeName: string
-): ProtoType<T> {
-	try {
-		// make sure to copy protos with compile step (use npm script)
-		return ProtoType.makeFrom(__dirname, protoFile, typeName);
-	} catch (err) {
-		// we won't get here if referenced  module exists, but metro packager
-		// in LiqudCore needs static path require
-		const fallback = require('./proto-defs');
-		return ProtoType.makeFrom(__dirname, protoFile, typeName, fallback);
-	}
-}
-
-function commonType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom<T>('common.proto', `common.${type}`);
-}
 
 export interface ObjectReference<T> {
 	objType: T;
 	path: string[];
 }
-export const objRefType = commonType<ObjectReference<any>>('ObjectReference');
+export const objRefType = ProtoType.for<ObjectReference<any>>(
+	pb.ObjectReference);
 
 export interface BooleanValue {
 	value: boolean;
 }
-export const boolValType = commonType<BooleanValue>('BooleanValue');
+export const boolValType = ProtoType.for<BooleanValue>(pb.BooleanValue);
 
 export interface StringArrayValue {
 	values: string[];
 }
-export const strArrValType = commonType<StringArrayValue>('StringArrayValue');
+export const strArrValType = ProtoType.for<StringArrayValue>(
+	pb.StringArrayValue);
 
 export function fixArray<T>(arr: T[]): T[] {
 	return (arr ? arr : []);
@@ -89,7 +75,7 @@ export function valOfOptInt(uint64: Value<number>|undefined): number|undefined {
 	return fixInt(valOf(uint64));
 }
 
-const numValType = commonType<Value<number>>('UInt64Value');
+const numValType = ProtoType.for<Value<number>>(pb.UInt64Value);
 export function packInt(uint64: number): Buffer {
 	return numValType.pack({ value: uint64 });
 }
@@ -101,7 +87,7 @@ export interface ErrorValue {
 	runtimeExcJson?: string;
 	err?: string;
 }
-export const errBodyType = commonType<ErrorValue>('ErrorValue');
+export const errBodyType = ProtoType.for<ErrorValue>(pb.ErrorValue);
 
 export function errToMsg(err: any): ErrorValue {
 	if (typeof err !== 'object') {

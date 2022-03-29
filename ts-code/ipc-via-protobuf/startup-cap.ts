@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,11 +16,12 @@
 */
 
 import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
-import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal, makeProtobufTypeFrom } from "./protobuf-msg";
+import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { defer } from "../lib-common/processes";
-import { ProtoType } from "../lib-client/protobuf-loader";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { startup as pb } from "../protos/startup.proto";
 
 type SignInService = web3n.startup.SignInService;
 type SignUpService = web3n.startup.SignUpService;
@@ -71,10 +72,6 @@ export function makeSignUpCaller(
 	};
 }
 
-function startupType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom<T>('startup.proto', `startup.${type}`);
-}
-
 
 namespace getAvailableAddresses {
 
@@ -83,7 +80,8 @@ namespace getAvailableAddresses {
 		token?: Value<string>;
 	}
 
-	const requestType = startupType<Request>('GetAvailableAddressesRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.GetAvailableAddressesRequestBody);
 
 	export function wrapService(
 		fn: SignUpService['getAvailableAddresses']
@@ -117,7 +115,7 @@ namespace addUser {
 		token?: Value<string>;
 	}
 
-	const requestType = startupType<Request>('AddUserRequestBody');
+	const requestType = ProtoType.for<Request>(pb.AddUserRequestBody);
 
 	export function wrapService(fn: SignUpService['addUser']): ExposedFn {
 		return buf => {
@@ -148,7 +146,7 @@ namespace isActivated {
 		userId: string;
 	}
 
-	const requestType = startupType<Request>('IsActivatedRequestBody');
+	const requestType = ProtoType.for<Request>(pb.IsActivatedRequestBody);
 
 	export function wrapService(fn: SignUpService['isActivated']): ExposedFn {
 		return buf => {
@@ -175,7 +173,7 @@ Object.freeze(isActivated);
 interface PassOnlyRequest {
 	pass: string;
 }
-const reqWithPassType = startupType<PassOnlyRequest>('PassOnlyRequestBody');
+const reqWithPassType = ProtoType.for<PassOnlyRequest>(pb.PassOnlyRequestBody);
 
 
 namespace createUserParams {
@@ -248,8 +246,8 @@ namespace startLoginToRemoteStorage {
 		address: string;
 	}
 
-	const requestType = startupType<Request>(
-		'StartLoginToRemoteStorageRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.StartLoginToRemoteStorageRequestBody);
 
 	export function wrapService(
 		fn: SignInService['startLoginToRemoteStorage']
@@ -279,7 +277,7 @@ interface ProgressValue {
 	p: number;
 	decrResult?: Value<boolean>;
 }
-const progressValueType = startupType<ProgressValue>('ProgressValue');
+const progressValueType = ProtoType.for<ProgressValue>(pb.ProgressValue);
 
 
 namespace completeLoginAndLocalSetup {
@@ -339,7 +337,7 @@ namespace useExistingStorage {
 		pass: string;
 	}
 
-	const requestType = startupType<Request>('UseExistingStorageRequestBody');
+	const requestType = ProtoType.for<Request>(pb.UseExistingStorageRequestBody);
 
 	export function wrapService(
 		fn: SignInService['useExistingStorage']

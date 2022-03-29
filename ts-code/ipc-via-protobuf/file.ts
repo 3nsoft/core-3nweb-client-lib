@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,13 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, makeProtobufTypeFrom, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { file as pb } from '../protos/file.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
 import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
-import { ProtoType } from "../lib-client/protobuf-loader";
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
@@ -147,11 +148,7 @@ export function exposeFileService(
 	return fileMsg;
 }
 
-function makeFileType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('file.proto', `file.${type}`);
-}
-
-export const fileMsgType = makeFileType<FileMsg>('File');
+export const fileMsgType = ProtoType.for<FileMsg>(pb.File);
 
 interface StatsMsg {
 	isFile?: Value<boolean>;
@@ -164,7 +161,7 @@ interface StatsMsg {
 	version?: Value<number>;
 }
 
-const statsMsgType = makeFileType<StatsMsg>('StatsMsg');
+const statsMsgType = ProtoType.for<StatsMsg>(pb.StatsMsg);
 
 export function packStats(s: Stats): Buffer {
 	const msg: StatsMsg = {
@@ -202,7 +199,7 @@ export interface FileMsg {
 	impl: ObjectReference<'FileImpl'>;
 }
 
-const fileType = makeFileType<FileMsg>('File');
+const fileType = ProtoType.for<FileMsg>(pb.File);
 
 
 namespace stat {
@@ -234,7 +231,7 @@ interface XAttrValue {
 	bytes?: Value<Buffer>;
 }
 
-const xattrValueType = makeFileType<XAttrValue>('XAttrValue');
+const xattrValueType = ProtoType.for<XAttrValue>(pb.XAttrValue);
 
 export function packXAttrValue(val: any): EnvelopeBody {
 	if (Buffer.isBuffer(val)) {
@@ -266,7 +263,7 @@ namespace getXAttr {
 		xaName: string;
 	}
 
-	const requestType = makeFileType<Request>('GetXAttrRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetXAttrRequestBody);
 
 	export function wrapService(fn: ReadonlyFile['getXAttr']): ExposedFn {
 		return buf => {
@@ -324,9 +321,9 @@ export namespace readBytes {
 		bytes?: Value<Uint8Array>;
 	}
 
-	const requestType = makeFileType<Request>('ReadBytesRequestBody');
+	const requestType = ProtoType.for<Request>(pb.ReadBytesRequestBody);
 
-	const replyType = makeFileType<Reply>('ReadBytesReplyBody');
+	const replyType = ProtoType.for<Reply>(pb.ReadBytesReplyBody);
 
 	export function packReply(bytes?: Uint8Array): EnvelopeBody {
 		return replyType.pack({ bytes: toOptVal(bytes) });
@@ -461,7 +458,7 @@ interface FileEventMsg {
 	remoteVersion?: Value<number>;
 }
 
-const fileEventType = makeFileType<FileEventMsg>('FileEventMsg');
+const fileEventType = ProtoType.for<FileEventMsg>(pb.FileEventMsg);
 
 export function packFileEvent(e: FileEvent): Buffer {
 	const msg: FileEventMsg = {
@@ -533,7 +530,7 @@ export namespace vGetXAttr {
 		xaName: string;
 	}
 
-	const requestType = makeFileType<Request>('GetXAttrRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetXAttrRequestBody);
 
 	export interface Reply {
 		version: number;
@@ -542,7 +539,7 @@ export namespace vGetXAttr {
 		bytes?: Value<Buffer>;
 	}
 
-	export const replyType = makeFileType<Reply>('VersionedGetXAttrReplyBody');
+	export const replyType = ProtoType.for<Reply>(pb.VersionedGetXAttrReplyBody);
 
 	export function unpackReply(buf: EnvelopeBody): {
 		attr: any; version: number;
@@ -597,7 +594,8 @@ export namespace vListXAttrs {
 		xaNames: string[];
 	}
 
-	export const replyType = makeFileType<Reply>('VersionedListXAttrsReplyBody');
+	export const replyType = ProtoType.for<Reply>(
+		pb.VersionedListXAttrsReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['listXAttrs']
@@ -632,14 +630,14 @@ export namespace vReadBytes {
 		end?: Value<number>;
 	}
 
-	const requestType = makeFileType<Request>('ReadBytesRequestBody');
+	const requestType = ProtoType.for<Request>(pb.ReadBytesRequestBody);
 
 	interface Reply {
 		version: number;
 		bytes?: Value<Uint8Array>;
 	}
 
-	const replyType = makeFileType<Reply>('VersionedReadBytesReplyBody');
+	const replyType = ProtoType.for<Reply>(pb.VersionedReadBytesReplyBody);
 
 	export function packReply(
 		r: { version: number; bytes?: Uint8Array; }
@@ -689,7 +687,7 @@ export namespace vReadTxt {
 		txt: string;
 	}
 
-	export const replyType = makeFileType<Reply>('VersionedReadTxtReplyBody');
+	export const replyType = ProtoType.for<Reply>(pb.VersionedReadTxtReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['readTxt']
@@ -724,7 +722,7 @@ export namespace vReadJSON {
 		json: string;
 	}
 
-	export const replyType = makeFileType<Reply>('VersionedReadJsonReplyBody');
+	export const replyType = ProtoType.for<Reply>(pb.VersionedReadJsonReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['readJSON']
@@ -765,8 +763,8 @@ export namespace vGetByteSource {
 		src: ObjectReference<'FileByteSource'>;
 	}
 
-	export const replyType = makeFileType<Reply>(
-		'VersionedGetByteSourceReplyBody');
+	export const replyType = ProtoType.for<Reply>(
+		pb.VersionedGetByteSourceReplyBody);
 
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['getByteSource'],
@@ -814,7 +812,7 @@ export namespace updateXAttrs {
 		};
 	}
 	
-	const requestType = makeFileType<Request>('UpdateXAttrsRequestBody');
+	const requestType = ProtoType.for<Request>(pb.UpdateXAttrsRequestBody);
 
 	export function fromReqChanges(r: Request['changes']): XAttrsChanges {
 		const attrs: XAttrsChanges = {};
@@ -893,7 +891,7 @@ namespace writeBytes {
 		bytes: Buffer;
 	}
 
-	const requestType = makeFileType<Request>('WriteBytesRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteBytesRequestBody);
 
 	export function wrapService(fn: WritableFile['writeBytes']): ExposedFn {
 		return buf => {
@@ -923,7 +921,7 @@ namespace writeTxt {
 		txt: string;
 	}
 
-	const requestType = makeFileType<Request>('WriteTxtRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteTxtRequestBody);
 
 	export function wrapService(fn: WritableFile['writeTxt']): ExposedFn {
 		return buf => {
@@ -951,7 +949,7 @@ namespace writeJSON {
 		json: string;
 	}
 
-	const requestType = makeFileType<Request>('WriteJsonRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteJsonRequestBody);
 
 	export function wrapService(fn: WritableFile['writeJSON']): ExposedFn {
 		return buf => {
@@ -981,7 +979,7 @@ namespace getByteSink {
 		truncateFile?: Value<boolean>;
 	}
 
-	const requestType = makeFileType<Request>('GetByteSinkRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetByteSinkRequestBody);
 
 	export function wrapService(
 		fn: WritableFile['getByteSink'], expServices: ExposedServices
@@ -1021,7 +1019,7 @@ namespace copy {
 		file: ObjectReference<'FileImpl'>;
 	}
 
-	export const requestType = makeFileType<Request>('CopyRequestBody');
+	export const requestType = ProtoType.for<Request>(pb.CopyRequestBody);
 
 	export function wrapService(
 		fn: WritableFile['copy'], expServices: ExposedServices
@@ -1112,7 +1110,7 @@ namespace vWriteBytes {
 		bytes: Buffer;
 	}
 
-	const requestType = makeFileType<Request>('WriteBytesRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteBytesRequestBody);
 
 	export function wrapService(
 		fn: WritableFileVersionedAPI['writeBytes']
@@ -1144,7 +1142,7 @@ namespace vWriteTxt {
 		txt: string;
 	}
 
-	const requestType = makeFileType<Request>('WriteTxtRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteTxtRequestBody);
 
 	export function wrapService(
 		fn: WritableFileVersionedAPI['writeTxt']
@@ -1176,7 +1174,7 @@ namespace vWriteJSON {
 		json: string;
 	}
 
-	const requestType = makeFileType<Request>('WriteJsonRequestBody');
+	const requestType = ProtoType.for<Request>(pb.WriteJsonRequestBody);
 
 	export function wrapService(
 		fn: WritableFileVersionedAPI['writeJSON']
@@ -1209,15 +1207,16 @@ export namespace vGetByteSink {
 		currentVersion?: Value<number>;
 	}
 
-	const requestType = makeFileType<Request>('VersionedGetByteSinkRequestBody');
+	const requestType = ProtoType.for<Request>(
+		pb.VersionedGetByteSinkRequestBody);
 
 	export interface Reply {
 		version: number;
 		sink: ObjectReference<'FileByteSink'>;
 	}
 
-	export const replyType = makeFileType<Reply>(
-		'VersionedGetByteSinkReplyBody');
+	export const replyType = ProtoType.for<Reply>(
+		pb.VersionedGetByteSinkReplyBody);
 
 	export function wrapService(
 		fn: WritableFileVersionedAPI['getByteSink'], expServices: ExposedServices

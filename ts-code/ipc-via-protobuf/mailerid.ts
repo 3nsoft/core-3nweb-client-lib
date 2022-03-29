@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ProtoType } from "../lib-client/protobuf-loader";
 import { ExposedFn, Caller, makeIPCException, ExposedObj } from "./connector";
-import { makeProtobufTypeFrom } from "./protobuf-msg";
+import { ProtoType } from '../lib-client/protobuf-type';
+import { mailerid as pb } from '../protos/mailerid.proto';
 
 type MailerId = web3n.mailerid.Service;
 
@@ -35,11 +35,6 @@ export function makeMailerIdCaller(
 		getUserId: getUserId.makeCaller(caller, objPath),
 		login: login.makeCaller(caller, objPath)
 	};
-}
-
-
-function maileridType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom('mailerid.proto', `mailerid.${type}`);
 }
 
 
@@ -79,8 +74,8 @@ namespace login {
 	}
 
 
-	const requestType = maileridType<Request>('LoginRequestBody');
-	const replyType = maileridType<Reply>('LoginReplyBody');
+	const requestType = ProtoType.for<Request>(pb.LoginRequestBody);
+	const replyType = ProtoType.for<Reply>(pb.LoginReplyBody);
 
 	export function wrapService(fn: MailerId['login']): ExposedFn {
 		return bytes => {

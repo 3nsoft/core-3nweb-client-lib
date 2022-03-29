@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,10 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Value, valOfOpt, toOptVal, makeProtobufTypeFrom } from './protobuf-msg';
+import { Value, valOfOpt, toOptVal } from './protobuf-msg';
 import { ExposedObj, ExposedFn, Caller, ExposedServices } from './connector';
 import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from './fs';
-import { ProtoType } from '../lib-client/protobuf-loader';
+import { ProtoType } from '../lib-client/protobuf-type';
+import { storage as pb } from '../protos/storage.proto';
 
 type Storage = web3n.storage.Service;
 type StorageType = web3n.storage.StorageType;
@@ -58,10 +59,6 @@ export function makeStorageCaller(caller: Caller, objPath: string[]): Storage {
 	return storage;
 }
 
-function storageType<T extends object>(type: string): ProtoType<T> {
-	return makeProtobufTypeFrom<T>('storage.proto', `storage.${type}`);
-}
-
 
 namespace getAppLocalFS {
 
@@ -69,7 +66,7 @@ namespace getAppLocalFS {
 		appName?: Value<string>;
 	}
 
-	const requestType = storageType<Request>('GetAppLocalFSRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetAppLocalFSRequestBody);
 
 	export function wrapService(
 		fn: Storage['getAppLocalFS'], expServices: ExposedServices
@@ -107,7 +104,7 @@ namespace getAppSyncedFS {
 		appName?: Value<string>;
 	}
 
-	const requestType = storageType<Request>('GetAppSyncedFSRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetAppSyncedFSRequestBody);
 
 	export function wrapService(
 		fn: Storage['getAppSyncedFS'], expServices: ExposedServices
@@ -146,7 +143,7 @@ namespace getSysFS {
 		path?: Value<string>;
 	}
 
-	const requestType = storageType<Request>('GetSysFSRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetSysFSRequestBody);
 
 	export function wrapService(
 		fn: NonNullable<Storage['getSysFS']>, expServices: ExposedServices
@@ -187,7 +184,7 @@ namespace getUserFS {
 		path?: Value<string>;
 	}
 
-	const requestType = storageType<Request>('GetUserFSRequestBody');
+	const requestType = ProtoType.for<Request>(pb.GetUserFSRequestBody);
 
 	export function wrapService(
 		fn: NonNullable<Storage['getUserFS']>, expServices: ExposedServices

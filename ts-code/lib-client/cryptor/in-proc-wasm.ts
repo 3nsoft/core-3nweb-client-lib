@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 3NSoft Inc.
+ Copyright (C) 2021 - 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,8 @@ import { signing } from 'ecma-nacl';
 import { startWasmFrom } from './wasm-mp1-modules';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { ProtoType } from '../protobuf-loader';
+import { ProtoType } from '../protobuf-type';
+import { cryptor as pb } from '../../protos/cryptor.proto';
 import { defer, Deferred } from '../../lib-common/processes';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
@@ -45,20 +46,6 @@ function wasmBytes(): Buffer {
 		// look for module with base64 form in a module, that must've been packed
 		const str = require('./cryptor-wasm.js').wasm;
 		return Buffer.from(str, 'base64');
-	}
-}
-
-function makeProtobufType<T extends object>(type: string): ProtoType<T> {
-	const protoFile = 'cryptor.proto';
-	const typeName = `cryptor.${type}`;
-	try {
-		// make sure to copy protos with compile step (use npm script)
-		return ProtoType.makeFrom(__dirname, protoFile, typeName);
-	} catch (err) {
-		// we won't get here if referenced  module exists, but metro packager
-		// in LiqudCore needs static path require
-		const fallback = require('./proto-defs');
-		return ProtoType.makeFrom(__dirname, protoFile, typeName, fallback);
 	}
 }
 
@@ -114,11 +101,11 @@ function toLocalErr(
 	}
 }
 
-const reqType = makeProtobufType<WasmRequest>('Request');
-const replyType = makeProtobufType<WasmReply>('Reply');
+const reqType = ProtoType.for<WasmRequest>(pb.Request);
+const replyType = ProtoType.for<WasmReply>(pb.Reply);
 
-const boolValType = makeProtobufType<{ val: boolean; }>('BoolVal');
-const kpairType = makeProtobufType<signing.Keypair>('Keypair');
+const boolValType = ProtoType.for<{ val: boolean; }>(pb.BoolVal);
+const kpairType = ProtoType.for<signing.Keypair>(pb.Keypair);
 
 export function makeInProcessWasmCryptor(): Cryptor {
 

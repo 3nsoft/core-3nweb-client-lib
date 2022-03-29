@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,7 +22,8 @@ import { cpus } from 'os';
 import { Deferred, defer } from '../../lib-common/processes';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { dirname, join } from 'path';
-import { ProtoType } from '../protobuf-loader';
+import { ProtoType } from '../protobuf-type';
+import { cryptor as pb } from '../../protos/cryptor.proto';
 import { signing } from 'ecma-nacl';
 import { assert } from '../../lib-common/assert';
 
@@ -359,8 +360,8 @@ export const makeInWorkerCryptor: makeCryptor = (
 
 class WasmWorkers extends Workers<Uint8Array> {
 
-	private readonly reqType = makeProtobufType<WasmRequest>('Request');
-	private readonly replyType = makeProtobufType<WasmReply>('Reply');
+	private readonly reqType = ProtoType.for<WasmRequest>(pb.Request);
+	private readonly replyType = ProtoType.for<WasmReply>(pb.Reply);
 
 	constructor(
 		logErr: LogError, logWarning: LogWarning, maxThreads: number|undefined
@@ -441,20 +442,6 @@ function toLocalErr(
 	}
 }
 
-function makeProtobufType<T extends object>(type: string): ProtoType<T> {
-	const protoFile = 'cryptor.proto';
-	const typeName = `cryptor.${type}`;
-	try {
-		// make sure to copy protos with compile step (use npm script)
-		return ProtoType.makeFrom(__dirname, protoFile, typeName);
-	} catch (err) {
-		// we won't get here if referenced  module exists, but metro packager
-		// in LiqudCore needs static path require
-		const fallback = require('./proto-defs');
-		return ProtoType.makeFrom(__dirname, protoFile, typeName, fallback);
-	}
-}
-
 export const makeInWorkerWasmCryptor: makeCryptor = (
 	logErr, logWarning, maxThreads
 ) => {
@@ -464,8 +451,8 @@ export const makeInWorkerWasmCryptor: makeCryptor = (
 	const workers = new WasmWorkers(logErr, logWarning, maxThreads);
 	const close = workers.close.bind(workers);
 
-	const boolValType = makeProtobufType<{ val: boolean; }>('BoolVal');
-	const kpairType = makeProtobufType<signing.Keypair>('Keypair');
+	const boolValType = ProtoType.for<{ val: boolean; }>(pb.BoolVal);
+	const kpairType = ProtoType.for<signing.Keypair>(pb.Keypair);
 
 	const cryptor: Cryptor = {
 
