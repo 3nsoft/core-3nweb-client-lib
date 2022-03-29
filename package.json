@@ -1,11 +1,11 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
   "scripts": {
-    "build": "bash packing/protos-to-node-module.sh && tsc -p ts-code && bash packing/build-wasm-cryptor.sh",
+    "build": "bash packing/protos-to-node-module.sh && tsc -p ts-code && bash packing/copy-api.sh && bash packing/build-wasm-cryptor.sh",
     "test": "node build/tests/jasmine.js"
   },
   "repository": {
