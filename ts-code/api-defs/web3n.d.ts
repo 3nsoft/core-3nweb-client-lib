@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-/// <reference path="asmail.d.ts" />
-/// <reference path="common-caps.d.ts" />
-/// <reference path="files.d.ts" />
-/// <reference path="mailerid.d.ts" />
-/// <reference path="startup.d.ts" />
-/// <reference path="storage.d.ts" />
+/// <reference path="./asmail.d.ts" />
+/// <reference path="./common-caps.d.ts" />
+/// <reference path="./files.d.ts" />
+/// <reference path="./mailerid.d.ts" />
+/// <reference path="./startup.d.ts" />
+/// <reference path="./storage.d.ts" />
 
 
 declare namespace web3n {
