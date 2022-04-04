@@ -18,9 +18,9 @@
 import { W3N_NAME, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
-import { exposeStorageCAP, makeStorageCaller } from "../ipc-via-protobuf/storage-cap";
+import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../ipc-via-protobuf/storage-cap";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
-import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDifference } from "./generic";
+import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDifference, promiseClientSide } from "./generic";
 
 type W3N = web3n.caps.common.W3N;
 
@@ -51,6 +51,18 @@ export function makeW3Nclient<T extends W3N>(
 		storage: makeStorageCaller,
 	};
 	return makeClientSide(clientSide, mainCAPs, extraCAPs);
+}
+
+export function promiseW3Nclient<T extends W3N>(
+	clientSide: Caller, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
+): Promise<T> {
+	const mainCAPs: ClientCAPsWraps<W3N> = {
+		log: makeLogCaller,
+		mail: makeASMailCaller,
+		mailerid: makeMailerIdCaller,
+		storage: promiseStorageCaller,
+	};
+	return promiseClientSide(clientSide, mainCAPs, extraCAPs);
 }
 
 

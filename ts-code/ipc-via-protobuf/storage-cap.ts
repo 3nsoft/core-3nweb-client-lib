@@ -43,7 +43,21 @@ export function exposeStorageCAP(
 }
 
 export function makeStorageCaller(caller: Caller, objPath: string[]): Storage {
-	const lstStorageCAP = caller.listObj(objPath) as (keyof Storage)[];
+	const lstStorageCAP = caller.listObj!(objPath) as (keyof Storage)[];
+	return instantiateStorageCaller(caller, lstStorageCAP, objPath);
+}
+
+export async function promiseStorageCaller(
+	caller: Caller, objPath: string[]
+): Promise<Storage> {
+	const lstStorageCAP = (await caller.listObjAsync!(objPath)) as (
+		keyof Storage)[];
+	return instantiateStorageCaller(caller, lstStorageCAP, objPath);
+}
+
+function instantiateStorageCaller(
+	caller: Caller, lstStorageCAP: (keyof Storage)[], objPath: string[]
+): Storage {
 	const sysFS = lstStorageCAP.includes('getSysFS');
 	const userFS = lstStorageCAP.includes('getUserFS');
 	const storage: Storage = {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -40,8 +40,13 @@ export class ClientsSideImpl implements ClientsSide {
 
 	constructor(
 		private readonly sendMsg: (msg: Envelope) => void,
-		private readonly syncReqToListObj: (path: string[]) => string[]
+		private readonly syncReqToListObj: Caller['listObj'],
+		private readonly asyncReqToListObj: Caller['listObjAsync']
 	) {
+		if ((this.asyncReqToListObj && this.syncReqToListObj)
+		|| (!this.asyncReqToListObj && !this.syncReqToListObj)) {
+			throw new Error(`Expect either sync or async obj listing function.`);
+		}
 		Object.seal(this);
 	}
 
@@ -127,7 +132,9 @@ export class ClientsSideImpl implements ClientsSide {
 
 	caller(): Caller {
 		const callerWrap: Caller = {
-			listObj: this.listObj.bind(this),
+			listObj: (this.syncReqToListObj ? this.listObj.bind(this) : undefined),
+			listObjAsync: (this.asyncReqToListObj ?
+				this.listObjAsync.bind(this) : undefined),
 			registerClientDrop: this.registerClientDrop.bind(this),
 			srvRefOf: this.srvRefOf.bind(this),
 			startObservableCall: this.startObservableCall.bind(this),
@@ -207,7 +214,13 @@ export class ClientsSideImpl implements ClientsSide {
 	listObj(path: string[]): string[] {
 		if (this.isStopped) { throw makeIPCException(
 			{ 'ipcNotConnected': true }); }
-		return this.syncReqToListObj(path);
+		return this.syncReqToListObj!(path);
+	}
+
+	listObjAsync(path: string[]): Promise<string[]> {
+		if (this.isStopped) { throw makeIPCException(
+			{ 'ipcNotConnected': true }); }
+		return this.asyncReqToListObj!(path);
 	}
 
 }

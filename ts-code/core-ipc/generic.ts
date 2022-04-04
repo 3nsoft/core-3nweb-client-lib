@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 3NSoft Inc.
+ Copyright (C) 2021 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -65,8 +65,9 @@ export function makeClientSide<T extends W3N, W3N extends object>(
 	mainCAPs: ClientCAPsWraps<W3N>,
 	extraCAPs: ClientCAPsWraps<TypeDifference<T, W3N>>|undefined
 ): T {
+	assert(!!clientSide.listObj);
 	const objPath = [ W3N_NAME ];
-	const lstOfCAPs = clientSide.listObj(objPath) as (keyof T)[];
+	const lstOfCAPs = clientSide.listObj!(objPath) as (keyof T)[];
 	const w3n = {} as T;
 	for (const cap of lstOfCAPs) {
 		const capObjPath = objPath.concat(cap as string);
@@ -75,10 +76,33 @@ export function makeClientSide<T extends W3N, W3N extends object>(
 			assert(typeof makeCap === 'function');
 			w3n[cap] = makeCap(clientSide, capObjPath);
 		} else if (extraCAPs) {
-			assert(!!exposeCAPs);
 			const makeCap = extraCAPs[cap as keyof TypeDifference<T, W3N>];
 			assert(typeof makeCap === 'function');
 			w3n[cap] = makeCap(clientSide, capObjPath);
+		}
+	}
+	return w3n;
+}
+
+export async function promiseClientSide<T extends W3N, W3N extends object>(
+	clientSide: Caller,
+	mainCAPs: ClientCAPsWraps<W3N>,
+	extraCAPs: ClientCAPsWraps<TypeDifference<T, W3N>>|undefined
+): Promise<T> {
+	assert(!!clientSide.listObjAsync);
+	const objPath = [ W3N_NAME ];
+	const lstOfCAPs = (await clientSide.listObjAsync!(objPath)) as (keyof T)[];
+	const w3n = {} as T;
+	for (const cap of lstOfCAPs) {
+		const capObjPath = objPath.concat(cap as string);
+		if (mainCAPs[cap as keyof W3N]) {
+			const makeCap = mainCAPs[cap as keyof W3N];
+			assert(typeof makeCap === 'function');
+			w3n[cap] = await makeCap(clientSide, capObjPath);
+		} else if (extraCAPs) {
+			const makeCap = extraCAPs[cap as keyof TypeDifference<T, W3N>];
+			assert(typeof makeCap === 'function');
+			w3n[cap] = await makeCap(clientSide, capObjPath);
 		}
 	}
 	return w3n;

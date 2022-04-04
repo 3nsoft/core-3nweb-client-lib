@@ -48,7 +48,8 @@ export interface Caller {
 	): () => void;
 	registerClientDrop(o: any, srvRef: ObjectReference<any>): void;
 	srvRefOf(clientObj: any): ObjectReference<any>;
-	listObj(path: string[]): string[];
+	listObj?: (path: string[]) => string[];
+	listObjAsync?: (path: string[]) => Promise<string[]>;
 }
 
 export interface ClientsSide {
@@ -70,7 +71,8 @@ function makeServicesSide(sendMsg: (msg: Envelope) => void): ServicesSide {
 
 function makeClientsSide(
 	sendMsg: (msg: Envelope) => void,
-	syncReqToListObj: (path: string[]) => string[]|null
+	syncReqToListObj: Caller['listObj'],
+	asyncReqToListObj: Caller['listObjAsync']
 ): ClientsSide {
 	const classFn = require('./connector-clients-side').ClientsSideImpl;
 	return new classFn(sendMsg, syncReqToListObj);
@@ -87,7 +89,8 @@ export class ObjectsConnector {
 		private msgSink: Observer<Envelope>,
 		msgSrc: Observable<Envelope>,
 		sides: 'clients'|'services'|'clients-and-services',
-		listObjOnServiceSide?: (path: string[]) => string[]|null
+		listObj?: Caller['listObj'],
+		listObjAsync?: Caller['listObjAsync']
 	) {
 		this.messagingProc = msgSrc.subscribe({
 			next: msg => this.processIncomingMsg(msg),
@@ -102,9 +105,10 @@ export class ObjectsConnector {
 			((sides === 'services') || (sides === 'clients-and-services')) ?
 			makeServicesSide(sendMsg) : undefined);
 		if ((sides === 'clients') || (sides === 'clients-and-services')) {
-			if (!listObjOnServiceSide) { throw new Error(
-				`Client side needs listObjOnServiceSide argument`); }
-			this.clients = makeClientsSide(sendMsg, listObjOnServiceSide);
+			if ((!listObj && !listObjAsync)
+			|| (listObj && listObjAsync)) { throw new Error(
+				`Client side needs either listObj, or listObjAsync argument`); }
+			this.clients = makeClientsSide(sendMsg, listObj, listObjAsync);
 		} else {
 			this.clients = undefined;
 		}

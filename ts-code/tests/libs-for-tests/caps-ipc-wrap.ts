@@ -17,7 +17,7 @@
 
 import { Subject } from "rxjs";
 import { map, delay } from "rxjs/operators";
-import { exposeStartupW3N, makeStartupW3Nclient, exposeW3N, makeW3Nclient, Envelope, msgProtoType, ObjectsConnector } from "../../lib-index";
+import { exposeStartupW3N, makeStartupW3Nclient, exposeW3N, makeW3Nclient, Envelope, msgProtoType, ObjectsConnector, Caller, makeIPCException } from "../../lib-index";
 
 type StartupW3N = web3n.startup.W3N;
 type CommonW3N = web3n.caps.common.W3N;
@@ -36,7 +36,11 @@ function makePipe() {
 		map(buf => msgProtoType.unpack(buf))
 	);
 	const coreSide = new ObjectsConnector(fromCore, toCore, 'services');
-	const listObjInCore = coreSide.exposedServices.listObj;
+	const listObjInCore: Caller['listObj'] = path => {
+		const lst = coreSide.exposedServices.listObj(path);
+		if (lst) { return lst; }
+		else { throw makeIPCException({ objectNotFound: true }); }
+	};
 	const clientSide = new ObjectsConnector(
 		fromClient, toClient, 'clients', listObjInCore);
 	return { coreSide, clientSide };
