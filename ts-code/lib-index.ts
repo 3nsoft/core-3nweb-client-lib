@@ -15,14 +15,6 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export * from "./core-ipc/common-caps";
-export * from "./core-ipc/startup-caps";
-
-export * from "./ipc-via-protobuf/connector";
-export { FileMsg, makeFileCaller, exposeFileService } from "./ipc-via-protobuf/file";
-export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
-export { makeLogCaller, exposeLogger } from "./ipc-via-protobuf/log-cap";
-
 export * from "./core";
 
 export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";

@@ -17,7 +17,7 @@
 
 import { Subject } from "rxjs";
 import { map, delay } from "rxjs/operators";
-import { exposeStartupW3N, makeStartupW3Nclient, exposeW3N, makeW3Nclient, Envelope, msgProtoType, ObjectsConnector, Caller, makeIPCException } from "../../lib-index";
+import { exposeStartupW3N, makeStartupW3Nclient, exposeW3N, makeW3Nclient, Envelope, msgProtoType, ObjectsConnector, Caller, makeIPCException } from "../../ipc";
 
 type StartupW3N = web3n.startup.W3N;
 type CommonW3N = web3n.caps.common.W3N;
