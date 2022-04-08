@@ -23,18 +23,5 @@ export { FileMsg, makeFileCaller, exposeFileService } from "./ipc-via-protobuf/f
 export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
 export { makeLogCaller, exposeLogger } from "./ipc-via-protobuf/log-cap";
 
-export * from "./core";
-
-export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";
-export { makeNetClient } from "./lib-client/request-utils";
-
-export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevice, userFilesOnDevice, reverseDomain } from "./core/storage";
-
-export { DeviceFS } from './lib-client/local-files/device-fs';
-
-export { appDirs } from './core/app-files';
-
-export { makeLogger } from './lib-client/logging/log-to-file';
-
 
 Object.freeze(exports);

@@ -15,7 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core, makeNetClient, cryptors } from "../../lib-index";
+import { Core, makeNetClient } from "../../lib-index";
+import { makeInWorkerWasmCryptor } from "../../cryptors";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
 import { stringOfB64Chars } from "../../lib-common/random-node";
@@ -104,7 +105,7 @@ export class CoreRunner {
 						else { resolve(texts as any); }
 					}))
 			}),
-			cryptors.makeInWorkerWasmCryptor);
+			makeInWorkerWasmCryptor);
 	}
 
 	async close(): Promise<void> {
