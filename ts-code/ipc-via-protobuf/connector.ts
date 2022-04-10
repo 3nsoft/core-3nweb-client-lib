@@ -146,12 +146,12 @@ export class ObjectsConnector {
 
 	close(err?: any): void {
 		if (!this.messagingProc) { return; }
+		this.messagingProc.unsubscribe();
 		if (err) {
 			this.msgSink.error(err);
 		} else {
 			this.msgSink.complete();
 		}
-		this.messagingProc.unsubscribe();
 		this.stop(false, err);
 	}
 
