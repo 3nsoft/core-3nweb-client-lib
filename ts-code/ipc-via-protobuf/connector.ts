@@ -75,7 +75,7 @@ function makeClientsSide(
 	asyncReqToListObj: Caller['listObjAsync']
 ): ClientsSide {
 	const classFn = require('./connector-clients-side').ClientsSideImpl;
-	return new classFn(sendMsg, syncReqToListObj);
+	return new classFn(sendMsg, syncReqToListObj, asyncReqToListObj);
 }
 
 
