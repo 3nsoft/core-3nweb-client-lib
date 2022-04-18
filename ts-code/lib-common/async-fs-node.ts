@@ -319,6 +319,27 @@ export async function createEmptyFile(
 
 /**
  * @param path
+ * @return a promise, resolvable to true, if given path represents directory,
+ * or false, if it does not.
+ */
+ export async function existsFolder(path: string): Promise<boolean> {
+	try {
+		const stats = await stat(path);
+		if (stats.isDirectory()) {
+			return true;
+		} else {
+			throw makeFileException(excCode.notDirectory, path);
+		}
+	} catch (e) {
+		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
+			return false;
+		}
+		throw e;
+	}
+}
+
+/**
+ * @param path
  * @return true, if given path represents directory, or false, if it does not.
  */
 export function existsFolderSync(path: string): boolean {

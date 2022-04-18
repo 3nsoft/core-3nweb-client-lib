@@ -118,18 +118,12 @@ ${stringifyErr(err)}`;
 	}
 	
 	function recordUnhandledRejectionsInProcess(): void {
-		const unhandlePromiseRejectionLogWait = 200;
-		const unhandledRejections = new Map<Promise<any>, any>();
-		process.on('unhandledRejection', (reason, p) => {
-			unhandledRejections.set(p, reason);
-			setTimeout(() => {
-				if (!unhandledRejections.has(p)) { return; }
-				unhandledRejections.delete(p);
-				logError(reason, `Unhandled exception in promise (logged after ${unhandlePromiseRejectionLogWait} milliseconds wait)`).catch(noop);
-			}, unhandlePromiseRejectionLogWait).unref();
+		process.on('unhandledRejection', (err, p) => {
+			console.log(' -- Unhandled rejection of promise:', err);
+			logError(err, 'Unhandled rejection of promise');
 		});
-		process.on('rejectionHandled', p => unhandledRejections.delete(p));
 		process.on('uncaughtException', err => {
+			console.log(' -- Unhandled exception:', err);
 			logError(err, 'Unhandled exception');
 		});
 	}

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../lib-common/async-fs-node';
 import { NamedProcs } from '../../lib-common/processes';
@@ -53,17 +54,17 @@ function alreadyExistsOrReThrow(exc: FileException): void {
 	if (!exc.alreadyExists) { throw exc; }
 }
 
-interface GenerationCfg {
+export interface GenerationCfg {
 	period: number;
 	lastDone: number;
 }
 
-interface Cfg {
+export interface Cfg {
 	numOfSplits: number;
 	charsInSplit: number;
 }
 
-interface CfgWithGens extends Cfg {
+export interface CfgWithGens extends Cfg {
 	generations: GenerationCfg[];
 }
 
@@ -108,6 +109,8 @@ export class ObjFolders {
 		private readonly generations?: GenerationCfg[],
 		canMove?: CanMoveObjToDeeperCache
 	) {
+		assert(Number.isInteger(this.numOfSplits) && (this.numOfSplits > 0) &&
+			Number.isInteger(this.charsInSplit) && (this.charsInSplit > 0));
 		this.accessFolder = join(this.path, ACCESS_DIR);
 		if (this.generations) {
 			if (!canMove) { throw new Error(
@@ -169,8 +172,8 @@ export class ObjFolders {
 		return path;
 	}
 
-	private genBacketPath(backetIndex: number): string {
-		return join(this.generationsFolder, `${backetIndex}`);
+	private genBucketPath(bucketIndex: number): string {
+		return join(this.generationsFolder, `${bucketIndex}`);
 	}
 
 	private async findObjFolder(
@@ -182,7 +185,7 @@ export class ObjFolders {
 		}
 		if (!this.generations) { return; }
 		for (let i=0; i<this.generations.length; i+=1) {
-			const folder = join(this.genBacketPath(i), ...pathSections);
+			const folder = join(this.genBucketPath(i), ...pathSections);
 			if (await folderExists(folder)) {
 				return { folder, genBacket: i };
 			}
@@ -206,7 +209,7 @@ export class ObjFolders {
 			const found = await this.findObjFolder(pathSections);
 			if (found) {
 				if (found.genBacket === undefined) { return found.folder; }
-				const folder = await move(this.genBacketPath(found.genBacket),
+				const folder = await move(this.genBucketPath(found.genBacket),
 					pathSections, this.accessFolder);
 				return folder;
 			}
@@ -224,22 +227,22 @@ export class ObjFolders {
 			const found = await this.findObjFolder(pathSections);
 			if (!found) { return; }
 			const backetPath = ((found.genBacket === undefined) ?
-				this.accessFolder : this.genBacketPath(found.genBacket));
+				this.accessFolder : this.genBucketPath(found.genBacket));
 			await deleteTree(backetPath, pathSections);
 		});
 	}
 
 	async listRecent(): Promise<{ path: string; objId: ObjId; }[]> {
 		const lst = (await allTreePaths(
-			this.genBacketPath(0), this.numOfSplits, this.logError))
+			this.accessFolder, this.numOfSplits, this.logError))
 		.map(pathSections => ({
-			path: join(this.genBacketPath(0), ...pathSections),
-			objId: pathSections.join() as ObjId
+			path: join(this.accessFolder, ...pathSections),
+			objId: pathSections.join('') as ObjId
 		}));
-		lst.unshift({
-			objId: null,
-			path: join(this.accessFolder, ROOT_OBJ_DIR)
-		});
+		const rootObjPath = join(this.accessFolder, ROOT_OBJ_DIR);
+		if (await fs.existsFolder(rootObjPath)) {
+			lst.unshift({ objId: null, path: rootObjPath });
+		}
 		return lst;
 	}
 
@@ -534,17 +537,17 @@ async function allTreePaths(
 ): Promise<string[][]> {
 	const lst = await fs.readdir(path)
 	.catch(async (exc: FileException) => {
-		if (!exc.notFound) {
-			await logError(exc, `Enumerating a split tree of objects, got an error while trying to directory list ${path}`);
-		}
+		if (exc.notFound) { return; }
+		await logError(exc, `Enumerating a split tree of objects, got an error while trying to list directory ${path}`);
 	});
 	if (!lst) { return []; }
-	if (numOfSplits <= 1) {
+	if (numOfSplits <= 0) {
 		return lst.map(f => [f]);
 	}
 	const sections: string[][] = [];
 	for (let i=0; i<lst.length; i+=1) {
 		const f = lst[i];
+		if (f === ROOT_OBJ_DIR) { continue; }
 		const treePaths = await allTreePaths(
 			join(path, f), numOfSplits-1, logError);
 		for (let j=0; j<treePaths.length; j+=1) {
