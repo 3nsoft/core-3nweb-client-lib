@@ -18,6 +18,7 @@
 import { ExposedFn, Caller, makeIPCException, ExposedObj } from "./connector";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { mailerid as pb } from '../protos/mailerid.proto';
+import { decodeFromUtf8, encodeToUtf8 } from "./protobuf-msg";
 
 type MailerId = web3n.mailerid.Service;
 
@@ -43,7 +44,7 @@ namespace getUserId {
 	export function wrapService(fn: MailerId['getUserId']): ExposedFn {
 		return () => {
 			const promise = fn()
-			.then(userId => Buffer.from(userId, 'utf8'));
+			.then(userId => encodeToUtf8(userId) as Buffer);
 			return { promise };
 		};
 	}
@@ -55,7 +56,7 @@ namespace getUserId {
 		return () => caller.startPromiseCall(path, undefined)
 		.then(buf => {
 			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
-			return buf.toString('utf8');
+			return decodeFromUtf8(buf);
 		});
 	}
 

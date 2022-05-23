@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8 } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { fs as pb } from '../protos/fs.proto';
 import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
@@ -731,7 +731,7 @@ namespace readTxtFile {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
-			.then(txt => Buffer.from(txt, 'utf8'));
+			.then(txt => encodeToUtf8(txt) as Buffer);
 			return { promise };
 		};
 	}
@@ -742,7 +742,7 @@ namespace readTxtFile {
 		const ipcPath = objPath.concat('readTxtFile');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
-		.then(buf => (buf ? buf.toString('utf8') : ''));
+		.then(buf => (buf ? decodeFromUtf8(buf) : ''));
 	}
 
 }

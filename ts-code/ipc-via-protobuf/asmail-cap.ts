@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue } from './protobuf-msg';
+import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8 } from './protobuf-msg';
 import { ProtoType } from '../lib-client/protobuf-type';
 import { asmail as pb } from '../protos/asmail.proto';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
@@ -89,7 +89,7 @@ namespace getUserId {
 	export function wrapService(fn: ASMailService['getUserId']): ExposedFn {
 		return () => {
 			const promise = fn()
-			.then(userId => Buffer.from(userId, 'utf8'));
+			.then(userId => encodeToUtf8(userId) as Buffer);
 			return { promise };
 		};
 	}
@@ -101,7 +101,7 @@ namespace getUserId {
 		return () => caller.startPromiseCall(path, undefined)
 		.then(buf => {
 			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
-			return buf.toString('utf8');
+			return decodeFromUtf8(buf);
 		});
 	}
 

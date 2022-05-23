@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt } from "./protobuf-msg";
+import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8 } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
@@ -362,7 +362,7 @@ namespace readTxt {
 	export function wrapService(fn: ReadonlyFile['readTxt']): ExposedFn {
 		return () => {
 			const promise = fn()
-			.then(txt => Buffer.from(txt, 'utf8'));
+			.then(txt => encodeToUtf8(txt) as Buffer);
 			return { promise };
 		};
 	}
@@ -373,7 +373,7 @@ namespace readTxt {
 		const path = objPath.concat('readTxt');
 		return () => caller
 		.startPromiseCall(path, undefined)
-		.then(buf => (buf ? buf.toString('utf8') : ''));
+		.then(buf => (buf ? decodeFromUtf8(buf) : ''));
 	}
 
 }
@@ -381,13 +381,13 @@ Object.freeze(readTxt);
 
 
 export function packJSON(json: any): EnvelopeBody {
-	return Buffer.from(JSON.stringify(json), 'utf8');
+	return encodeToUtf8(JSON.stringify(json)) as Buffer;
 }
 
 export function unpackJSON(buf: EnvelopeBody): any {
 	if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
 	try {
-		return JSON.parse(buf.toString('utf8'));
+		return JSON.parse(decodeFromUtf8(buf));
 	} catch (err) {
 		throw errWithCause(err, `Can't parse ipc reply as json`);
 	}

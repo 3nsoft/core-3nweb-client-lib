@@ -165,5 +165,15 @@ export function valOfOptAny(valObj: AnyValue|undefined): any|undefined {
 	}
 }
 
+export function encodeToUtf8(str: string): Uint8Array {
+	const enc = new TextEncoder();
+	return enc.encode(str);
+}
+
+export function decodeFromUtf8(bytes: Uint8Array): string {
+	const dec = new TextDecoder();
+	return dec.decode(bytes);
+}
+
 
 Object.freeze(exports);
