@@ -26,7 +26,7 @@ import { FileNode, FileLinkParams } from './file-node';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { Storage } from './common';
 import { pipe } from '../../../lib-common/byte-streaming/pipe';
-import { Observer as RxObserver } from 'rxjs';
+import { toRxObserver } from '../../../lib-common/utils-for-observables';
 
 type Stats = web3n.files.Stats;
 type File = web3n.files.File;
@@ -87,11 +87,13 @@ export class FileObject implements WritableFile, Linkable {
 
 	async stat(): Promise<Stats> {
 		if (!this.v.node) { throw makeFileException(excCode.notFound, this.name); }
+		const sync = await this.v.node.sync();
 		const attrs = this.v.node.getAttrs();
 		const stat: Stats = {
 			writable: this.writable,
 			size: this.v.node.size,
 			version: this.v.node.version,
+			sync,
 			isFile: true,
 			ctime: new Date(attrs.ctime),
 			mtime: new Date(attrs.mtime),
@@ -117,7 +119,7 @@ export class FileObject implements WritableFile, Linkable {
 		if (!this.v.node) { throw new Error(
 			`Node for file ${this.name} is not yet initialized`); }
 		const sub = this.v.node.event$
-		.subscribe(observer as RxObserver<FileEvent>);
+		.subscribe(toRxObserver(observer));
 		return () => sub.unsubscribe();
 	}
 	

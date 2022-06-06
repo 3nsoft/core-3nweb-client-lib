@@ -24,15 +24,16 @@ import { makeFileException, Code as excCode, FileException } from '../../../lib-
 import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject } from './file';
-import { Storage, NodeType } from './common';
+import { Storage, NodeType, ObjId, NodesContainer, NodeEvent } from './common';
 import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../../files';
 import { selectInFS } from '../../files-select';
 import { posix } from 'path';
 import { pipe } from '../../../lib-common/byte-streaming/pipe';
 import { utf8 } from '../../../lib-common/buffer-utils';
-import { Observer as RxObserver, from } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { from, Observable } from 'rxjs';
+import { filter, map, mergeMap, takeUntil } from 'rxjs/operators';
 import { NodeInFS } from './node-in-fs';
+import { Broadcast, toRxObserver } from '../../../lib-common/utils-for-observables';
 
 function splitPathIntoParts(path: string): string[] {
 	return posix.resolve('/', path).split('/').filter(part => !!part);
@@ -82,27 +83,41 @@ const WRITE_NONEXCL_FLAGS: VersionedFileFlags = {
 	truncate: true
 };
 
+type BroadcastedEvents = 'close';
+
 export class XspFS implements WritableFS {
 	
-	type: FSType;
-	v = new V();
+	public readonly type: FSType;
+	public readonly v: V;
+	private store: Storage|undefined;
+	private readonly fsObs = new Broadcast<BroadcastedEvents>();
 	
 	private constructor(
-			public storage: Storage,
-			public writable: boolean,
-			public name = '') {
-		this.type = this.storage.type;
+		storage: Storage,
+		public readonly writable: boolean,
+		rootNode: FolderNode,
+		public name = ''
+	) {
+		this.store = storage;
+		this.type = this.store.type;
+		this.v = new V(rootNode);
 		Object.seal(this);
+	}
+
+	private storage(): Storage {
+		if (!this.store) { throw makeFileException(
+			excCode.storageClosed, this.name); }
+		return this.store;
 	}
 	
 	async readonlySubRoot(path: string): Promise<ReadonlyFS> {
 		const pathParts = splitPathIntoParts(path);
-		const folder = await this.v.root.getFolderInThisSubTree(pathParts, false)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
+			pathParts, false).catch(setExcPath(path));
 		const folderName = ((pathParts.length === 0) ?
 			this.name : pathParts[pathParts.length-1]);
-		const fs = new XspFS(this.storage, false, folderName);
-		fs.v.root = folder;
+		const fs = new XspFS(this.storage(), false, folder, folderName);
 		return wrapReadonlyFS(fs);
 	}
 
@@ -110,13 +125,12 @@ export class XspFS implements WritableFS {
 		path: string, flags = WRITE_NONEXCL_FLAGS
 	): Promise<WritableFS> {
 		const pathParts = splitPathIntoParts(path);
-		const folder = await this.v.root.getFolderInThisSubTree(
-			pathParts, flags.create, flags.exclusive)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
+			pathParts, flags.create, flags.exclusive).catch(setExcPath(path));
 		const folderName = ((pathParts.length === 0) ?
 			this.name : pathParts[pathParts.length-1]);
-		const fs = new XspFS(this.storage, true, folderName);
-		fs.v.root = folder;
+		const fs = new XspFS(this.storage(), true, folder, folderName);
 		return wrapWritableFS(fs);
 	}
 	
@@ -129,8 +143,8 @@ export class XspFS implements WritableFS {
 	static async makeNewRoot(
 		storage: Storage, key: Uint8Array
 	): Promise<WritableFS> {
-		const fs = new XspFS(storage, true);
-		fs.v.root = await FolderNode.newRoot(fs.storage, key);
+		const root = await FolderNode.newRoot(storage, key); 
+		const fs = new XspFS(storage, true, root);
 		return wrapWritableFS(fs);
 	}
 	
@@ -143,18 +157,18 @@ export class XspFS implements WritableFS {
 	static async fromExistingRoot(
 		storage: Storage, key: Uint8Array
 	): Promise<WritableFS> {
-		const fs = new XspFS(storage, true);
 		const objSrc = await storage.getObj(null!);
-		fs.v.root = await FolderNode.rootFromObjBytes(
-			fs.storage, undefined, null, objSrc, key);
+		const root = await FolderNode.rootFromObjBytes(
+			storage, undefined, null, objSrc, key);
+		const fs = new XspFS(storage, true, root);
 		return wrapWritableFS(fs);
 	}
 
 	static fromASMailMsgRootFromJSON(
 		storage: Storage, folderJson: FolderInJSON, rootName?: string
 	): ReadonlyFS {
-		const fs = new XspFS(storage, false, rootName);
-		fs.v.root = FolderNode.rootFromJSON(storage, rootName, folderJson);
+		const root = FolderNode.rootFromJSON(storage, rootName, folderJson);
+		const fs = new XspFS(storage, false, root, rootName);
 		return wrapIntoVersionlessReadonlyFS(fs);
 	}
 	
@@ -162,14 +176,16 @@ export class XspFS implements WritableFS {
 	 * Note that this method doesn't close storage.
 	 */
 	async close(): Promise<void> {
-		this.v.root = (undefined as any);
-		this.storage = (undefined as any);
+		this.v.close();
+		this.store = undefined;
+		this.fsObs.done();
 	}
 	
 	async makeFolder(path: string, exclusive = false): Promise<void> {
 		const folderPath = splitPathIntoParts(path);
-		await this.v.root.getFolderInThisSubTree(folderPath, true, exclusive)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		await root.getFolderInThisSubTree(
+			folderPath, true, exclusive).catch(setExcPath(path));
 	}
 
 	select(path: string, criteria: SelectCriteria):
@@ -179,8 +195,9 @@ export class XspFS implements WritableFS {
 	
 	async deleteFolder(path: string, removeContent = false): Promise<void> {
 		const { fileName: folderName, folderPath: parentPath } = split(path);
-		const parentFolder = await this.v.root.getFolderInThisSubTree(parentPath)
-		.catch(setExcPath(parentPath.join('/')));
+		const root = this.v.getRootIfNotClosed(path);
+		const parentFolder = await root.getFolderInThisSubTree(
+			parentPath).catch(setExcPath(parentPath.join('/')));
 		if (typeof folderName !== 'string') { throw new Error(
 			'Cannot remove root folder'); }
 		const folder = (await parentFolder.getFolder(folderName)
@@ -193,8 +210,9 @@ export class XspFS implements WritableFS {
 	
 	async deleteFile(path: string): Promise<void> {
 		const { fileName, folderPath } = split(path);
-		const parentFolder = await this.v.root.getFolderInThisSubTree(folderPath)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const parentFolder = await root.getFolderInThisSubTree(
+			folderPath).catch(setExcPath(path));
 		const file = await parentFolder.getFile(fileName)
 		.catch(setExcPath(path));
 		await parentFolder.removeChild(file!);
@@ -202,10 +220,11 @@ export class XspFS implements WritableFS {
 	
 	async deleteLink(path: string): Promise<void> {
 		const { fileName, folderPath } = split(path);
-		const parentFolder = await this.v.root.getFolderInThisSubTree(folderPath)
-		.catch(setExcPath(path));
-		const link = await parentFolder.getLink(fileName)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const parentFolder = await root.getFolderInThisSubTree(
+			folderPath).catch(setExcPath(path));
+		const link = await parentFolder.getLink(
+			fileName).catch(setExcPath(path));
 		await parentFolder.removeChild(link!);
 	}
 	
@@ -220,11 +239,11 @@ export class XspFS implements WritableFS {
 			'Bad new path: it points to filesystem root'); }
 		const dstFName = dstFolderPath[dstFolderPath.length-1];
 		dstFolderPath.splice(dstFolderPath.length-1, 1);
+		const root = this.v.getRootIfNotClosed(initPath);
 		try {
-			const srcFolder = await this.v.root.getFolderInThisSubTree(
-				srcFolderPath);
+			const srcFolder = await root.getFolderInThisSubTree(srcFolderPath);
 			srcFolder.hasChild(initFName, true);
-			const dstFolder = await this.v.root.getFolderInThisSubTree(
+			const dstFolder = await root.getFolderInThisSubTree(
 				dstFolderPath, true);
 			await srcFolder.moveChildTo(initFName, dstFolder, dstFName);
 		} catch (exc) {
@@ -241,11 +260,13 @@ export class XspFS implements WritableFS {
 
 	async stat(path: string): Promise<Stats> {
 		const node = await this.v.get(path);
+		const sync = await node.sync();
 		const attrs = node.getAttrs();
 		const stats: Stats = {
 			ctime: new Date(attrs.ctime),
 			mtime: new Date(attrs.mtime),
 			version: node.version,
+			sync,
 			writable: this.writable,
 		};
 		if (node.type === 'file') {
@@ -363,15 +384,17 @@ export class XspFS implements WritableFS {
 	}
 
 	private ensureLinkingAllowedTo(params: LinkParameters<any>): void {
-		if (this.storage.type === 'local') {
+		const storage = this.storage();
+		if (storage.type === 'local') {
 			return;
-		} else if (this.storage.type === 'synced') {
+		} else if (storage.type === 'synced') {
 			if ((params.storageType === 'share') ||
 				(params.storageType === 'synced')) { return; }
-		} else if (this.storage.type === 'share') {
+		} else if (storage.type === 'share') {
 			if (params.storageType === 'share') { return; }
 		}
-		throw new Error(`Cannot create link to ${params.storageType} from ${this.storage.type} storage.`);
+		throw new Error(`Cannot create link to ${
+			params.storageType} from ${storage.type} storage.`);
 	}
 
 	async link(path: string, target: File|FS): Promise<void> {
@@ -382,22 +405,25 @@ export class XspFS implements WritableFS {
 		const params = await (<Linkable> <any> target).getLinkParams();
 		this.ensureLinkingAllowedTo(params);
 		const { fileName, folderPath } = split(path);
-		const folder = await this.v.root.getFolderInThisSubTree(folderPath, true)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
+			folderPath, true).catch(setExcPath(path));
 		await folder.createLink(fileName, params);
 	}
 
 	async readLink(path: string): Promise<SymLink> {
 		const { fileName, folderPath } = split(path);
-		const folder = await this.v.root.getFolderInThisSubTree(folderPath)
-		.catch(setExcPath(path));
+		const root = this.v.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
+			folderPath).catch(setExcPath(path));
 		const link = await folder.getLink(fileName)
 		.catch(setExcPath(path));
 		return await link!.read();
 	}
 
 	async getLinkParams(): Promise<LinkParameters<any>> {
-		const linkParams = this.v.root.getParamsForLink();
+		const root = this.v.getRootIfNotClosed(this.name);
+		const linkParams = root.getParamsForLink();
 		linkParams.params.folderName = this.name;
 		linkParams.readonly = !this.writable;
 		return linkParams;
@@ -408,39 +434,70 @@ export class XspFS implements WritableFS {
 	): Promise<ReadonlyFS|WritableFS> {
 		const name = params.params.folderName;
 		const writable = !params.readonly;
-		const fs = new XspFS(storage, writable, name);
-		fs.v.root = await FolderNode.rootFromLinkParams(storage, params.params);
+		const root = await FolderNode.rootFromLinkParams(storage, params.params);
+		const fs = new XspFS(storage, writable, root, name);
 		return (fs.writable ? wrapWritableFS(fs) : wrapReadonlyFS(fs));
 	}
 
+	private getCloseEvent$(): Observable<any> {
+		return this.fsObs.event$.pipe(
+			filter(ev => (ev === 'close'))
+		);
+	}
+
 	watchFolder(path: string, observer: Observer<FolderEvent>): () => void {
-		const watchSub = from(
-			this.v.root.getFolderInThisSubTree(splitPathIntoParts(path), false))
+		const folderPath = splitPathIntoParts(path);
+		const root = this.v.getRootIfNotClosed(path);
+		const nodeProm = root.getFolderInThisSubTree(folderPath, false);
+		const watchSub = from(nodeProm)
 		.pipe(
-			mergeMap(f => f.event$)
+			mergeMap(f => f.event$),
+			takeUntil(this.getCloseEvent$())
 		)
-		.subscribe(observer as RxObserver<FolderEvent>);
+		.subscribe(toRxObserver(observer));
 		return () => watchSub.unsubscribe();
 	}
 
 	watchFile(path: string, observer: Observer<FileEvent>): () => void {
 		const { fileName, folderPath } = split(path);
-		const watchSub = from(
-			this.v.root.getFolderInThisSubTree(folderPath, false))
+		const root = this.v.getRootIfNotClosed(path);
+		const nodeProm = root.getFolderInThisSubTree(folderPath, false);
+		const watchSub = from(nodeProm)
 		.pipe(
 			mergeMap(folder => folder.getFile(fileName)),
-			mergeMap(f => f!.event$)
+			mergeMap(f => f!.event$),
+			takeUntil(this.getCloseEvent$())
 		)
-		.subscribe(observer as RxObserver<FileEvent>);
+		.subscribe(toRxObserver(observer));
 		return () => watchSub.unsubscribe();
 	}
 
 	watchTree(
 		path: string, observer: Observer<FolderEvent|FileEvent>
 	): () => void {
-		throw new Error('Not implemented, yet');
+		const folderPath = splitPathIntoParts(path);
+		const root = this.v.getRootIfNotClosed(path);
+		const idToPath = new ObjIdToPathMap();
+		const setupFilterMap = root.getFolderInThisSubTree(folderPath, false)
+		.then(rootNode => idToPath.fillFromTree(rootNode));
+		const watchSub = from(setupFilterMap)
+		.pipe(
+			mergeMap(() => this.storage().getNodeEvents()),
+			map(nodeEvent => {
+				const path = idToPath.getPathCorrectingTreeMap(nodeEvent);
+				if (path) {
+					const event = nodeEvent.event;
+					event.path = path;
+					return event;
+				}
+			}, 1),
+			filter(event => !!event),
+			takeUntil(this.getCloseEvent$())
+		)
+		.subscribe(toRxObserver(observer));
+		return () => watchSub.unsubscribe();
 	}
-	
+
 	async readonlyFile(path: string): Promise<ReadonlyFile> {
 		const fNode = await this.v.getOrCreateFile(path, {});
 		return wrapReadonlyFile(FileObject.makeExisting(fNode, false));
@@ -547,17 +604,28 @@ type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
 
 class V implements WritableFSVersionedAPI {
 
-	root: FolderNode = (undefined as any);
+	private rootNode: FolderNode|undefined;
 
-	constructor() {
+	constructor(root: FolderNode) {
+		this.rootNode = root;
 		Object.seal(this);
+	}
+
+	close(): void {
+		this.rootNode = undefined;
+	}
+
+	getRootIfNotClosed(excPath: string): FolderNode {
+		if (!this.rootNode) { throw makeFileException(
+			excCode.storageClosed, excPath); }
+		return this.rootNode;
 	}
 
 	async getOrCreateFile(path: string, flags: FileFlags): Promise<FileNode> {
 		const { fileName, folderPath } = split(path);
 		const { create, exclusive } = flags;
-		const folder = await this.root.getFolderInThisSubTree(folderPath, create)
-		.catch(setExcPath(path));
+		const folder = await this.getRootIfNotClosed(path).getFolderInThisSubTree(
+			folderPath, create).catch(setExcPath(path));
 		const nullOnMissing = create;
 		let file = await folder.getFile(fileName, nullOnMissing)
 		.catch(setExcPath(path));
@@ -573,9 +641,10 @@ class V implements WritableFSVersionedAPI {
 
 	async get(path: string): Promise<NodeInFS<any>> {
 		const { fileName, folderPath } = split(path);
-		const folder = await this.root.getFolderInThisSubTree(folderPath, false)
-		.catch(setExcPath(path));
-		if (fileName === undefined) { return this.root; }
+		const root = this.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
+			folderPath, false).catch(setExcPath(path));
+		if (fileName === undefined) { return root; }
 		const node = await folder.getNode(undefined, fileName)
 		.catch(setExcPath(path));
 		return node! as NodeInFS<any>;
@@ -607,7 +676,8 @@ class V implements WritableFSVersionedAPI {
 	async listFolder(
 		path: string
 	): Promise<{ lst: ListingEntry[]; version: number; }> {
-		const folder = await this.root.getFolderInThisSubTree(
+		const root = this.getRootIfNotClosed(path);
+		const folder = await root.getFolderInThisSubTree(
 			splitPathIntoParts(path), false).catch(setExcPath(path));
 		return folder.list();
 	}
@@ -677,6 +747,102 @@ class V implements WritableFSVersionedAPI {
 }
 Object.freeze(V.prototype);
 Object.freeze(V);
+
+
+class ObjIdToPathMap {
+
+	private readonly map = new Map<ObjId, string>();
+	private readonly moves = new Map<number, {
+		newPath?: string; objId?: ObjId;
+	}>();
+
+	constructor() {
+		Object.seal(this);
+	}
+
+	async fillFromTree(root: FolderNode): Promise<void> {
+		for (const [ objId, path ] of await recursiveIdAndPathList(root, '.')) {
+			this.map.set(objId, path);
+		}
+	}
+
+	getPathCorrectingTreeMap(
+		{ event, objId, parentObjId }: NodeEvent
+	): string|undefined {
+		let path = this.map.get(objId);
+		if (path) {
+			if (event.type === 'removed') {
+				this.map.delete(objId);
+			} else if (event.type === 'entry-renaming') {
+				const { newName, oldName } = event;
+				const child = this.findObjIdByPath(`${path}/${oldName}`);
+				if (child) {
+					this.map.set(child, `${path}/${newName}`);
+				}
+			} else if (event.type === 'entry-removal') {
+				const { moveLabel, name } = event;
+				if (moveLabel) {
+					const child = this.findObjIdByPath(`${path}/${name}`);
+					if (child) {
+						const moveInfo = this.moves.get(moveLabel);
+						if (moveInfo) {
+							this.map.set(child, moveInfo.newPath!);
+							this.moves.delete(moveLabel);
+						} else {
+							this.moves.set(moveLabel, { objId: child });
+						}
+					}
+				}
+			} else if (event.type === 'entry-addition') {
+				const { moveLabel, entry: { name } } = event;
+				const newPath = `${path}/${name}`;
+				if (moveLabel) {
+					const moveInfo = this.moves.get(moveLabel);
+					if (moveInfo) {
+						this.map.set(moveInfo.objId!, newPath);
+						this.moves.delete(moveLabel);
+					} else {
+						this.moves.set(moveLabel, { newPath });
+					}
+				}
+			}
+			return path;
+		}
+		const parentPath = this.map.get(parentObjId!);
+		if (!parentPath || (event.type === 'removed')) { return; }
+		path = `${parentPath}/${event.path}`;
+		this.map.set(objId, path);
+		return path;
+	}
+
+	private findObjIdByPath(path: string): ObjId|undefined {
+		for (const [ objId, p ] of this.map.entries()) {
+			if (p === path) { return objId; }
+		}
+	}
+
+}
+Object.freeze(ObjIdToPathMap.prototype);
+Object.freeze(ObjIdToPathMap);
+
+
+async function recursiveIdAndPathList(
+	folder: FolderNode, path: string
+): Promise<[ ObjId, string ][]> {
+	const { lst } = folder.list();
+	const idAndPaths: [ ObjId, string ][] = [ [ folder.objId, path ] ];
+	for (const item of lst) {
+		if (item.isFile || item.isLink) {
+
+		} else if (item.isFolder) {
+			const child = await folder.getFolder(item.name);
+			const childLst = await recursiveIdAndPathList(
+				child!, `${path}/${item.name}`);
+			idAndPaths.push(... childLst);
+		}
+	}
+	return idAndPaths;
+}
 
 
 Object.freeze(exports);

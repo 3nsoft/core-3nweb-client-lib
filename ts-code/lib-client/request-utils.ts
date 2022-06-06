@@ -21,7 +21,7 @@ import { IncomingMessage, IncomingHttpHeaders, ClientRequest } from 'http';
 import { parse as parseUrl } from 'url';
 import { fromEvent, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
-import { defer } from '../lib-common/processes';
+import { defer } from '../lib-common/processes/deferred';
 import { take, map, takeUntil, mergeMap } from 'rxjs/operators';
 
 export const SESSION_ID_HEADER = "X-Session-Id";

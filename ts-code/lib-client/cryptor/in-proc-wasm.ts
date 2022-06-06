@@ -22,7 +22,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { ProtoType } from '../protobuf-type';
 import { cryptor as pb } from '../../protos/cryptor.proto';
-import { defer, Deferred } from '../../lib-common/processes';
+import { defer, Deferred } from '../../lib-common/processes/deferred';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
 

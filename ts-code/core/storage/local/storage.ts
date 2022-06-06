@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
 import { secret_box as sbox } from 'ecma-nacl';
@@ -22,12 +22,19 @@ import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { ObjFiles, LocalObj } from './obj-files';
+import { Broadcast } from '../../../lib-common/utils-for-observables';
+import { Observable } from 'rxjs';
+
+type FolderEvent = web3n.files.FolderEvent;
+type FileEvent = web3n.files.FileEvent;
+
 
 export class LocalStorage implements Storage {
 
 	public readonly type: web3n.files.FSType = 'local';
 	public readonly versioned = true;
 	public readonly nodes = new NodesContainer();
+	private readonly events = new Broadcast<NodeEvent>();
 
 	private constructor(
 		private readonly files: ObjFiles,
@@ -45,6 +52,16 @@ export class LocalStorage implements Storage {
 		const files = await ObjFiles.makeFor(path, logError);
 		const s = new LocalStorage(files, getStorages, cryptor, logError);
 		return wrapStorageImplementation(s);
+	}
+
+	getNodeEvents(): Observable<NodeEvent> {
+		return this.events.event$;
+	}
+
+	broadcastNodeEvent(
+		objId: ObjId, parentObjId: ObjId|undefined, event: FolderEvent|FileEvent
+	): void {
+		this.events.next({ objId, parentObjId, event });
 	}
 
 	storageForLinking(type: web3n.files.FSType, location?: string): Storage {
@@ -99,8 +116,7 @@ export class LocalStorage implements Storage {
 
 	async close(): Promise<void> {
 		try {
-			// XXX add cleanups
-			
+			this.events.done();
 		} catch (err) {
 			await this.logError(err);
 		}
@@ -109,5 +125,6 @@ export class LocalStorage implements Storage {
 }
 Object.freeze(LocalStorage.prototype);
 Object.freeze(LocalStorage);
+
 
 Object.freeze(exports);

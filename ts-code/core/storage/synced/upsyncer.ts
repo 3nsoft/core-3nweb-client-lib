@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,64 +12,115 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { StorageOwner, FirstSaveReqOpts, FollowingSaveReqOpts } from "../../../lib-client/3nstorage/service";
-import { SyncedObj, ObjFiles } from "./obj-files";
+import { SyncedObj } from "./obj-files";
 import { MonoTypeOperatorFunction } from "rxjs";
-import { FileWrite } from "../../../lib-client/objs-on-disk/file-writing-proc";
+import { FileWrite, HeaderWrite, SegsWrite } from "../../../lib-client/objs-on-disk/file-writing-proc";
 import { tap } from "rxjs/operators";
-import { Worker } from "../../../lib-common/processes";
+import { LabelledExecPools, Task } from "../../../lib-common/processes/labelled-exec-pools";
 import { LogError } from "../../../lib-client/logging/log-to-file";
-import { UpSyncTasks, UploadInfo, RemovalInfo, ArchivalInfo, makeUploadInfo } from "./upsync-status";
 import { StorageException } from "../../../lib-client/3nstorage/exceptions";
 import { assert } from "../../../lib-common/assert";
+import { ArchivalInfo, RemovalInfo, UploadInfo, UpSyncTaskInfo } from "./obj-status";
+import { ObjId } from "../../../lib-client/3nstorage/xsp-fs/common";
 
 const MAX_CHUNK_SIZE = 512*1024;
 
+const MAX_FAST_UPLOAD = 2*1024*1024;
+
+type UploadExecLabel = 'long' | 'fast';
+type UploadNeedInfo = NonNullable<UploadInfo['needUpload']>;
+
+function executorLabelFor(info: UploadNeedInfo): UploadExecLabel {
+	let uploadSize = 0;
+	if (info.header) {
+		uploadSize += info.header;
+	}
+	for (const seg of info.segs) {
+		uploadSize += seg.len;
+	}
+	return ((uploadSize <= MAX_FAST_UPLOAD) ? 'fast' : 'long');
+}
+
+function addEventToInfo(info: UploadNeedInfo, writeEv: FileWrite[]): void {
+	for (const w of writeEv) {
+		if ((w as HeaderWrite).isHeader) {
+			info.header = w.bytes.length;
+		} else {
+			mergeSections(info.segs, w as SegsWrite);
+		}
+	}
+}
+
+function mergeSections(segs: UploadNeedInfo['segs'], w: SegsWrite): void {
+	const wStart = w.ofs;
+	const wLen = w.bytes.length;
+	for (let i=0; i<segs.length; i+=1) {
+		const section = segs[i];
+		const sectionEnd = section.ofs + section.len;
+		if (sectionEnd < wStart) {
+			continue;
+		}
+		if (sectionEnd === wStart) {
+			section.len += wLen;
+		} else if (section.ofs <= wStart) {
+			const maxOverlap = section.len - (wStart - section.ofs);
+			if (maxOverlap < wLen) {
+				section.len += wLen - maxOverlap;
+			}
+		} else if ((wStart + wLen) === section.ofs) {
+			section.ofs = wStart;
+		} else {
+			segs.splice(i, 0, { ofs: wStart, len: wLen });
+		}
+		return;
+	}
+	segs.push({ ofs: wStart, len: wLen });
+}
+
+export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
+
+export type BroadcastUpSyncEvent = (objId: ObjId, task: UpSyncTaskInfo) => void;
+
+
 export class UpSyncer {
 
+	private readonly execPools: LabelledExecPools<UploadExecLabel>;
 	private readonly uploads = new Map<SyncedObj, ObjUpSync>();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
-		private readonly files: ObjFiles,
-		private readonly logError: LogError
+		private readonly logError: LogError,
+		private readonly broadcastUpSyncEvent: BroadcastUpSyncEvent
 	) {
+		this.execPools = new LabelledExecPools([
+			{ label: 'long', maxProcs: 1 },
+			{ label: 'fast', maxProcs: 1 }
+		], logError);
 		Object.seal(this);
 	}
 
 	private getOrMakeUploadsFor(obj: SyncedObj): ObjUpSync {
 		let uploads = this.uploads.get(obj);
 		if (!uploads) {
-			const status = new UpSyncTasks(obj.objFolder, this.logError);
 			uploads = new ObjUpSync(
-				obj, status, this.remoteStorage, this.addToWorker, this.logError);
+				obj, this.remoteStorage, this.execPools, this.logError,
+				this.broadcastUpSyncEvent);
 			this.uploads.set(obj, uploads);
 		}
 		return uploads;
 	}
 
 	start(): void {
-		this.worker.start(2);
+		this.execPools.start();
 	}
 
 	async stop(): Promise<void> {
-		await this.worker.stop();
-		for (const upload of this.uploads.values()) {
-			upload.stop();
-		}
+		await this.execPools.stop();	// implicitly cancels all upsync tasks
 		this.uploads.clear();
-	}
-
-	get chunkSize(): number {
-		return (this.remoteStorage.maxChunkSize ?
-			Math.min(this.remoteStorage.maxChunkSize, MAX_CHUNK_SIZE) :
-			MAX_CHUNK_SIZE);
-	}
-
-	private readonly addToWorker = (ready: ObjUpSync): void => {
-		this.worker.add(ready);
 	}
 
 	tapFileWrite(
@@ -81,101 +132,136 @@ export class UpSyncer {
 
 	async removeCurrentVersionOf(obj: SyncedObj): Promise<void> {
 		const objUploads = this.getOrMakeUploadsFor(obj);
-		objUploads.removeCurrentVersion();
-	}
-
-	private readonly worker = new Worker<ObjUpSync>(
-		async u => {
-			await u.process();
-			if (u.isDone() && (u === this.uploads.get(u.obj))) {
-				this.uploads.delete(u.obj);
-			}
-		},
-		async queue => {
-			for (const u of queue) {
-				u.stop();
-				this.uploads.delete(u.obj);
-			}
+		if (objUploads.neededExecutor()) {
+			this.execPools.add(objUploads);
 		}
-	);
+	}
 
 }
 Object.freeze(UpSyncer.prototype);
 Object.freeze(UpSyncer);
 
 
-export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
+class ObjUpSync implements Task<UploadExecLabel> {
 
-
-class ObjUpSync {
-
-	private readonly objWriteTaps = new Map<UploadInfo, ObjWriteTap>();
+	private taskInProcess: UpSyncTaskInfo|undefined = undefined;
+	private isCancelled = false;
+	private runningProc: Promise<void>|undefined = undefined;
 
 	constructor(
-		public readonly obj: SyncedObj,
-		private readonly status: UpSyncTasks,
+		private readonly obj: SyncedObj,
 		private readonly remoteStorage: StorageOwner,
-		private readonly addToWorker: (u: ObjUpSync) => void,
-		private readonly logError: LogError
+		private readonly execPools: LabelledExecPools<UploadExecLabel>,
+		private readonly logError: LogError,
+		private readonly broadcastUpSyncEvent: BroadcastUpSyncEvent
 	) {
-		Object.freeze(this);
+		Object.seal(this);
 	}
 
 	tapFileWrite(
 		isObjNew: boolean, newVersion: number, baseVersion: number|undefined
 	): FileWriteTapOperator {
-		const tap = new ObjWriteTap(
-			this.obj, newVersion, baseVersion, isObjNew);
-		const uploadInfo = makeUploadInfo(tap.version, tap.baseVersion);
-		this.objWriteTaps.set(uploadInfo, tap);
-		return tap.tapOperator();
+		// XXX for now upload is started when write is complete, but tapped code
+		//     layout can adopt upload as before completion.
+		const uploadInfo: UploadInfo = {
+			type: 'upload',
+			version: newVersion,
+			baseVersion,
+			needUpload: {
+				segs: []
+			}
+		};
+		if (isObjNew) {
+			uploadInfo.createObj = true;
+		}
+		return tap(
+			writeEv => {
+				addEventToInfo(uploadInfo.needUpload!, writeEv);
+			},
+			async err => {
+				// XXX cancel in-tap upload, when it will be added.
+				//     Something should be done in case there is a transaction that
+				//     needs  cancelling.
+				await this.cancelTransactionIfOpen(uploadInfo);
+
+				await this.logError(err);
+			},
+			() => {
+				uploadInfo.needUpload!.allByteOnDisk = true;
+				this.enqueueTask(uploadInfo);
+			}
+		);
 	}
 
-	stop(): void {
-
-		// XXX
-		// - is something needed here?
-
+	private enqueueTask(task: UpSyncTaskInfo): void {
+		this.obj.sync().queueTask(task);
+		if (this.neededExecutor()) {
+			this.execPools.add(this);
+		} else {
+			this.obj.scheduleSelfGC();
+		} 
 	}
 
-	removeCurrentVersion(): void {
-		this.status.queueTask({
-			type: 'removal',
-			currentVersion: true
-		});
-		this.addToWorker(this);
+	private async recordTaskCompletion(task: UpSyncTaskInfo): Promise<void> {
+		this.taskInProcess = undefined;
+		if (task.type === 'upload') {
+			await this.obj.markVersionSynced(task.version);
+		}
+		await this.obj.sync().recordTaskCompletion(task);
+		this.broadcastUpSyncEvent(this.obj.objId, task);
+	}
+
+	neededExecutor(): UploadExecLabel|undefined {
+		const task = this.obj.sync().glanceOnNextTask();
+		if (!task) { return; }
+		if (task.type !== 'upload') { return 'fast'; }
+		if (!task.needUpload) { return; }
+		return executorLabelFor(task.needUpload!);
 	}
 
 	removeArchivedVersion(version: number): void {
-		this.status.queueTask({
+		this.enqueueTask({
 			type: 'removal',
 			archivedVersions: version
 		});
-		this.addToWorker(this);
 	}
 
-	isDone(): boolean {
-		return this.status.isDone();
+	async cancel(): Promise<void> {
+		this.isCancelled = true;
+		await this.runningProc?.catch(noop);
 	}
 
 	async process(): Promise<void> {
-		if (this.isDone()) { return; }
+		if (this.obj.sync().isSyncDone() || this.isCancelled) { return; }
+		let task: UpSyncTaskInfo|undefined = undefined;
 		try {
-			const task = (await this.status.nextTask())!;
+			if (!this.taskInProcess) {
+				this.taskInProcess = (
+					await this.obj.sync().getTaskForProcessing())!;
+				if (this.isCancelled) { return; }
+			}
+			task = this.taskInProcess;
+		} catch (err) {
+			await this.logError(err, `ObjUpSync.process fails to get task`);
+			return;
+		}
+		try {
 			if (task.type === 'upload') {
-				await this.processUpload(task);
+				this.runningProc = this.processUpload(task);
 			} else if (task.type === 'removal') {
-				await this.processRemoval(task);
+				this.runningProc = this.processRemoval(task);
 			} else if (task.type === 'archiving') {
-				await this.processArchival(task);
+				this.runningProc = this.processArchival(task);
 			} else {
 				throw new Error(`This shouldn't be reached`);
 			}
+			try {
+				await this.runningProc;
+			} finally {
+				this.runningProc = undefined;
+			}
 		} catch (err) {
-			await this.logError(err, `Error occured in uploader processing`);
-		}
-		if (!this.isDone()) {
-			this.addToWorker(this);
+			await this.logError(err, `From ObjUpSync.process task ${task.type}`);
 		}
 	}
 
@@ -185,7 +271,7 @@ class ObjUpSync {
 
 		await this.logError(
 			`Archival of current version is not implemented, yet.`);
-		await this.status.recordTaskCompletion(task);
+		await this.recordTaskCompletion(task);
 	}
 
 	private async processRemoval(task: RemovalInfo): Promise<void> {
@@ -203,37 +289,21 @@ class ObjUpSync {
 			await this.logError(
 				`Removal of archived version is not implemented, yet.`);
 		}
-		await this.status.recordTaskCompletion(task);
+		await this.recordTaskCompletion(task);
+		this.obj.scheduleSelfGC();
 	}
 
 	private async processUpload(task: UploadInfo): Promise<void> {
-		const tap = this.objWriteTaps.get(task);
-		if (tap && !task.done) {
-			await this.uploadReadyBytes(task, tap);
-		}
-		if (tap && !task.done) {
-			await this.status.recordInterimStateOfCurrentTask(task);
+		if (task.needUpload) {
+			if (task.needUpload.allByteOnDisk) {
+				if (task.transactionId) {
+					await this.continueUploadOfCompletedVersion(task);
+				} else {
+					await this.startUploadOfCompletedVersion(task);
+				}
+			}
 		} else {
-			this.objWriteTaps.delete(task);
-			await this.status.recordTaskCompletion(task);
-		}
-	}
-
-	private async uploadReadyBytes(
-		uploadInfo: UploadInfo, tap: ObjWriteTap
-	): Promise<void> {
-		if (tap.cancelledOrErred()) {
-			await this.cancelTransactionIfOpen(uploadInfo);
-			return;
-		}
-		if (uploadInfo.transactionId) {
-			await this.doUploadInTransaction(uploadInfo, tap);
-		} else if (tap.isDone) {
-
-			// XXX current code does upload after file is written, future code
-			// can start upload sooner, and do diff-ed uploads
-
-			await this.doFirstUpload(uploadInfo, tap);
+			await this.recordTaskCompletion(task);
 		}
 	}
 
@@ -248,68 +318,72 @@ class ObjUpSync {
 		});
 	}
 
-	private async doFirstUpload(
-		uploadInfo: UploadInfo, tap: ObjWriteTap
+	private async startUploadOfCompletedVersion(
+		uploadInfo: UploadInfo
 	): Promise<void> {
-		assert(tap.isDone, `Current implementation works only on completely saved to disk objects`);
-		assert(!uploadInfo.awaiting);
-
 		const src = await this.obj.getObjSrc(uploadInfo.version);
-		// note that endlessness/finiteness of src is not used
 		const header = await src.readHeader();
 		const maxChunkLen = (this.remoteStorage.maxChunkSize ?
 			this.remoteStorage.maxChunkSize - header.length : MAX_CHUNK_SIZE);
 		assert(maxChunkLen > 0);
-		const segs = await src.segSrc.read(maxChunkLen);
 		const srcLen = (await src.segSrc.getSize()).size;
-		let last: boolean;
-		let bytesToSend: Uint8Array|Uint8Array[];
-		if (segs) {
-			if (segs.length === maxChunkLen) {
-				last = (srcLen === segs.length);
-			} else {
-				last = false;
-			}
-			bytesToSend = [ header, segs ];
+		if (srcLen <= maxChunkLen) {
+			const segs = await src.segSrc.read(maxChunkLen);
+			await this.uploadWholeVersion(
+				!!uploadInfo.createObj, uploadInfo.version, header, segs
+			);
+			uploadInfo.needUpload = undefined;
+			await this.recordTaskCompletion(uploadInfo);
 		} else {
-			last = true;
-			bytesToSend = header;
-		}
-
-		if (last) {
-			const opts: FirstSaveReqOpts = {
-				header: header.length, ver: uploadInfo.version, last
-			};
-			await this.remoteStorage.saveNewObjVersion(
-				this.obj.objId, bytesToSend, opts, undefined);
-			uploadInfo.done = true;
-		} else {
-			const opts: FirstSaveReqOpts = {
-				header: header.length, ver: uploadInfo.version
-			};
-			const txnId = await this.remoteStorage.saveNewObjVersion(
-				this.obj.objId, bytesToSend, opts, undefined);
-			if (!txnId) { throw new Error(
-				`Server didn't start obj saving transaction`); }
-			uploadInfo.transactionId = txnId;
-			uploadInfo.awaiting = {
-				allByteOnDisk: true,
-				segs: [ { ofs: segs!.length, len: srcLen - segs!.length } ]
-			};
-			this.addToWorker(this);
+			const segs = await src.segSrc.read(maxChunkLen);
+			uploadInfo.transactionId = await this.startUploadTransaction(
+				!!uploadInfo.createObj, uploadInfo.version, header, segs!
+			);
+			uploadInfo.needUpload!.segs = [
+				{ ofs: segs!.length, len: srcLen - segs!.length }
+			];
+			await this.obj.sync().recordInterimStateOfCurrentTask(uploadInfo);
+			this.execPools.add(this);
 		}
 	}
 
-	private async doUploadInTransaction(
-		uploadInfo: UploadInfo, tap: ObjWriteTap
+	private async uploadWholeVersion(
+		create: boolean, ver: number,
+		header: Uint8Array, segs: Uint8Array|undefined
 	): Promise<void> {
-		assert(tap.isDone, `Current implementation works only on completely saved to disk objects`);
-		assert(!!uploadInfo.transactionId
-			&& !!uploadInfo.awaiting
-			&& (uploadInfo.awaiting.segs.length > 0)
-			&& (uploadInfo.awaiting.segs[0].len > 0));
+		const opts: FirstSaveReqOpts = {
+			header: header.length, ver, last: true
+		};
+		if (create) {
+			opts.create = true;
+		}
+		const bytes = (segs ? [ header, segs ] : [ header ]);
+		await this.remoteStorage.saveNewObjVersion(
+			this.obj.objId, bytes, opts, undefined
+		);
+	}
 
-		const section = uploadInfo.awaiting!.segs[0];
+	private async startUploadTransaction(
+		create: boolean, ver: number, header: Uint8Array, segs: Uint8Array
+	): Promise<string> {
+		const opts: FirstSaveReqOpts = {
+			header: header.length, ver
+		};
+		if (create) {
+			opts.create = true;
+		}
+		const txnId = await this.remoteStorage.saveNewObjVersion(
+			this.obj.objId, [ header, segs ], opts, undefined);
+		if (!txnId) {
+			throw new Error(`Server didn't start obj saving transaction`);
+		}
+		return txnId;
+	}
+
+	private async continueUploadOfCompletedVersion(
+		uploadInfo: UploadInfo
+	): Promise<void> {
+		const section = uploadInfo.needUpload!.segs[0];
 		const lenToRead = Math.min(
 			section.len,
 			(this.remoteStorage.maxChunkSize ?
@@ -319,19 +393,19 @@ class ObjUpSync {
 		const segs = await src.segSrc.read(lenToRead);
 		if (!segs || (segs.length < lenToRead)) { throw new Error(
 			`Unexpected end of obj source`); }
-		const last = ((uploadInfo.awaiting!.segs.length === 0) &&
+		const last = ((uploadInfo.needUpload!.segs.length === 1) &&
 			(segs.length === section.len));
 		
 		if (last) {
 			const opts: FollowingSaveReqOpts = {
 				ofs: section.ofs,
 				trans: uploadInfo.transactionId!,
-				last: true
+				last
 			};
 			await this.remoteStorage.saveNewObjVersion(
 				this.obj.objId, segs, undefined, opts);
-			uploadInfo.done = true;
-			uploadInfo.awaiting = undefined;
+			uploadInfo.needUpload = undefined;
+			await this.recordTaskCompletion(uploadInfo);
 		} else {
 			const opts: FollowingSaveReqOpts = {
 				ofs: section.ofs,
@@ -340,12 +414,12 @@ class ObjUpSync {
 			await this.remoteStorage.saveNewObjVersion(
 				this.obj.objId, segs, undefined, opts);
 			if (segs.length === section.len) {
-				uploadInfo.awaiting!.segs.splice(0, 1);
+				uploadInfo.needUpload!.segs.splice(0, 1);
 			} else {
 				section.ofs += segs.length;
 				section.len -= segs.length;
 			}
-			this.addToWorker(this);
+			this.execPools.add(this);
 		}
 	}
 
@@ -354,41 +428,7 @@ Object.freeze(ObjUpSync.prototype);
 Object.freeze(ObjUpSync);
 
 
-class ObjWriteTap {
-
-	isDone = false;
-	isCancelled = false;
-	err: any = undefined;
-
-	constructor(
-		public readonly obj: SyncedObj,
-		public readonly version: number,
-		public readonly baseVersion: number|undefined,
-		public readonly isObjNew: boolean
-	) {
-		Object.seal(this);
-	}
-
-	tapOperator(): FileWriteTapOperator {
-		return tap(
-			w => {},
-			err => {
-				this.err = err;
-				this.isDone = true;
-			},
-			() => {
-				this.isDone = true;
-			}
-		);
-	}
-
-	cancelledOrErred(): boolean {
-		return (this.isCancelled || (this.isDone && this.err));
-	}
-
-}
-Object.freeze(ObjWriteTap.prototype);
-Object.freeze(ObjWriteTap);
+function noop() {}
 
 
 Object.freeze(exports);

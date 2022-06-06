@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { NamedProcs } from "../../../lib-common/processes";
+import { NamedProcs } from "../../../lib-common/processes/synced";
 import { MailRecipient } from "../../../lib-client/asmail/recipient";
 import { ObjDownloader, InitDownloadParts } from "../../../lib-client/objs-on-disk/obj-on-disk";
 import { MsgMeta } from "../../../lib-common/service-api/asmail/retrieval";

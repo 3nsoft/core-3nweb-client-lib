@@ -16,7 +16,7 @@
 */
 
 import { FileException } from '../../../lib-common/exceptions/file';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { MsgKeyInfo, MsgKeyRole } from '../keyring';
 import { base64 } from '../../../lib-common/buffer-utils';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
@@ -318,7 +318,7 @@ export class MsgIndex {
 			}
 			if (msgFound) {
 				removeFrom(records, msgId);
-				if ((records.fileTS !== null) && (records.ordered.length === 0)) {
+				if (!!records.fileTS && (records.ordered.length === 0)) {
 					await this.files.deleteFile(records.fileTS+INDEX_EXT);
 				} else {
 					await this.saveRecords(records);

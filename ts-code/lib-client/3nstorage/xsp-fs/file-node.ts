@@ -24,7 +24,7 @@ import { NodeInFS } from './node-in-fs';
 import { LinkParameters } from '../../files';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { base64, byteLengthIn } from '../../../lib-common/buffer-utils';
-import { defer } from '../../../lib-common/processes';
+import { defer } from '../../../lib-common/processes/deferred';
 import { idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import { assert } from '../../../lib-common/assert';
 import { CommonAttrs, XAttrs } from './attrs';

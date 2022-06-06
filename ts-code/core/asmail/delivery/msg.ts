@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
 import { MsgPacker, PackJSON } from '../msg/packer';
-import { defer, Deferred, SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { ResourcesForSending, Attachments, SavedMsgToSend, SEG_SIZE_IN_K_QUATS, estimatePackedSizeOf } from './common';
 import { WIP, WIPstate } from './per-recipient-wip';
 import { Observable, Subject } from 'rxjs';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
+import { defer, Deferred } from '../../../lib-common/processes/deferred';
 
 type WritableFS = web3n.files.WritableFS;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;

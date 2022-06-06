@@ -16,7 +16,7 @@
 
 import { ErrorWithCause } from '../exceptions/error';
 import { MapOfSets } from '../map-of-sets';
-import { NamedProcs } from '../processes';
+import { NamedProcs } from '../processes/synced';
 
 export type Observer<T> = web3n.Observer<T>;
 

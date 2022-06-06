@@ -23,6 +23,7 @@ import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
+import { toRxObserver } from "../lib-common/utils-for-observables";
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
@@ -30,11 +31,10 @@ type WritableFile = web3n.files.WritableFile;
 type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type File = web3n.files.File;
 type Stats = web3n.files.Stats;
+type SyncState = web3n.files.SyncState;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type FileEvent = web3n.files.FileEvent;
-type SyncedEvent = web3n.files.SyncedEvent;
-type UnsyncedEvent = web3n.files.UnsyncedEvent;
-type ConflictEvent = web3n.files.ConflictEvent;
+type SyncUploadEvent = web3n.files.SyncUploadEvent;
 
 export function makeFileCaller(
 	caller: Caller, fileMsg: FileMsg
@@ -159,6 +159,15 @@ interface StatsMsg {
 	mtime?: Value<number>;
 	ctime?: Value<number>;
 	version?: Value<number>;
+	sync?: SyncInfo;
+}
+
+interface SyncInfo {
+	state: string;
+	latest?: Value<number>;
+	conflictingRemote?: number[];
+	remote?: Value<number>;
+	deletedOnRemote?: Value<boolean>;
 }
 
 const statsMsgType = ProtoType.for<StatsMsg>(pb.StatsMsg);
@@ -172,7 +181,14 @@ export function packStats(s: Stats): Buffer {
 		ctime: (s.ctime ? toVal(s.ctime.valueOf()) : undefined),
 		mtime: (s.mtime ? toVal(s.mtime.valueOf()) : undefined),
 		size: toOptVal(s.size),
-		version: toOptVal(s.version)
+		version: toOptVal(s.version),
+		sync: (s.sync ? {
+			state: s.sync.state,
+			conflictingRemote: s.sync.conflictingRemote,
+			deletedOnRemote: toOptVal(s.sync.deletedOnRemote),
+			latest: toOptVal(s.sync.latest),
+			remote: toOptVal(s.sync.remote)
+		} : undefined)
 	};
 	return statsMsgType.pack(msg);
 }
@@ -188,6 +204,14 @@ export function unpackStats(buf: Buffer|void): Stats {
 		version: valOfOptInt(m.version),
 		ctime: (m.ctime ? new Date(valOfOptInt(m.ctime)!) : undefined),
 		mtime: (m.mtime ? new Date(valOfOptInt(m.mtime)!) : undefined),
+		sync: (m.sync ? {
+			state: m.sync.state as SyncState,
+			conflictingRemote: ((m.sync.conflictingRemote!.length > 0) ?
+				m.sync.conflictingRemote!.map(fixInt) : undefined),
+			deletedOnRemote: !!valOfOpt(m.sync.deletedOnRemote) || undefined,
+			latest: valOfOptInt(m.sync.latest),
+			remote: valOfOptInt(m.sync.remote)
+		} : undefined),
 	};
 }
 
@@ -454,8 +478,7 @@ interface FileEventMsg {
 	isRemote?: Value<boolean>;
 	newVersion?: Value<number>;
 	current?: Value<number>;
-	lastSynced?: Value<number>;
-	remoteVersion?: Value<number>;
+	uploaded?: Value<number>;
 }
 
 const fileEventType = ProtoType.for<FileEventMsg>(pb.FileEventMsg);
@@ -466,9 +489,8 @@ export function packFileEvent(e: FileEvent): Buffer {
 		path: e.path,
 		isRemote: toOptVal(e.isRemote),
 		newVersion: toOptVal(e.newVersion),
-		current: toOptVal((e as SyncedEvent).current),
-		lastSynced: toOptVal((e as UnsyncedEvent).lastSynced),
-		remoteVersion: toOptVal((e as ConflictEvent).remoteVersion)
+		current: toOptVal((e as SyncUploadEvent).current),
+		uploaded: toOptVal((e as SyncUploadEvent).uploaded)
 	};
 	return fileEventType.pack(msg);
 }
@@ -481,8 +503,7 @@ export function unpackFileEvent(buf: EnvelopeBody): FileEvent {
 		isRemote: valOfOpt(m.isRemote),
 		newVersion: valOfOptInt(m.newVersion),
 		current: valOfOptInt(m.current),
-		lastSynced: valOfOptInt(m.lastSynced),
-		remoteVersion: valOfOptInt(m.remoteVersion)
+		uploaded: valOfOptInt(m.uploaded),
 	} as FileEvent;
 }
 
@@ -507,15 +528,11 @@ namespace watch {
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(path, undefined, s);
-			s.subscribe({
-				next: buf => {
-					if (obs.next) {
-						obs.next(unpackFileEvent(buf));
-					}
-				},
-				complete: obs.complete,
-				error: obs.error
-			});
+			s.asObservable()
+			.pipe(
+				map(unpackFileEvent)
+			)
+			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}

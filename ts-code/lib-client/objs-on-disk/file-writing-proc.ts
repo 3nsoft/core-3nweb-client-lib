@@ -16,7 +16,7 @@
 */
 
 import { Subscribe, EncrEvent, HeaderEncrEvent, SegEncrEvent } from 'xsp-files';
-import { PressureValve } from '../../lib-common/processes';
+import { PressureValve } from '../../lib-common/processes/pressure';
 import { Observable } from 'rxjs';
 import { map, filter, mergeMap } from 'rxjs/operators';
 import { joinByteArrs } from '../../lib-common/buffer-utils';

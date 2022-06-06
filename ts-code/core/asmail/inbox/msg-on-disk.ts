@@ -16,7 +16,7 @@
 
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjOnDisk, ObjDownloader } from '../../../lib-client/objs-on-disk/obj-on-disk';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { MsgMeta } from '../../../lib-common/service-api/asmail/retrieval';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { ObjSource } from 'xsp-files';

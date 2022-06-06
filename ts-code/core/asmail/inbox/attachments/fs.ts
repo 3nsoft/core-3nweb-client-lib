@@ -40,6 +40,14 @@ class AttachmentStore implements Storage {
 		Object.seal(this);
 	}
 
+	getNodeEvents(): never {
+		throw new Error(`Attachment's storage is readonly.`);
+	}
+
+	broadcastNodeEvent(): never {
+		throw new Error(`Attachment's storage is readonly.`);
+	}
+
 	storageForLinking(type: FSType, location?: string): Storage {
 		if (type === 'share') {
 			return this.getStorages('share', location);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2016, 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,6 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { stringifyErr } from '../lib-common/exceptions/error';
 import jasmine = require('jasmine');
 
 const jas = new jasmine({});
@@ -43,19 +42,14 @@ jas.configureDefaultReporter({
 	showColors: true
 });
 
-const unhandledRejections = new WeakMap();
-process.on('unhandledRejection', (reason, p) => {
-	unhandledRejections.set(p, reason);
-	console.error(`
-Got an unhandled rejection:
-${stringifyErr(reason)}`);
-});
-process.on('rejectionHandled', (p) => {
-	const reason = unhandledRejections.get(p);
-	console.error(`
-Handling previously unhandled rejection:
-${stringifyErr(reason)}`);
-	unhandledRejections.delete(p);
-});
+// XXX jasmine completely removes all listeners of unhandled things,
+//     hence, the following code is commented out.
+//
+// process.on('unhandledRejection', (err, p) => {
+// 	console.error(' -- Unhandled rejection of promise at:', p, 'with:', err);
+// });
+// process.on('uncaughtException', err => {
+// 	console.error(' -- Unhandled exception:', err);
+// });
 
 jas.execute();

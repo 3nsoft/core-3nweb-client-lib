@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SingleProc, makeSyncedFunc } from "../processes";
+import { SingleProc, makeSyncedFunc } from "../processes/synced";
 import { ByteSource } from "xsp-files";
 
 type FileByteSource = web3n.files.FileByteSource;

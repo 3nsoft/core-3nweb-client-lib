@@ -19,7 +19,7 @@ import { SpecDescribe } from '../../libs-for-tests/spec-module';
 import { stringOfB64CharsSync } from '../../../lib-common/random-node';
 import { sendTxtMsg, SpecIt, throwDeliveryErrorFrom } from '../test-utils';
 import { makeContinuousSink } from '../../../lib-common/obj-streaming/sink-utils';
-import { sleep } from '../../../lib-common/processes';
+import { sleep } from '../../../lib-common/processes/sleep';
 import { User } from '../../libs-for-tests/core-runner';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
 

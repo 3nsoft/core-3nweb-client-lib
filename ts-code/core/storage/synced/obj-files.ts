@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,7 +17,8 @@
 
 import { FileException } from '../../../lib-common/exceptions/file';
 import { Observable, from, MonoTypeOperatorFunction } from 'rxjs';
-import { sleep, NamedProcs } from '../../../lib-common/processes';
+import { NamedProcs } from '../../../lib-common/processes/synced';
+import { sleep } from '../../../lib-common/processes/sleep';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
 import * as fs from '../../../lib-common/async-fs-node';
@@ -30,27 +31,13 @@ import { mergeMap, filter, tap } from 'rxjs/operators';
 import { FileWrite } from '../../../lib-client/objs-on-disk/file-writing-proc';
 import { flatTap } from '../../../lib-common/utils-for-observables';
 import { GC } from './obj-files-gc';
-import { ObjStatus } from './obj-status';
+import { ObjStatus, readAndCheckStatus, STATUS_FILE_NAME, UpSyncStatus } from './obj-status';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 
-/**
- * This is an extention for an unsynced version file. File name starts with a
- * version number.
- */
-export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
-
-/**
- * This is an upload info file. When an upload is complete,
- * this info file is removed.
- */
-export const UPLOAD_INFO_FNAME = 'upload';
-
-/**
- * Presence of this empty file in a object folder indicates that object's
- * removal hasn't been synchronized, yet.
- */
-export const UNSYNCED_REMOVAL = 'unsynced-removal';
+const UNSYNCED_FILE_NAME_EXT = 'unsynced';
+const SYNCED_FILE_NAME_EXT = 'v';
+const REMOTE_FILE_NAME_EXT = 'remote';
 
 
 export class ObjFiles {
@@ -83,9 +70,15 @@ export class ObjFiles {
 				if (objFiles.objs.has(objId)) { return false; }
 				const lst = await fs.readdir(objFolderPath);
 				for (const fName of lst) {
-					if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)
-					|| (fName === UPLOAD_INFO_FNAME)
-					|| (fName === UNSYNCED_REMOVAL)) { return false; }
+					if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)) { return false; }
+					if (fName === STATUS_FILE_NAME) {
+						if (!objFiles.objs.has(objId)) {
+							const status = await readAndCheckStatus(
+								objFolderPath, objId
+							).catch(noop);
+							if (status && status.syncTasks) { return false; }
+						}
+					}
 				}
 				return true;
 			},
@@ -101,7 +94,8 @@ export class ObjFiles {
 			const folder = await this.folders.getFolderAccessFor(objId);
 			if (!folder) { return; }
 			const obj = await SyncedObj.forExistingObj(
-				objId, folder, this.downloader, this.gc.scheduleCollection);
+				objId, folder, this.downloader, this.gc.scheduleCollection,
+				this.logError);
 			this.objs.set(objId, obj);
 			return obj;
 		});
@@ -117,10 +111,11 @@ export class ObjFiles {
 				assert(typeof download.version === 'number');
 				obj = await SyncedObj.forDownloadedObj(
 					objId, folder!, this.downloader, this.gc.scheduleCollection,
-					download.version, download.parts);
+					download.version, download.parts, this.logError);
 			} else {
 				obj = await SyncedObj.forNewObj(
-					objId, folder!, this.downloader, this.gc.scheduleCollection);
+					objId, folder!, this.downloader, this.gc.scheduleCollection,
+					this.logError);
 			}
 			this.objs.set(objId, obj);
 			return obj;
@@ -191,7 +186,7 @@ function makeSynchronizer(proc?: NamedProcs): SynchronizerOnObjId {
 		proc = new NamedProcs();
 	}
 	async function sync<T>(objId: ObjId, action: () => Promise<T>): Promise<T> {
-		const id = (!objId ? '==root==' : objId);
+		const id = (objId ? objId : '==root==');
 		return proc!.startOrChain(id, action);
 	}
 	return sync;
@@ -237,22 +232,23 @@ export class SyncedObj {
 
 	static async forExistingObj(
 		objId: ObjId, objFolder: string, downloader: Downloader,
-		scheduleGC: GC['scheduleCollection'],
+		scheduleGC: GC['scheduleCollection'], logError: LogError
 	): Promise<SyncedObj> {
-		const status = await ObjStatus.readFrom(objFolder, objId);
+		const status = await ObjStatus.readFrom(objFolder, objId, logError);
 		return new SyncedObj(objId, objFolder, status, downloader, scheduleGC);
 	}
 
 	static async forDownloadedObj(
 		objId: ObjId, objFolder: string, downloader: Downloader,
 		scheduleGC: GC['scheduleCollection'],
-		version: number, parts: InitDownloadParts
+		version: number, parts: InitDownloadParts, logError: LogError
 	): Promise<SyncedObj> {
+		// XXX let's note that given version is used to be current on server
 		const status = await ObjStatus.makeForDownloadedVersion(
-			objFolder, objId, version);
+			objFolder, objId, version, version, logError);
 		const obj = new SyncedObj(
 			objId, objFolder, status, downloader, scheduleGC);
-		const fPath = obj.path(version, false);
+		const fPath = obj.path(version, true);
 		const objVer = await ObjOnDisk.createFileForExistingVersion(
 			obj.objId, version, fPath,
 			obj.downloader, obj.objSegsGetterFromDisk, parts);
@@ -262,15 +258,25 @@ export class SyncedObj {
 
 	static async forNewObj(
 		objId: ObjId, objFolder: string, downloader: Downloader,
-		scheduleGC: GC['scheduleCollection']
+		scheduleGC: GC['scheduleCollection'], logError: LogError
 	): Promise<SyncedObj> {
-		const status = await ObjStatus.makeNew(objFolder, objId);
+		const status = await ObjStatus.makeNew(objFolder, objId, logError);
 		return new SyncedObj(objId, objFolder, status, downloader, scheduleGC);
 	}
 
-	private path(version: number, synced: boolean): string {
-		const fName = (synced ?
-			`${version}.v` : `${version}.${UNSYNCED_FILE_NAME_EXT}`);
+	sync(): UpSyncStatus {
+		return this.status;
+	}
+
+	scheduleSelfGC(): void {
+		this.scheduleGC(this);
+	}
+
+	private path(version: number, synced: boolean, remote?: true): string {
+		const fileExt = (synced ?
+			SYNCED_FILE_NAME_EXT :
+			(remote ? REMOTE_FILE_NAME_EXT : UNSYNCED_FILE_NAME_EXT));
+		const fName = `${version}.${fileExt}`;
 		return join(this.objFolder, fName);
 	}
 
@@ -368,14 +374,15 @@ export class SyncedObj {
 			this.objSegsGetterFromDisk);
 		this.verObjs.set(version, obj);
 		const fileWrite$ = write$.pipe(
-			tap(undefined,
-				err => {
+			tap({
+				error: err => {
 					if (this.verObjs.get(version) === obj) {
 						this.verObjs.delete(version);
 					}
-				}),
+				}
+			}),
 			flatTap(undefined, undefined,
-				() => this.setUnsyncedCurrentVersion(version))
+				() => this.setUnsyncedCurrentVersion(version, obj.getBaseVersion()))
 		);
 		return { fileWrite$, baseVer: obj.getBaseVersion() };
 	}
@@ -396,14 +403,24 @@ export class SyncedObj {
 		return this.status.isDeletedOnRemote();
 	}
 
-	async setUnsyncedCurrentVersion(version: number): Promise<void> {
-		await this.status.setUnsyncedCurrentVersion(version);
-		this.scheduleGC(this);
+	private async setUnsyncedCurrentVersion(
+		version: number, baseVersion: number|undefined
+	): Promise<void> {
+		await this.status.setUnsyncedCurrentVersion(version, baseVersion);
+		if (version > 1) {
+			this.scheduleSelfGC();
+		}
 	}
 
-	async setSyncedCurrentVersion(version: number): Promise<void> {
-		await this.status.setSyncedCurrentVersion(version);
-		this.scheduleGC(this);
+	async markVersionSynced(version: number): Promise<void> {
+		const verObj = this.verObjs.get(version);
+		if (verObj) {
+			await verObj.moveFile(this.path(version, true));
+		} else {
+			await fs.rename(this.path(version, false), this.path(version, true));
+		}
+		await this.status.markVersionSynced(version);
+		this.scheduleSelfGC();
 	}
 
 	async setRemoteVersion(version: number): Promise<void> {
@@ -416,9 +433,17 @@ export class SyncedObj {
 
 	async removeCurrentVersion(): Promise<void> {
 		await this.status.removeCurrentVersion(this.verObjs);
-		this.scheduleGC(this);
+		this.scheduleSelfGC();
 	}
 
+	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
+		return this.status.getNonGarbageVersions();
+	}
+
+	isStatusFileSaved(): boolean {
+		return this.status.isFileSaved();
+	}
+	
 }
 Object.freeze(SyncedObj.prototype);
 Object.freeze(SyncedObj);
@@ -431,6 +456,8 @@ async function isOnDisk(path: string): Promise<boolean> {
 		throw exc;
 	}));
 }
+
+function noop() {}
 
 
 Object.freeze(exports);

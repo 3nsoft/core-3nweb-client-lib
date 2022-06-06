@@ -19,7 +19,7 @@ import { Cryptor, makeCryptor } from './cryptor';
 import { LogWarning, LogError } from '../logging/log-to-file';
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
-import { Deferred, defer } from '../../lib-common/processes';
+import { Deferred, defer } from '../../lib-common/processes/deferred';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { dirname, join } from 'path';
 import { ProtoType } from '../protobuf-type';

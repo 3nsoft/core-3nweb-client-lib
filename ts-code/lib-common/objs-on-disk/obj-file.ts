@@ -18,7 +18,8 @@
 import * as fs from '../async-fs-node';
 import { errWithCause } from '../exceptions/error';
 import { bytesEqual } from '../bytes-equal';
-import { SingleProc, defer } from '../processes';
+import { SingleProc } from '../processes/synced';
+import { defer } from '../processes/deferred';
 import { toBuffer } from '../buffer-utils';
 import { Layout } from 'xsp-files';
 import { V1_FILE_START } from './v1-obj-file-format';

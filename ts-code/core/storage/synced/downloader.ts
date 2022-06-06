@@ -12,10 +12,11 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { StorageOwner } from '../../../lib-client/3nstorage/service';
-import { NamedProcs } from '../../../lib-common/processes';
+import { NamedProcs } from '../../../lib-common/processes/synced';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ObjDownloader, InitDownloadParts } from '../../../lib-client/objs-on-disk/obj-on-disk';
 import { Layout } from 'xsp-files';
@@ -90,10 +91,10 @@ export class Downloader implements ObjDownloader {
 		});
 	}
 
-	getCurrentObjVersion(
+	async getCurrentObjVersion(
 		objId: ObjId
 	): Promise<{ version: number, parts: InitDownloadParts; }> {
-		return this.sync(objId, -1, async () => {
+		return await this.sync(objId, -1, async () => {
 			const { header, segsTotalLen, version, segsChunk } =
 				await this.remoteStorage.getCurrentObj(objId, DOWNLOAD_START_CHUNK);
 			const layout: Layout = {

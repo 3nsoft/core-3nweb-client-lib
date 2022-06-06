@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,10 +12,13 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { SynchronizerOnObjId, SyncedObj } from './obj-files';
-import { SingleProc } from '../../../lib-common/processes';
+import { SynchronizerOnObjId, SyncedObj, } from './obj-files';
+import { SingleProc } from '../../../lib-common/processes/synced';
+import * as fs from '../../../lib-common/async-fs-node';
+import { join } from 'path';
 
 
 export class GC {
@@ -64,11 +67,42 @@ export class GC {
 		}
 		const obj = getAndRemoveOneFrom(this.wip);
 		if (!obj) { return; }
-
-		// XXX
-
-
+		await this.sync(obj.objId, () => this.collectIn(obj).catch(noop));
 		return this.objCollecting();
+	}
+
+	private async collectIn(obj: SyncedObj): Promise<void> {
+		// calculate versions that should not be removed
+		const { gcMaxVer, nonGarbage } = obj.getNonGarbageVersions();
+
+		// if object is set archived, and there is nothing in it worth keeping,
+		// whole folder can be removed
+		if ((nonGarbage.size === 0)
+		&& obj.isArchived() && obj.sync().isSyncDone()) {
+			if (!obj.isStatusFileSaved()) {
+				return;
+			}
+			this.rmObjFromCache(obj);
+			if (obj.objId) {
+				await this.rmObjFolder(obj.objId);
+			}
+			return;
+		}
+
+		// for all other cases, we remove version files that are not worth
+		// keeping.
+		const lst = await fs.readdir(obj.objFolder).catch(noop);
+		if (!lst) { return; }
+		const rmProcs: Promise<void>[] = [];
+		for (const f of lst) {
+			const ver = parseInt(f);
+			if (isNaN(ver) || nonGarbage.has(ver)
+			|| (gcMaxVer && (ver >= gcMaxVer))) { continue; }
+			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
+		}
+		if (rmProcs.length > 0) {
+			await Promise.all(rmProcs);
+		}
 	}
 
 }
@@ -83,6 +117,8 @@ function getAndRemoveOneFrom<T>(set: Set<T>): T|undefined {
 	set.delete(value);
 	return value;
 }
+
+function noop() {}
 
 
 Object.freeze(exports);

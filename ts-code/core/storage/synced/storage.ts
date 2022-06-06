@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,16 +12,13 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
-import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,
-	NodesContainer, wrapStorageImplementation, Storage as IStorage,
-	StorageGetter, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { makeObjNotFoundExc, makeObjExistsExc }
-	from '../../../lib-client/3nstorage/exceptions';
-import { StorageOwner as RemoteStorage }
-	from '../../../lib-client/3nstorage/service';
+import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { makeObjNotFoundExc, makeObjExistsExc } from '../../../lib-client/3nstorage/exceptions';
+import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
@@ -32,6 +29,14 @@ import { Downloader } from './downloader';
 import { RemoteEvents } from './remote-events';
 import { UpSyncer } from './upsyncer';
 import { NetClient } from '../../../lib-client/request-utils';
+import { Observable } from 'rxjs';
+import { Broadcast } from '../../../lib-common/utils-for-observables';
+import { UpSyncTaskInfo } from './obj-status';
+
+type FolderEvent = web3n.files.FolderEvent;
+type FileEvent = web3n.files.FileEvent;
+type Stats = web3n.files.Stats;
+
 
 export class SyncedStore implements ISyncedStorage {
 	
@@ -40,6 +45,7 @@ export class SyncedStore implements ISyncedStorage {
 	public readonly nodes = new NodesContainer();
 	private readonly remoteEvents: RemoteEvents;
 	private readonly uploader: UpSyncer;
+	private readonly events = new Broadcast<NodeEvent>();
 
 	private constructor(
 		private readonly files: ObjFiles,
@@ -51,8 +57,8 @@ export class SyncedStore implements ISyncedStorage {
 		const getFSNodes = (objId: ObjId) => this.nodes.get(objId);
 		this.remoteEvents = new RemoteEvents(
 			this.remoteStorage, this.files, getFSNodes, this.logError);
-		this.uploader = new UpSyncer(
-			this.remoteStorage, this.files, this.logError);
+		this.uploader = new UpSyncer(this.remoteStorage, this.logError,
+			this.broadcastUpSyncEvent.bind(this));
 		Object.seal(this);
 	}
 
@@ -68,12 +74,29 @@ export class SyncedStore implements ISyncedStorage {
 			path, new Downloader(remote), logError);
 		const s = new SyncedStore(
 			objFiles, remote, getStorages, cryptor, logError);
+		s.uploader.start();
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			startObjProcs: () => {
 				s.remoteEvents.startAbsorbingRemoteEvents();
 			}
 		};
+	}
+
+	getNodeEvents(): Observable<NodeEvent> {
+		return this.events.event$;
+	}
+
+	broadcastNodeEvent(
+		objId: ObjId, parentObjId: ObjId|undefined, event: FolderEvent|FileEvent
+	): void {
+		this.events.next({ objId, parentObjId, event });
+	}
+
+	private broadcastUpSyncEvent(objId: ObjId, task: UpSyncTaskInfo): void {
+		const node = this.nodes.get(objId);
+		if (!node) { return; }
+		node.broadcastUpSyncEvent(task);
 	}
 
 	storageForLinking(type: web3n.files.FSType, location?: string): IStorage {
@@ -84,6 +107,12 @@ export class SyncedStore implements ISyncedStorage {
 		} else {
 			throw new Error(`Getting ${type} storage is not implemented in local storage.`);
 		}
+	}
+
+	async getObjSyncInfo(objId: ObjId): Promise<Stats['sync']> {
+		const obj = await this.files.findObj(objId);
+		if (!obj) { return; }
+		return obj.sync().stat();
 	}
 	
 	getRootKeyDerivParamsFromServer(): Promise<ScryptGenParams> {
@@ -161,6 +190,7 @@ export class SyncedStore implements ISyncedStorage {
 	async close(): Promise<void> {
 		try {
 			await this.uploader.stop();
+			this.events.done();
 			await this.remoteEvents.close();
 			await this.remoteStorage.logout();
 		} catch (err) {

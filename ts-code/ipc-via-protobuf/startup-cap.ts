@@ -19,7 +19,7 @@ import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
 import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
-import { defer } from "../lib-common/processes";
+import { defer } from "../lib-common/processes/deferred";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { startup as pb } from "../protos/startup.proto";
 
@@ -309,7 +309,7 @@ namespace completeLoginAndLocalSetup {
 		return (pass, progressCB) => {
 			const s = new Subject<EnvelopeBody>();
 			const completion = defer<boolean>();
-			s.asObservable().subscribe({
+			s.subscribe({
 				next: buf => {
 					const { decrResult, p } = progressValueType.unpack(buf);
 					if (typeof valOfOpt(decrResult) === 'boolean') {

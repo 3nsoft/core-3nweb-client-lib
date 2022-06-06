@@ -16,7 +16,8 @@
 
 import { SubscribingClient } from '../lib-common/ipc/generic-ipc';
 import { Observable, from, throwError } from 'rxjs';
-import { SingleProc, sleep } from '../lib-common/processes';
+import { SingleProc } from '../lib-common/processes/synced';
+import { sleep } from '../lib-common/processes/sleep';
 import { catchError, mergeMap } from 'rxjs/operators';
 import { WSException } from '../lib-common/ipc/ws-ipc';
 import { ConnectException, HTTPException } from '../lib-common/exceptions/http';

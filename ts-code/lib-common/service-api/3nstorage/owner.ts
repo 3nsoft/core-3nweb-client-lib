@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This defines interfaces for 3nstorage owner's requests.
@@ -121,10 +122,12 @@ export interface GetObjQueryOpts {
 export interface PutObjFirstQueryOpts {
 
 	/**
-	 * This is a new object version parameter. When it is 1 (one), new object
-	 * should be created. If it is greater than one, changes are accepted only
-	 * when a current version on the server is (ver-1), ensuring that a client
-	 * knows current version on server to advance it.
+	 * This is a flag to indicate that new object should be created.
+	 */
+	create?: boolean;
+
+	/**
+	 * This parameter is object's new version.
 	 */
 	ver: number;
 
@@ -177,13 +180,15 @@ export namespace currentObj {
 		return `obj/${objId}/current${opts ? `?${stringifyOpts(opts as any)}`: ''}`;
 	}
 	
-	export function firstPutReqUrlEnd(objId: string,
-			opts: PutObjFirstQueryOpts): string {
+	export function firstPutReqUrlEnd(
+		objId: string, opts: PutObjFirstQueryOpts
+	): string {
 		return `obj/${objId}/current?${stringifyOpts(opts as any)}`;
 	}
 	
-	export function secondPutReqUrlEnd(objId: string,
-			opts: PutObjSecondQueryOpts): string {
+	export function secondPutReqUrlEnd(
+		objId: string, opts: PutObjSecondQueryOpts
+	): string {
 		return `obj/${objId}/current?${stringifyOpts(opts as any)}`;
 	}
 
@@ -246,8 +251,9 @@ export namespace archivedObjVersion {
 	
 	export const EXPRESS_URL_END = '/obj/:objId/archived';
 	
-	export function getReqUrlEnd(objId: string, version: number,
-			opts?: GetObjQueryOpts): string {
+	export function getReqUrlEnd(
+		objId: string, version: number, opts?: GetObjQueryOpts
+	): string {
 		if (opts) {
 			opts.ver = version;
 		}
@@ -270,8 +276,9 @@ export namespace archivedRootVersion {
 	
 	export const EXPRESS_URL_END = 'root/archived';
 	
-	export function getReqUrlEnd(version: number,
-			opts?: GetObjQueryOpts): string {
+	export function getReqUrlEnd(
+		version: number, opts?: GetObjQueryOpts
+	): string {
 		if (opts) {
 			opts.ver = version;
 		}
@@ -335,8 +342,9 @@ export function sanitizedDiff(
 	};
 }
 
-export function addDiffSectionTo(sections: number[][],
-		newBytes: boolean, srcPos: number, len: number): void {
+export function addDiffSectionTo(
+	sections: number[][], newBytes: boolean, srcPos: number, len: number
+): void {
 	sections.push([ (newBytes ? 1 : 0), srcPos, len ]);
 } 
 

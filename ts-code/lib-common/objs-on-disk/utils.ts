@@ -16,7 +16,7 @@
 */
 
 import { Layout, LayoutBaseSection, LayoutNewSection } from 'xsp-files';
-import { defer, Deferred } from '../processes';
+import { defer, Deferred } from '../processes/deferred';
 import { DiffInfo } from '../service-api/3nstorage/owner';
 import { ObjVersionFile } from './obj-file';
 import { Readable } from 'stream';

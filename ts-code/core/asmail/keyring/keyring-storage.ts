@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { SingleProc } from "../../../lib-common/processes";
+import { SingleProc } from "../../../lib-common/processes/synced";
 
 type WritableFS = web3n.files.WritableFS;
 type FileException = web3n.files.FileException;

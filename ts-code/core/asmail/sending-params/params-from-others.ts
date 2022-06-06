@@ -16,7 +16,7 @@
 
 import { JsonFileProc }
 	from '../../../lib-client/3nstorage/util/file-based-json';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { SendingParams } from '../msg/common';
 import { SendingParamsHolder } from '../sending-params';
 

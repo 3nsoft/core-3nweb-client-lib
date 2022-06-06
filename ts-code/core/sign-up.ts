@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -26,10 +26,11 @@ import { GetUsersOnDisk } from './app-files';
 import * as random from '../lib-common/random-node';
 import { Cryptor } from '../lib-client/cryptor/cryptor';
 import { box } from 'ecma-nacl';
-import { makeKeyGenProgressCB } from './sign-in';
+import { makeKeyGenProgressCB, ProgressCB } from './sign-in';
 import { Subject } from 'rxjs';
 import { LogError } from '../lib-client/logging/log-to-file';
 import { UserMidParams, UserStorageParams } from '../lib-common/user-admin-api/signup';
+import { ErrorWithCause, errWithCause } from '../lib-common/exceptions/error';
 
 export interface ScryptGenParams {
 	logN: number;
@@ -128,21 +129,23 @@ export class SignUp {
 	}
 
 	private getAvailableAddresses: SignUpService[
-			'getAvailableAddresses'] = async (name, signupToken) => {
+		'getAvailableAddresses'
+	] = async (name, signupToken) => {
 		const addresses = await checkAvailableAddressesForName(
 			this.net, this.serviceURL, name, signupToken);
 		return addresses;
 	};
 
-	private createUserParams: SignUpService[
-			'createUserParams'] = async (pass, progressCB) => {
+	private createUserParams: SignUpService['createUserParams'] = async (
+		pass, progressCB
+	) => {
 		await this.genMidParams(pass, 0, 50, progressCB);
 		await this.genStorageParams(pass, 51, 100, progressCB);
 	};
 
 	private async genStorageParams(
 		pass: string, progressStart: number, progressEnd: number,
-		originalProgressCB: (progress: number) => void
+		originalProgressCB: ProgressCB
 	): Promise<void> {
 		const derivParams: keyDeriv.ScryptGenParams = {
 			logN: defaultDerivParams.logN,
@@ -164,7 +167,7 @@ export class SignUp {
 
 	private async genMidParams(
 		pass: string, progressStart: number, progressEnd: number,
-		originalProgressCB: (progress: number) => void
+		originalProgressCB: ProgressCB
 	): Promise<void> {
 		const derivParams: keyDeriv.ScryptGenParams = {
 			logN: defaultDerivParams.logN,
@@ -201,8 +204,8 @@ export class SignUp {
 			storage: this.store.params,
 			signupToken
 		}).catch (async err => {
-			await this.logError(err, `Failed to create user account ${address}.`);
-			throw err;
+			throw await this.logAndWrap(err,
+				`Failed to create user account ${address}.`);
 		});
 		if (!accountCreated) { return false; }
 		this.doneBroadcast.next({
@@ -216,6 +219,11 @@ export class SignUp {
 		this.forgetKeys();
 		return true;
 	};
+
+	private async logAndWrap(err: any, msg: string): Promise<ErrorWithCause> {
+		await this.logError(err, msg);
+		return errWithCause(err, msg);
+	}
 
 	private forgetKeys(): void {
 		this.store = (undefined as any);

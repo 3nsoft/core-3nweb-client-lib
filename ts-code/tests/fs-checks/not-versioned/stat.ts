@@ -98,8 +98,12 @@ it.func = async function(s) {
 	expect(stat.isFolder).toBe(true);
 	expect(stat.writable).toBe(true);
 	let stat2 = await testFS.stat('.');
+	// in check below we ignore sync field that may change in background
+	delete stat.sync;
+	delete stat2.sync;
 	expect(deepEqual(stat, stat2)).toBe(true);
 	stat2 = await testFS.stat('/');
+	delete stat2.sync;
 	expect(deepEqual(stat, stat2)).toBe(true);
 };
 specs.its.push(it);

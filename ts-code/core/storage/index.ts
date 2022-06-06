@@ -336,7 +336,7 @@ export class Storages implements FactoryOfFSs {
 			this.synced = await StorageAndFS.existing(syncedStore, key);
 			key.fill(0);
 			if (!this.synced) { return false; }
-			await startObjProcs();
+			startObjProcs();
 			return true;
 		};
 	}

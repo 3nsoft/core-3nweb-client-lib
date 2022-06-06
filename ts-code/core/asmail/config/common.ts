@@ -19,7 +19,7 @@ import { MailConfigurator } from '../../../lib-client/asmail/service-config';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { JsonFileProc }
 	from '../../../lib-client/3nstorage/util/file-based-json';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 
 type WritableFile = web3n.files.WritableFile;
 type FileEvent = web3n.files.FileEvent;

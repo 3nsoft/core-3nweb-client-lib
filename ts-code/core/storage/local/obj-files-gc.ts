@@ -12,10 +12,11 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../../lib-common/async-fs-node';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { join } from 'path';
 import { LocalObj } from './obj-files';
 
@@ -82,10 +83,10 @@ export class GC {
 			const ver = parseInt(f);
 			if (isNaN(ver) || nonGarbage.has(ver)
 			|| (gcMaxVer && (ver >= gcMaxVer))) { continue; }
-			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(() => {}));
+			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
 		}
-		while (rmProcs.length > 0) {
-			await rmProcs.pop();
+		if (rmProcs.length > 0) {
+			await Promise.all(rmProcs);
 		}
 		return this.objCollecting();
 	}
@@ -102,5 +103,8 @@ function getAndRemoveOneFrom<T>(set: Set<T>): T|undefined {
 	set.delete(value);
 	return value;
 }
+
+function noop() {}
+
 
 Object.freeze(exports);

@@ -18,7 +18,7 @@
 import { StorageGetter } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { errWithCause } from '../../../lib-common/exceptions/error';
-import { NamedProcs } from '../../../lib-common/processes';
+import { NamedProcs } from '../../../lib-common/processes/synced';
 import { MailRecipient, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
 import { ServiceLocator } from '../../../lib-client/service-locator';
 import { OpenedMsg, openMsg } from '../msg/opener';

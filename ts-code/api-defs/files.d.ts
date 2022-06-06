@@ -40,6 +40,7 @@ declare namespace web3n.files {
 		attrsNotEnabledInFS?: true;
 		versionMismatch?: true;
 		isEndless?: true;
+		storageClosed?: true;
 	}
 
 	interface exceptionCode {
@@ -58,6 +59,7 @@ declare namespace web3n.files {
 		parsingError: 'parsing-error';
 		notImplemented: 'ENOSYS';
 		isEndless: 'is-endless';
+		storageClosed: 'storage-closed';
 	}
 
 	/**
@@ -124,7 +126,21 @@ declare namespace web3n.files {
 		 */
 		version?: number;
 
+		/**
+		 * This tells object's latest sync state.
+		 * If such information cannot be provided, this field will be absent.
+		 */
+		sync?: {
+			state: SyncState;
+			latest?: number;
+			conflictingRemote?: number[];
+			remote?: number;
+			deletedOnRemote?: true;
+		};
+
 	}
+
+	type SyncState = 'synced' | 'behind' | 'unsynced' | 'conflicting';
 
 	interface FileByteSource {
 
@@ -988,37 +1004,25 @@ declare namespace web3n.files {
 		type: 'removed';
 	}
 
-	interface MovedEvent extends FSEvent {
-		type: 'moved';
-	}
-
-	interface SyncedEvent extends FSEvent {
-		type: 'synced';
+	interface SyncUploadEvent extends FSEvent {
+		type: 'sync-upload';
+		uploaded: number;
 		current: number;
 	}
 
-	interface UnsyncedEvent extends FSEvent {
-		type: 'unsynced';
-		lastSynced: number;
-	}
-
-	interface ConflictEvent extends FSEvent {
-		type: 'conflicting';
-		remoteVersion: number;
-	}
-
 	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
-		EntryRenamingEvent | RemovedEvent | MovedEvent |
-		SyncedEvent | UnsyncedEvent | ConflictEvent;
+		EntryRenamingEvent | RemovedEvent | SyncUploadEvent;
 
 	interface EntryRemovalEvent extends FSEvent {
 		type: 'entry-removal';
 		name: string;
+		moveLabel?: number;
 	}
 
 	interface EntryAdditionEvent extends FSEvent {
 		type: 'entry-addition';
 		entry: ListingEntry;
+		moveLabel?: number;
 	}
 
 	interface EntryRenamingEvent extends FSEvent {
@@ -1027,8 +1031,7 @@ declare namespace web3n.files {
 		newName: string;
 	}
 
-	type FileEvent = FileChangeEvent | RemovedEvent | MovedEvent |
-		SyncedEvent | UnsyncedEvent | ConflictEvent;
+	type FileEvent = FileChangeEvent | RemovedEvent | SyncUploadEvent;
 
 	interface FileChangeEvent extends FSEvent {
 		type: 'file-change';

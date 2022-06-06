@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,12 +17,13 @@
 
 import { CoreRunner, User } from "./core-runner";
 import { beforeAllWithTimeoutLog, afterAllCond } from "./jasmine-utils";
-import { callWithTimeout } from "../../lib-common/processes";
+import { callWithTimeout } from "../../lib-common/processes/timeout";
 import { ServicesRunner } from "./services-runner";
 import { assert } from "../../lib-common/assert";
 import { parse as parseUrl } from 'url';
 import { makeNetClient } from "../../lib-client/request-utils";
 import { listMsgs as listMsgsAPI } from '../../lib-common/service-api/asmail/retrieval';
+import { sleep } from "../../lib-common/processes/sleep";
 
 
 export interface Setup {
@@ -81,11 +82,27 @@ function makeSetupObject(
 		if (isStopped) { return; }
 		isUp = false;
 		isStopped = true;
+		await sleep(1000);
 		try {
-			await runner.close();
+			try {
+				await runner.close()
+				.catch(err => {
+					console.error(`\n>>> error in closing core's runner`, err);
+					throw err;
+				});
+			} finally {
+				await runner.cleanup(true)
+				.catch(err => {
+					console.error(`\n>>> error in cleanup of core's runner`, err);
+					throw err;
+				});
+			}
 		} finally {
-			await runner.cleanup(true);
-			await server.stop(true);
+			await server.stop()
+			.catch(err => {
+				console.error(`\n>>> error in stopping server`, err);
+				throw err;
+			});
 		}
 	}
 
@@ -202,14 +219,30 @@ function makeMultiUserSetupObject(
 		if (isStopped) { return; }
 		isUp = false;
 		isStopped = true;
-		for (const runner of runners.values()) {
-			try {
-				await runner.close();
-			} finally {
-				await runner.cleanup(true);
+		await sleep(1000);
+		try {
+			for (const runner of runners.values()) {
+				try {
+					await runner.close()
+					.catch(err => {
+						console.error(`\n>>> error in closing core's runner`, err);
+						throw err;
+					});
+				} finally {
+					await runner.cleanup(true)
+					.catch(err => {
+						console.error(`\n>>> error in cleanup of core's runner`, err);
+						throw err;
+					});
+				}
 			}
+		} finally {
+			await server.stop()
+			.catch(err => {
+				console.error(`\n>>> error in stopping server`, err);
+				throw err;
+			});
 		}
-		await server.stop();
 	}
 
 	return { s, setUp, setDown };

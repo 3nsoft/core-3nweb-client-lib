@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,7 @@ import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../libs-for-tests/startup';
 import { User, testApp } from '../libs-for-tests/core-runner';
+import { sleep } from '../../lib-common/processes/sleep';
 
 // NOTE: it-specs inside signIn process expect to run in a given order -- they
 //		change app's state, expected by following specs in this describe.
@@ -34,6 +35,7 @@ describe('signIn process (empty cache)', () => {
 		if (!s.isUp) { return; }
 		user = s.users[0];
 		const runner = s.runners.get(user.userId)!;
+		await sleep(3000);	// attempt to let processes settle
 		await runner.restart(true, false);
 		({ closeIPC, coreInit, w3n } = runner.startCore());
 	}, 30000);

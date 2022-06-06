@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subject, Observer as RxObserver } from 'rxjs';
+import { Subject } from 'rxjs';
+import { toRxObserver } from '../lib-common/utils-for-observables';
 
 type FSCollection = web3n.files.FSCollection;
 type FSItem = web3n.files.FSItem;
@@ -78,7 +79,7 @@ class FSItemsCollection {
 	}
 
 	watch(observer: Observer<CollectionEvent>): () => void {
-		const sub = this.change$.subscribe(observer as RxObserver<CollectionEvent>);
+		const sub = this.change$.subscribe(toRxObserver(observer));
 		return () => sub.unsubscribe();
 	}
 

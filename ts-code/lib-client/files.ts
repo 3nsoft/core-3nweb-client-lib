@@ -296,6 +296,7 @@ export function wrapIntoVersionlessReadonlyFS(
 		stat: async (path: string) => {
 			const stats = await fs.stat(path);
 			delete stats.version;
+			delete stats.sync;
 			return stats;
 		},
 		readonlyFile: async (path: string) => toVersionlessReadonlyFile(
@@ -334,6 +335,7 @@ function toVersionlessReadonlyFile(f: ReadonlyFile): ReadonlyFile {
 		stat: async () => {
 			const stats = await f.stat();
 			delete stats.version;
+			delete stats.sync;
 			return stats;
 		},
 		watch: f.watch.bind(f),

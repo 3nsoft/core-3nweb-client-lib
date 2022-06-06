@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,7 @@
 */
 
 import { stringifyErr } from "../../lib-common/exceptions/error";
-import { callWithTimeout } from "../../lib-common/processes";
+import { callWithTimeout } from "../../lib-common/processes/timeout";
 
 export function itCond(
 	expectation: string, assertion?: () => Promise<void>, timeout?: number,
@@ -95,13 +95,9 @@ function callbackWithTimeout(
 			if (err === timeoutErr) {
 				console.log(`\n>>> timeout in ${actionType}: action hasn't completed in ${millisToSleep - 5} milliseconds`);
 			} else if (throwIfErr) {
-				if (typeof err === 'string') {
-					fail(err);
-				} else if ((err as web3n.RuntimeException).runtimeException) {
-					fail(stringifyErr(err));
-				} else {
-					throw err;
-				}
+				console.log(`\n>>> ${actionType} threw`, err);
+				fail((err as web3n.RuntimeException).runtimeException ?
+					stringifyErr(err) : err);
 			}
 		}
 	};

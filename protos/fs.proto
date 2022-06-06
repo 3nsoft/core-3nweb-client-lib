@@ -85,8 +85,8 @@ message FSEventMsg {
 	common.StringValue new_name = 12;
 	ListingEntryMsg entry = 13;
 	common.UInt64Value current = 14;
-	common.UInt64Value last_synced = 15;
-	common.UInt64Value remote_version = 16;
+	common.UInt64Value uploaded = 15;
+	common.UInt64Value move_label = 16;
 }
 
 // --- ReadonlyFS.watchFile ---

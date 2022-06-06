@@ -22,6 +22,14 @@ message File {
 // Request body is empty
 // Reply body is StatsMsg
 message StatsMsg {
+	message SyncInfo {
+		string state = 1;
+		common.UInt64Value latest = 2;
+		common.UInt64Value remote = 3;
+		repeated uint64 conflicting_remote = 4;
+		common.BooleanValue deleted_on_remote = 5;
+	}
+
 	common.BooleanValue is_file = 1;
 	common.BooleanValue is_folder = 2;
 	common.BooleanValue is_link = 3;
@@ -30,6 +38,7 @@ message StatsMsg {
 	common.UInt64Value mtime = 6;
 	common.UInt64Value ctime = 7;
 	common.UInt64Value version = 8;
+	SyncInfo sync = 9;
 }
 
 // --- ReadonlyFile.getXAttr ---
@@ -79,8 +88,7 @@ message FileEventMsg {
 	common.BooleanValue is_remote = 3;
 	common.UInt64Value new_version = 4;
 	common.UInt64Value current = 14;
-	common.UInt64Value last_synced = 15;
-	common.UInt64Value remote_version = 16;
+	common.UInt64Value uploaded = 15;
 }
 
 

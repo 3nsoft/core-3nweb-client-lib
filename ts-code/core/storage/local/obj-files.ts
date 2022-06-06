@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,12 +19,10 @@ import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
 import { ObjOnDisk, GetBaseSegsOnDisk } from '../../../lib-client/objs-on-disk/obj-on-disk';
 import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ObjSource, Subscribe } from 'xsp-files';
-import { NamedProcs } from '../../../lib-common/processes';
+import { NamedProcs } from '../../../lib-common/processes/synced';
 import { join } from 'path';
 import { GC } from './obj-files-gc';
 import { ObjStatus } from './obj-status';
-import { tap } from 'rxjs/operators';
-import { flatTap } from '../../../lib-common/utils-for-observables';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 
@@ -65,7 +63,7 @@ export class ObjFiles {
 			const folder = await this.folders.getFolderAccessFor(objId);
 			if (!folder) { return; }
 			obj = await LocalObj.forExistingObj(
-				objId, folder, this.gc.scheduleCollection);
+				objId, folder, this.gc.scheduleCollection, this.logError);
 			this.objs.set(objId, obj);
 			return obj;
 		});
@@ -75,7 +73,7 @@ export class ObjFiles {
 		return this.sync(objId, async () => {
 			const folder = await this.folders.getFolderAccessFor(objId, true);
 			const obj = await LocalObj.forNewObj(
-				objId, folder!, this.gc.scheduleCollection);
+				objId, folder!, this.gc.scheduleCollection, this.logError);
 			this.objs.set(objId, obj);
 			return obj;
 		});
@@ -120,16 +118,18 @@ export class LocalObj {
 	}
 
 	static async forExistingObj(
-		objId: ObjId, objFolder: string, scheduleGC: GC['scheduleCollection']
+		objId: ObjId, objFolder: string, scheduleGC: GC['scheduleCollection'],
+		logError: LogError|undefined
 	): Promise<LocalObj> {
-		const status = await ObjStatus.readFrom(objFolder, objId);
+		const status = await ObjStatus.readFrom(objFolder, objId, logError);
 		return new LocalObj(objId, objFolder, status, scheduleGC);
 	}
 
 	static async forNewObj(
-		objId: ObjId, objFolder: string, scheduleGC: GC['scheduleCollection']
+		objId: ObjId, objFolder: string, scheduleGC: GC['scheduleCollection'],
+		logError: LogError|undefined
 	): Promise<LocalObj> {
-		const status = await ObjStatus.makeNew(objFolder, objId);
+		const status = await ObjStatus.makeNew(objFolder, objId, logError);
 		return new LocalObj(objId, objFolder, status, scheduleGC);
 	}
 
@@ -187,8 +187,7 @@ export class LocalObj {
 		return this.status.getCurrentVersionOrThrow();
 	}
 
-	getNonGarbageVersions(
-	): { gcMaxVer: number|undefined; nonGarbage: Set<number> } {
+	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
 		return this.status.getNonGarbageVersions();
 	}
 

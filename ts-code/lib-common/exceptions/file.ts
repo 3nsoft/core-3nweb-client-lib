@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 export const Code: web3n.files.exceptionCode = {
 	notFound: 'ENOENT',
@@ -30,6 +31,7 @@ export const Code: web3n.files.exceptionCode = {
 	parsingError: 'parsing-error',
 	notImplemented: 'ENOSYS',
 	isEndless: 'is-endless',
+	storageClosed: 'storage-closed',
 };
 Object.freeze(Code);
 
@@ -75,6 +77,8 @@ export function makeFileException(
 		err.notImplemented = true;
 	} else if (code === Code.isEndless) {
 		err.isEndless = true;
+	} else if (code === Code.storageClosed) {
+		err.storageClosed = true;
 	}
 	return err;
 }

@@ -17,7 +17,7 @@
 import * as WebSocket from 'ws';
 import { IncomingMessage } from 'http';
 import { SESSION_ID_HEADER, Reply } from './request-utils';
-import { defer } from '../lib-common/processes';
+import { defer } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
 import { globalAgent as agent } from 'https';
 

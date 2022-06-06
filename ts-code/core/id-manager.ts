@@ -20,7 +20,7 @@ import { MailerIdProvisioner } from '../lib-client/mailer-id/provisioner';
 import { user as mid } from '../lib-common/mid-sigs-NaCl-Ed';
 import { JsonKey, keyFromJson, use as keyUse } from '../lib-common/jwkeys';
 import { PKLoginException } from '../lib-client/user-with-pkl-session';
-import { SingleProc } from '../lib-common/processes';
+import { SingleProc } from '../lib-common/processes/synced';
 import { GenerateKey } from './sign-in';
 import { LogError, LogWarning } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';

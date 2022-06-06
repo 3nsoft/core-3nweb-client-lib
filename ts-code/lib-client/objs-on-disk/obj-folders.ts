@@ -16,7 +16,7 @@
 */
 
 import * as fs from '../../lib-common/async-fs-node';
-import { NamedProcs } from '../../lib-common/processes';
+import { NamedProcs } from '../../lib-common/processes/synced';
 import { FileException } from '../../lib-common/exceptions/file';
 import { LogError } from '../logging/log-to-file';
 import { NONCE_LENGTH } from 'xsp-files';

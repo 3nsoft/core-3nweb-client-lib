@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 
 /**
@@ -87,8 +88,9 @@ export function deepEqual(a: any, b: any): boolean {
 	return true;
 }
 
-export function* deepFind(a: any, predicate: (val: any) => boolean):
-		IterableIterator<{ pos: string[]; val: any; }> {
+export function* deepFind(
+	a: any, predicate: (val: any) => boolean
+): IterableIterator<{ pos: string[]; val: any; }> {
 	if ((typeof a !== 'object') || !a) {
 		if (predicate(a)) {
 			yield { pos: [], val: a };

@@ -20,7 +20,7 @@ import { base64 } from '../../../lib-common/buffer-utils';
 import { MailSender, SessionInfo, FirstSaveReqOpts, FollowingSaveReqOpts }
 	from '../../../lib-client/asmail/sender';
 import { MsgPacker, PackJSON } from '../msg/packer';
-import { SingleProc } from '../../../lib-common/processes';
+import { SingleProc } from '../../../lib-common/processes/synced';
 import { checkAndExtractPKey } from '../key-verification';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
 import { Msg } from './msg';

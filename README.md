@@ -10,9 +10,9 @@ After repository clone, bring down all NodeJS modules, by running in project's f
 npm ci
 ```
 
-Tests have some unit and integrated components. Integration test uses 3NWeb spec server. `spec-server` folder with server's code should be present either near this project's folder, or inside of it. Cloned spec server code repository should also be `npm ci`
+Tests have some unit and integrated components. Integration test uses 3NWeb spec server. Integrated tests use server and dns mocking from `spec-3nweb-server`.
 
-Just build is done with
+Build is done with
 ```
 npm run build
 ```

@@ -123,7 +123,7 @@ export class CoreRunner {
 		}
 		await this.removeDataFolder();
 	}
-	
+
 	async removeDataFolder(): Promise<void> {
 		await rmDirWithContent(this.dataFolder).catch((exc: FileException) => {
 			if (!exc.notFound) { throw exc; }

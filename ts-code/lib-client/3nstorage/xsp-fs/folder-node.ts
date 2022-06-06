@@ -29,7 +29,7 @@ import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
 import { LinkParameters } from '../../files';
 import { StorageException } from '../exceptions';
-import { defer, Deferred } from '../../../lib-common/processes';
+import { defer, Deferred } from '../../../lib-common/processes/deferred';
 import { copy } from '../../../lib-common/json-utils';
 import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import * as random from '../../../lib-common/random-node';
@@ -125,6 +125,17 @@ class FolderPersistance extends NodePersistance {
 }
 Object.freeze(FolderPersistance.prototype);
 Object.freeze(FolderPersistance);
+
+let nextMoveLabel = Math.floor(Math.random()/2*Number.MAX_SAFE_INTEGER);
+function getMoveLabel(): number {
+	const label = nextMoveLabel;
+	if (nextMoveLabel >= Number.MAX_SAFE_INTEGER) {
+		nextMoveLabel = 0;
+	} else {
+		nextMoveLabel += 1;
+	}
+	return label;
+}
 
 export interface FolderLinkParams {
 	folderName: string;
@@ -252,8 +263,9 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			name => !!this.currentState.nodes[name].isFolder);
 	}
 
-	private getNodeInfo(name: string, undefOnMissing = false):
-			NodeInfo|undefined {
+	private getNodeInfo(
+		name: string, undefOnMissing = false
+	): NodeInfo|undefined {
 		const fj = this.currentState.nodes[name];
 		if (fj) {
 			return fj;
@@ -604,30 +616,33 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			throw makeFileException(excCode.alreadyExists, nameInDst); }
 		if (dst === this) {
 			// In this case we only need to change child's name
-			return this.changeChildName(childName, nameInDst);
+			await this.changeChildName(childName, nameInDst);
+		} else {
+			const childJSON = this.getNodeInfo(childName)!;
+			// we have two transitions here, in this and in dst.
+			const moveLabel = getMoveLabel();
+			await dst.moveChildIn(nameInDst, childJSON, moveLabel);
+			await this.moveChildOut(childName, moveLabel);
 		}
-		const childJSON = this.getNodeInfo(childName)!;
-		// we have two transitions here, in this and in dst.
-		await Promise.all([
-			await dst.moveChildIn(nameInDst, childJSON),
-			await this.moveChildOut(childName)
-		]);
 	}
 
-	private async moveChildOut(name: string): Promise<void> {
+	private async moveChildOut(name: string, moveLabel: number): Promise<void> {
 		await this.doTransition(async (state, version) => {
 			delete state.nodes[name];
 			const event: EntryRemovalEvent = {
 				type: 'entry-removal',
 				path: this.name,
 				name,
-				newVersion: version
+				newVersion: version,
+				moveLabel
 			};
 			return event;
 		});
 	}
 
-	private async moveChildIn(newName: string, child: NodeInfo): Promise<void> {
+	private async moveChildIn(
+		newName: string, child: NodeInfo, moveLabel: number
+	): Promise<void> {
 		child = copy(child);
 		await this.doTransition(async (state, version) => {
 			child.name = newName;
@@ -641,7 +656,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 					isFolder: child.isFolder,
 					isLink: child.isLink
 				},
-				newVersion: version
+				newVersion: version,
+				moveLabel
 			};
 			return event;
 		});

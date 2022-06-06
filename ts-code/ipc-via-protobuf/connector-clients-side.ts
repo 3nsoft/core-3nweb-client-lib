@@ -17,7 +17,7 @@
 
 import { Subject } from "rxjs";
 import { ObjectReference, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
-import { Deferred, defer } from "../lib-common/processes";
+import { Deferred, defer } from "../lib-common/processes/deferred";
 import { WeakReference, makeWeakRefFor } from "../lib-common/weakref";
 import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller } from "./connector";
 

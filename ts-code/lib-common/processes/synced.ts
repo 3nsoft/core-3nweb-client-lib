@@ -15,13 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { errWithCause } from "./exceptions/error";
-
-export function sleep(millis: number): Promise<void> {
-	return new Promise<void>((resolve) => {
-		setTimeout(resolve, millis).unref();
-	});
-}
+import { defer, Deferred } from "./deferred";
 
 /**
  * This represents a function that will create a promise, potentially starting
@@ -188,54 +182,54 @@ Object.freeze(SingleProc.prototype);
 Object.freeze(SingleProc);
 
 
-export class DeduppedRunner<T> {
+// export class DeduppedRunner<T> {
 
-	private proc: Promise<T>|undefined = undefined;
-	private waiting: Deferred<T>|undefined = undefined;
+// 	private proc: Promise<T>|undefined = undefined;
+// 	private waiting: Deferred<T>|undefined = undefined;
 	
-	constructor(
-		private readonly action: Action<T>
-	) {
-		Object.seal(this);
-	}
+// 	constructor(
+// 		private readonly action: Action<T>
+// 	) {
+// 		Object.seal(this);
+// 	}
 
-	trigger(): Promise<T> {
-		if (this.proc) {
-			if (!this.waiting) {
-				this.waiting = defer();
-			}
-			return this.waiting.promise;
-		} else {
-			this.proc = this.startAction();
-			return this.proc;
-		}
-	}
+// 	trigger(): Promise<T> {
+// 		if (this.proc) {
+// 			if (!this.waiting) {
+// 				this.waiting = defer();
+// 			}
+// 			return this.waiting.promise;
+// 		} else {
+// 			this.proc = this.startAction();
+// 			return this.proc;
+// 		}
+// 	}
 
-	private async startAction(): Promise<T> {
-		const deferredBeforeStart = this.waiting;
-		this.waiting = undefined;
-		try {
-			const result = await this.action();
-			if (deferredBeforeStart) {
-				deferredBeforeStart.resolve(result);
-			}
-			return result;
-		} catch (err) {
-			if (deferredBeforeStart) {
-				deferredBeforeStart.reject(err);
-			}
-			throw err;
-		} finally {
-			this.proc = undefined;
-			if (this.waiting) {
-				this.proc = this.startAction();
-			}
-		}
-	}
+// 	private async startAction(): Promise<T> {
+// 		const deferredBeforeStart = this.waiting;
+// 		this.waiting = undefined;
+// 		try {
+// 			const result = await this.action();
+// 			if (deferredBeforeStart) {
+// 				deferredBeforeStart.resolve(result);
+// 			}
+// 			return result;
+// 		} catch (err) {
+// 			if (deferredBeforeStart) {
+// 				deferredBeforeStart.reject(err);
+// 			}
+// 			throw err;
+// 		} finally {
+// 			this.proc = undefined;
+// 			if (this.waiting) {
+// 				this.proc = this.startAction();
+// 			}
+// 		}
+// 	}
 
-}
-Object.freeze(DeduppedRunner.prototype);
-Object.freeze(DeduppedRunner);
+// }
+// Object.freeze(DeduppedRunner.prototype);
+// Object.freeze(DeduppedRunner);
 
 
 /**
@@ -248,161 +242,173 @@ export function makeSyncedFunc<T extends Function>(
 }
 
 
-export interface Deferred<T> {
-	promise: Promise<T>;
-	resolve: (result?: T|PromiseLike<T>) => void;
-	reject: (err: any) => void;
-}
+// export interface Deferred<T> {
+// 	promise: Promise<T>;
+// 	resolve: (result?: T|PromiseLike<T>) => void;
+// 	reject: (err: any) => void;
+// }
 
-export function defer<T>(): Deferred<T> {
-	const d = <Deferred<T>> {};
-	d.promise = new Promise<T>((resolve, reject) => {
-		d.resolve = resolve;
-		d.reject = reject;
-	});
-	Object.freeze(d);
-	return d;
-}
-
-
-export class PressureValve {
-
-	private stopper: Deferred<void>|undefined = undefined;
-
-	constructor() {
-		Object.seal(this);
-	}
-
-	toggle(flag: boolean): void {
-		if (flag) {
-			if (this.stopper) { return; }
-			this.stopper = defer();
-		} else {
-			if (!this.stopper) { return; }
-			this.stopper.resolve();
-			this.stopper = undefined;
-		}
-	}
-
-	pressWithError(err: any): void {
-		this.toggle(true);
-		this.stopper!.reject(errWithCause(err, `Backpressure error`));
-	}
-
-	readonly pressure = async (): Promise<void> => {
-		if (!this.stopper) { return; }
-		await this.stopper.promise;
-	}
-
-}
-Object.freeze(PressureValve.prototype);
-Object.freeze(PressureValve);
+// export function defer<T>(): Deferred<T> {
+// 	const d = <Deferred<T>> {};
+// 	d.promise = new Promise<T>((resolve, reject) => {
+// 		d.resolve = resolve;
+// 		d.reject = reject;
+// 	});
+// 	Object.freeze(d);
+// 	return d;
+// }
 
 
-export function callWithTimeout<T>(
-	f: () => Promise<T>, timeout: number, timeoutErr: () => any
-): Promise<T> {
-	let isDone = false;
-	const deferred = defer<T>();
-	f().then(res => {
-		if (isDone) { return; }
-		isDone = true;
-		deferred.resolve(res);
-	}, err => {
-		if (isDone) { return; }
-		isDone = true;
-		deferred.reject(err);
-	});
-	sleep(timeout).then(() => {
-		if (isDone) { return; }
-		isDone = true;
-		const err = timeoutErr();
-		if (err) {
-			deferred.reject(err);
-		}
-	});
-	return deferred.promise;
-}
+// export class PressureValve {
+
+// 	private stopper: Deferred<void>|undefined = undefined;
+
+// 	constructor() {
+// 		Object.seal(this);
+// 	}
+
+// 	toggle(flag: boolean): void {
+// 		if (flag) {
+// 			if (this.stopper) { return; }
+// 			this.stopper = defer();
+// 		} else {
+// 			if (!this.stopper) { return; }
+// 			this.stopper.resolve();
+// 			this.stopper = undefined;
+// 		}
+// 	}
+
+// 	pressWithError(err: any): void {
+// 		this.toggle(true);
+// 		this.stopper!.reject(errWithCause(err, `Backpressure error`));
+// 	}
+
+// 	readonly pressure = async (): Promise<void> => {
+// 		if (!this.stopper) { return; }
+// 		await this.stopper.promise;
+// 	}
+
+// }
+// Object.freeze(PressureValve.prototype);
+// Object.freeze(PressureValve);
 
 
-export class Worker<T> {
+// export function callWithTimeout<T>(
+// 	f: () => Promise<T>, timeout: number, timeoutErr: () => any
+// ): Promise<T> {
+// 	let isDone = false;
+// 	const deferred = defer<T>();
+// 	f().then(res => {
+// 		if (isDone) { return; }
+// 		isDone = true;
+// 		deferred.resolve(res);
+// 	}, err => {
+// 		if (isDone) { return; }
+// 		isDone = true;
+// 		deferred.reject(err);
+// 	});
+// 	sleep(timeout).then(() => {
+// 		if (isDone) { return; }
+// 		isDone = true;
+// 		const err = timeoutErr();
+// 		if (err) {
+// 			deferred.reject(err);
+// 		}
+// 	});
+// 	return deferred.promise;
+// }
 
-	private readonly queue: T[] = [];
-	private readonly set = new Set<T>();
-	private isRunning = false;
-	private readonly procs: Promise<void>[] = [];
-	private maxProcs = 1;
 
-	constructor(
-		private readonly process: (w: T) => Promise<void>,
-		private readonly stopPendingIn: (queue: T[]) => Promise<void>
-	) {
-		Object.seal(this);
-	}
+// export interface WorkerTask<WorkerLabel extends string> {
+// 	neededWorker(): WorkerLabel|undefined;
+// 	process(): Promise<void>;
+// 	cancel(): Promise<void>;
+// }
 
-	add(w: T, queueIfNotRunning = false): void {
-		if (this.isRunning) {
-			this.addToQueueOnce(w);
-			this.runQueued();
-		} else if (queueIfNotRunning) {
-			this.addToQueueOnce(w);
-		}
-	}
+// interface Worker {
+// 	readonly procs: Promise<void>[];
+// 	readonly maxProcs: number;
+// }
 
-	private addToQueueOnce(w: T): void {
-		if (!this.set.has(w)) {
-			this.queue.push(w);
-			this.set.add(w);
-		}
-	}
+// export class QueueAndWorkers<WorkerLabel extends string> {
 
-	private getFromQueueHead(): T|undefined {
-		const w = this.queue.shift();
-		if (!w) { return; }
-		this.set.delete(w);
-		return w;
-	}
+// 	private readonly queue: WorkerTask<WorkerLabel>[] = [];
+// 	private readonly workers = new Map<WorkerLabel, Worker>();
 
-	private async runQueued(): Promise<void> {
-		if (!this.isRunning || (this.procs.length >= this.maxProcs)) { return; }
-		const w = this.getFromQueueHead();
-		if (!w) { return; }
-		const proc = this.process(w);
-		this.procs.push(proc);
-		try {
-			await proc;
-		} finally {
-			const i = this.procs.indexOf(proc);
-			if (i >= 0) {
-				this.procs.splice(i, 1);
-			}
-			this.runQueued();
-		}
-	}
+// 	// private readonly set = new Set<WorkerTask>();
+// 	private isRunning = false;
+// 	// private readonly procs: Promise<void>[] = [];
+// 	// private maxProcs = 1;
 
-	start(maxNumOfProcs: number): void {
-		this.maxProcs = maxNumOfProcs;
-		this.isRunning = true;
-		this.runQueued();
-	}
+// 	constructor() {
+// 		Object.seal(this);
+// 	}
 
-	pause(): void {
-		this.isRunning = false;
-	}
+// 	add(w: WorkerTask<WorkerLabel>, queueIfNotRunning = false): void {
+// 		if (this.isRunning) {
+// 			this.queue.push();
+// 			this.processNextQueued();
+// 		} else if (queueIfNotRunning) {
+// 			this.addToQueueOnce(w);
+// 		}
+// 	}
 
-	async stop(): Promise<void> {
-		this.isRunning = false;
-		const queue = this.queue.splice(0, this.queue.length);
-		this.set.clear();
-		await this.stopPendingIn(queue);
-		while (this.procs.length > 0) {
-			await this.procs.pop();
-		}
-	}
+// 	private addToQueueOnce(w: WorkerTask<WorkerLabel>): void {
+// 		if (!this.set.has(w)) {
+// 			this.queue.push(w);
+// 			this.set.add(w);
+// 		}
+// 	}
 
-}
-Object.freeze(Worker.prototype);
-Object.freeze(Worker);
+// 	private getFromQueueHead(): WorkerTask<WorkerLabel>|undefined {
+// 		const w = this.queue.shift();
+// 		if (!w) { return; }
+// 		this.set.delete(w);
+// 		return w;
+// 	}
+
+// 	private async processNextQueued(): Promise<void> {
+// 		if (!this.isRunning || (this.procs.length >= this.maxProcs)) { return; }
+// 		const w = this.getFromQueueHead();
+// 		if (!w) { return; }
+// 		const proc = w.process();
+// 		this.procs.push(proc);
+// 		try {
+// 			await proc;
+// 		} finally {
+// 			const i = this.procs.indexOf(proc);
+// 			if (i >= 0) {
+// 				this.procs.splice(i, 1);
+// 			}
+// 			this.processNextQueued();
+// 		}
+// 	}
+
+// 	start(maxNumOfProcs = 1): void {
+// 		this.maxProcs = maxNumOfProcs;
+// 		this.isRunning = true;
+// 		this.processNextQueued();
+// 	}
+
+// 	pause(): void {
+// 		this.isRunning = false;
+// 	}
+
+// 	async stop(): Promise<void> {
+// 		this.isRunning = false;
+// 		const queue = this.queue.splice(0, this.queue.length);
+// 		this.set.clear();
+// 		for (const w of queue) {
+// 			await w.cancel();
+// 		}
+// 		while (this.procs.length > 0) {
+// 			await this.procs.pop();
+// 		}
+// 	}
+
+// }
+// Object.freeze(Worker.prototype);
+// Object.freeze(Worker);
 
 
 Object.freeze(exports);

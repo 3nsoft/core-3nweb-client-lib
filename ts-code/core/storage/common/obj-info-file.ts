@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../../lib-common/async-fs-node';
 import { join } from 'path';
@@ -37,6 +38,131 @@ export async function readJSONInfoFileIn<T>(
 			message: `Can't read and parse content of obj info file ${fileName} in obj folder ${objFolder}`,
 			cause: err
 		});
+	}
+}
+
+export interface VersionsInfo {
+
+	/**
+	 * This field indicates current object version in cache.
+	 */
+	current?: number;
+
+	/**
+	 * This is a list of archived versions in the cache.
+	 */
+	archived?: number[];
+
+	/**
+	 * This is a map from base version to diff-ed version(s), that use(s) base.
+	 */
+	baseToDiff: { [baseVersion: number]: number[]; };
+
+	/**
+	 * This is a map from diff version to base version.
+	 */
+	diffToBase: { [diffVersion: number]: number; };
+
+}
+
+/**
+ * This function adds base->diff link to given versions info.
+ * @param versions
+ * @param diffVer
+ * @param baseVer
+ */
+export function addBaseToDiffLinkInStatus(
+	versions: VersionsInfo, diffVer: number, baseVer: number
+): void {
+	if (diffVer <= baseVer) { throw new Error(
+		`Given diff version ${diffVer} is not greater than base version ${baseVer}`); }
+	versions.diffToBase[diffVer] = baseVer;
+	const diffs = versions.baseToDiff[baseVer];
+	if (diffs) {
+		if (diffs.indexOf(diffVer) < 0) {
+			diffs.push(diffVer);
+		}
+	} else {
+		versions.baseToDiff[baseVer] = [ diffVer ];
+	}
+}
+
+/**
+ * This function removes given version from versions info, if it is neither
+ * archived, nor is a base for another version. If given version is itself
+ * based on another, this function is recursively applied to base version, as
+ * well.
+ * @param versions
+ * @param ver
+ */
+export function rmNonArchVersionsIn(versions: VersionsInfo, ver: number): void {
+	if (!versions.archived
+	|| !versions.archived.includes(ver)) { return; }
+	if (versions.baseToDiff[ver]) { return; }
+	const base = versions.diffToBase[ver];
+	if (typeof base !== 'number') { return; }
+	delete versions.diffToBase[ver];
+	const diffs = versions.baseToDiff[base];
+	if (!diffs) { return; }
+	const diffInd = diffs.indexOf(ver);
+	if (diffInd < 0) { return; }
+	diffs.splice(diffInd, 1);
+	if (diffs.length === 0) {
+		delete versions.baseToDiff[base];
+		rmNonArchVersionsIn(versions, base);
+	}
+}
+
+export function rmArchVersionsIn(versions: VersionsInfo, ver: number): void {
+	if (!versions.archived) { return; }
+	const vInd = versions.archived.indexOf(ver);
+	if (vInd < 0) { return; }
+	versions.archived.splice(vInd, 1);
+	rmNonArchVersionsIn(versions, ver);
+}
+
+export function setCurrentVersionIn(
+	versions: VersionsInfo, version: number, baseVer: number|undefined
+): void {
+	if (baseVer !== undefined) {
+		// base->diff links should be added before removals
+		addBaseToDiffLinkInStatus(versions, version, baseVer);
+	}
+	const initCurrent = versions.current;
+	if (typeof initCurrent === 'number') {
+		rmNonArchVersionsIn(versions, initCurrent);
+	}
+	versions.current = version;
+}
+
+export function rmCurrentVersionIn(versions: VersionsInfo): number|undefined {
+	const current = versions.current;
+	if (typeof current === 'number') {
+		rmNonArchVersionsIn(versions, current);
+		delete versions.current;
+	}
+	return current;
+}
+
+export function nonGarbageVersionsIn(versions: VersionsInfo): Set<number> {
+	const nonGarbage = new Set<number>();
+	addWithBasesTo(nonGarbage, versions.current, versions);
+	if (versions.archived) {
+		for (const archVer of versions.archived) {
+			addWithBasesTo(nonGarbage, archVer, versions);
+		}
+	}
+	return nonGarbage;
+}
+
+export function addWithBasesTo(
+	nonGarbage: Set<number>, ver: number|undefined, versions: VersionsInfo
+): void {
+	while (typeof ver === 'number') {
+		if (nonGarbage.has(ver)) { break; }
+		nonGarbage.add(ver);
+		if (!versions.diffToBase) { break; }
+		ver = versions.diffToBase[ver];
 	}
 }
 

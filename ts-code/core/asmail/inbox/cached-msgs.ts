@@ -20,7 +20,7 @@ import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { ObjFolders } from "../../../lib-client/objs-on-disk/obj-folders";
 import { MsgDownloader } from "./msg-downloader";
 import { MsgMeta } from "../../../lib-common/service-api/asmail/retrieval";
-import { NamedProcs } from "../../../lib-common/processes";
+import { NamedProcs } from "../../../lib-common/processes/synced";
 import { LogError } from "../../../lib-client/logging/log-to-file";
 
 export class CachedMessages {

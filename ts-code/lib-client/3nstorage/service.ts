@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This defines functions that implement 3NStorage protocol.
@@ -23,7 +24,7 @@ import * as api from '../../lib-common/service-api/3nstorage/owner';
 import { ServiceUser, IGetMailerIdSigner } from '../user-with-mid-session';
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
-import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc } from './exceptions';
+import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc } from './exceptions';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from './xsp-fs/common';
 
@@ -87,7 +88,7 @@ export class StorageOwner extends ServiceUser {
 		}
 		this.maxChunkSize = rep.data.maxChunkSize;
 	}
-	
+
 	/**
 	 * This does MailerId login with a subsequent getting of session parameters
 	 * from 
@@ -98,7 +99,7 @@ export class StorageOwner extends ServiceUser {
 		await super.login();
 		await this.setSessionParams();
 	}
-	
+
 	/**
 	 * @param objId must be null for root object, and a string id for other ones
 	 * @param transactionId
@@ -120,7 +121,7 @@ export class StorageOwner extends ServiceUser {
 			throw makeException(rep, 'Unexpected status');
 		}
 	}
-	
+
 	/**
 	 * This method returns either first part of an object, or a whole of it,
 	 * depending on a given limit for segments. Returned promise resolves to a
@@ -133,8 +134,10 @@ export class StorageOwner extends ServiceUser {
 	 */
 	async getCurrentObj(
 		objId: ObjId, limit: number
-	): Promise<{ version: number; segsTotalLen: number;
-					header: Uint8Array; segsChunk: Uint8Array; }> {
+	): Promise<{
+		version: number; segsTotalLen: number;
+		header: Uint8Array; segsChunk: Uint8Array;
+	}> {
 		const opts: api.GetObjQueryOpts = { header: true, limit };
 		const appPath = (objId ?
 			api.currentObj.getReqUrlEnd(objId, opts) :
@@ -146,7 +149,7 @@ export class StorageOwner extends ServiceUser {
 			responseHeaders: [ api.HTTP_HEADER.objVersion,
 				api.HTTP_HEADER.objSegmentsLength, api.HTTP_HEADER.objHeaderLength ]
 		});
-		
+
 		if (rep.status === api.currentObj.SC.okGet) {
 			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
 				`Malformed response: body is not binary`); }
@@ -163,7 +166,7 @@ export class StorageOwner extends ServiceUser {
 				segsChunk: rep.data.subarray(headerLen)
 			};
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!);
+			throw makeObjNotFoundExc(objId!, undefined, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
@@ -182,7 +185,7 @@ export class StorageOwner extends ServiceUser {
 	): Promise<Uint8Array> {
 		if (end <= start) { throw new Error(`Given out of bounds parameters: start is ${start}, end is ${end}, -- for downloading obj ${objId}, version ${version}`); }
 		const limit = end - start;
-		
+
 		const opts: api.GetObjQueryOpts = { ofs: start, limit, ver: version };
 		const appPath = (objId ?
 			api.currentObj.getReqUrlEnd(objId, opts) :
@@ -192,13 +195,13 @@ export class StorageOwner extends ServiceUser {
 			method: 'GET',
 			responseType: 'arraybuffer',
 		});
-		
+
 		if (rep.status === api.currentObj.SC.okGet) {
 			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
 				`Malformed response: body is not binary`); }
 			return rep.data;
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!);
+			throw makeObjNotFoundExc(objId!, undefined, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
@@ -231,13 +234,15 @@ export class StorageOwner extends ServiceUser {
 		} else {
 			throw new Error(`Missing request options`);
 		}
-		
+
 		const rep = await this.doBinarySessionRequest<api.currentObj.ReplyToPut>(
 			{ appPath, method: 'PUT', responseType: 'json' }, bytes);
 		if (rep.status === api.currentObj.SC.okPut) {
 			return rep.data.transactionId;
+		} else if (rep.status === api.currentObj.SC.objAlreadyExists) {
+			throw makeObjExistsExc(objId!, undefined, true);
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!);
+			throw makeObjNotFoundExc(objId!, undefined, true);
 		} else if (rep.status === api.currentObj.SC.concurrentTransaction) {
 			throw makeConcurrentTransExc(objId!);
 		} else if (rep.status === api.currentObj.SC.unknownTransaction) {
@@ -251,7 +256,7 @@ export class StorageOwner extends ServiceUser {
 			throw makeException(rep, 'Unexpected status');
 		}
 	}
-	
+
 	/**
 	 * This deletes object from being available as currently existing one.
 	 * But, it does not remove archived versions of it, even if current varsion
@@ -269,7 +274,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.currentObj.SC.concurrentTransaction) {
 			throw makeConcurrentTransExc(objId);
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId);
+			throw makeObjNotFoundExc(objId, undefined, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

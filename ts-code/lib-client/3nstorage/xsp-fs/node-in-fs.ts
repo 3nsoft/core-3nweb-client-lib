@@ -20,8 +20,8 @@
  * reliance set.
  */
 
-import { SingleProc } from '../../../lib-common/processes';
-import { Node, NodeType, Storage, RemoteEvent } from './common';
+import { SingleProc } from '../../../lib-common/processes/synced';
+import { Node, NodeType, Storage, RemoteEvent, SyncedStorage } from './common';
 import { makeFileException, Code as excCode, Code } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { StorageException } from '../exceptions';
@@ -29,12 +29,16 @@ import { Observable, Subject } from 'rxjs';
 import { share } from 'rxjs/operators';
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
+import { UpSyncTaskInfo } from '../../../core/storage/synced/obj-status';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
 type FileChangeEvent = web3n.files.FileChangeEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
 type XAttrsChanges = web3n.files.XAttrsChanges;
+type RuntimeException = web3n.RuntimeException;
+type Stats = web3n.files.Stats;
+
 
 export abstract class NodeInFS<P extends NodePersistance> implements Node {
 
@@ -115,12 +119,17 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return this.attrs;
 	}
 
-	processRemoteEvent(event: RemoteEvent): Promise<void> {
+	async	processRemoteEvent(event: RemoteEvent): Promise<void> {
 		this.bufferRemoteEvent(event);
 		return this.doChange(true, async () => {
 			const event = this.getBufferedEvent();
 			if (!event) { return; }
 			if (event.type === 'remote-change') {
+
+// TODO
+// uploader should show if there is process for this obj uploads with version
+// in the event, and if so, wait for completion of that process to either ignore
+// remote event, or to set conflict, or whatever
 
 				// XXX should we use here synced storage methods here?
 				//     This method is called only in synced storage.
@@ -147,6 +156,10 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			this.remoteEvents = [];
 		}
 		this.remoteEvents.push(event);
+		if (this.remoteEvents.length > 1) {
+			// XXX attempt to compress events
+
+		}
 	}
 
 	private getBufferedEvent(): RemoteEvent|undefined {
@@ -162,13 +175,29 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return this.doChange(true, () => this.delete());
 	}
 
+	broadcastUpSyncEvent(task: UpSyncTaskInfo): void {
+		if (task.type === 'upload') {
+			this.broadcastEvent({
+				type: 'sync-upload',
+				path: this.name,
+				current: this.version,
+				uploaded: task.version
+			});
+		}
+	}
+
 	/**
 	 * This non-synchronized method deletes object from storage, and detaches
 	 * this node from storage. Make sure to call it inside access synchronization
 	 * construct.
 	 */
 	protected async delete(remoteEvent?: boolean): Promise<void> {
-		if (!remoteEvent) {
+		if (remoteEvent) {
+
+			// XXX
+			throw Error(`Removal from remote side is not implemented, yet.`);
+
+		} else {
 			await this.storage.removeObj(this.objId);
 		}
 		this.storage.nodes.delete(this);
@@ -202,27 +231,27 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		if (!awaitPrevChange && this.writeProc.isProcessing()) {
 			throw makeFileException(excCode.concurrentUpdate, this.name+` type ${this.type}`);
 		}
-		try {
-			const res = await this.writeProc.startOrChain(() => {
-				if (this.currentVersion < 0) {
-					throw makeFileException(Code.notFound, this.name);
+		const res = await this.writeProc.startOrChain(() => {
+			if (this.currentVersion < 0) {
+				throw makeFileException(
+					Code.notFound, this.name, `Object is marked removed`);
+			}
+			return change()
+			.catch((exc: RuntimeException) => {
+				if (!exc.runtimeException) {
+					throw errWithCause(exc, `Cannot save changes to ${this.type} ${this.name}, version ${this.version}`);
 				}
-				return change();
+				if ((exc as StorageException).type === 'storage') {
+					if ((exc as StorageException).concurrentTransaction) {
+						throw makeFileException(excCode.concurrentUpdate, this.name, exc);
+					} else if ((exc as StorageException).objNotFound) {
+						throw makeFileException(excCode.notFound, this.name, exc);
+					}
+				}
+				throw makeFileException(Code.ioError, this.name, exc);		
 			});
-			return res;
-		} catch (exc) {
-			if (!(exc as web3n.RuntimeException).runtimeException) {
-				throw errWithCause(exc, `Cannot save changes to ${this.type} ${this.name}, version ${this.version}`);
-			}
-			if ((exc as StorageException).type === 'storage') {
-				if ((exc as StorageException).concurrentTransaction) {
-					throw makeFileException(excCode.concurrentUpdate, this.name, exc);
-				} else if ((exc as StorageException).objNotFound) {
-					throw makeFileException(excCode.notFound, this.name, exc);
-				}
-			}
-			throw makeFileException(Code.ioError, this.name, exc);
-		}
+		});
+		return res;
 	}
 
 	/**
@@ -261,10 +290,12 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	}
 
 	protected broadcastEvent(event: FSEvent, complete?: boolean): void {
+		this.storage.broadcastNodeEvent(this.objId, this.parentId, event);
 		if (!this.events) { return; }
 		this.events.next(event);
 		if (complete) {
 			this.events.complete();
+			this.events = undefined;
 		}
 	}
 
@@ -279,6 +310,13 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			this.events = new Subject<FSEvent>();
 		}
 		return this.events.asObservable().pipe(share());
+	}
+
+	async sync(): Promise<Stats['sync']> {
+		if ((this.storage.type === 'synced')
+		|| (this.storage.type === 'share')) {
+			return (this.storage as SyncedStorage).getObjSyncInfo(this.objId);
+		}
 	}
 
 }

@@ -17,7 +17,7 @@
 
 import { SpecDescribe } from '../../libs-for-tests/spec-module';
 import { SpecIt, throwDeliveryErrorFrom } from '../test-utils';
-import { sleep } from '../../../lib-common/processes';
+import { sleep } from '../../../lib-common/processes/sleep';
 
 export const specs: SpecDescribe = {
 	description: '.sendMsg',

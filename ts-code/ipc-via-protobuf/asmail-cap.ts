@@ -22,6 +22,7 @@ import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedS
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from './fs';
+import { toRxObserver } from '../lib-common/utils-for-observables';
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -305,15 +306,11 @@ namespace inboxSubscribe {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
 				path, requestType.pack({ event }), s);
-			s.subscribe({
-				next: buf => {
-					if (obs.next) {
-						obs.next(unpackIncomingMessage(buf, caller));
-					}
-				},
-				complete: obs.complete,
-				error: obs.error
-			});
+			s.asObservable()
+			.pipe(
+				map(buf => unpackIncomingMessage(buf, caller))
+			)
+			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}
@@ -697,19 +694,16 @@ namespace observeAllDeliveries {
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(path, undefined, s);
-			s.subscribe({
-				next: buf => {
-					if (obs.next) {
-						const { id, progress } = notifType.unpack(buf);
-						obs.next({
-							id,
-							progress: unpackDeliveryProgress(progress)
-						});
-					}
-				},
-				complete: obs.complete,
-				error: obs.error
-			});
+			s.asObservable()
+			.pipe(
+				map(buf => {
+					const { id, progress } = notifType.unpack(buf);
+					return {
+						id, progress: unpackDeliveryProgress(progress)
+					};
+				})
+			)
+			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}
@@ -746,16 +740,12 @@ namespace observeDelivery {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
 				path, requestType.pack({ id }), s);
-			s.subscribe({
-				next: buf => {
-					if (obs.next) {
-						const msg = deliveryProgressMsgType.unpack(buf);
-						obs.next(unpackDeliveryProgress(msg));
-					}
-				},
-				complete: obs.complete,
-				error: obs.error
-			});
+			s.asObservable()
+			.pipe(
+				map(buf => unpackDeliveryProgress(
+					deliveryProgressMsgType.unpack(buf)))
+			)
+			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}

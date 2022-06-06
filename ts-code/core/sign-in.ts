@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,13 +16,12 @@
 */
 
 import { IdManager } from './id-manager';
-import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey }
-	from '../lib-client/key-derivation';
+import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey } from '../lib-client/key-derivation';
 import { GetUsersOnDisk } from './app-files';
 import { Cryptor } from '../lib-client/cryptor/cryptor';
 import { Subject } from 'rxjs';
 import { LogError } from '../lib-client/logging/log-to-file';
-import { errWithCause } from '../lib-common/exceptions/error';
+import { ErrorWithCause, errWithCause } from '../lib-common/exceptions/error';
 
 export type GenerateKey  =
 	(derivParams: ScryptGenParams) => Promise<Uint8Array>;
@@ -66,27 +65,30 @@ export class SignIn {
 	}
 
 	private startLoginToRemoteStorage: SignInService[
-			'startLoginToRemoteStorage'] = async (address) => {
+		'startLoginToRemoteStorage'
+	] = async (address) => {
 		try {
 			this.completeInitWithoutCache = await this.startInitWithoutCache(
 				address);
 			return !!this.completeInitWithoutCache;
 		} catch(err) {
-			await this.log(err, 'Failing to initialize without cache');
-			throw err;
+			throw await this.logAndWrap(err,
+				'Fail to start login to remote storage');
 		}
 	};
 
 	private completeLoginAndLocalSetup: SignInService[
-			'completeLoginAndLocalSetup'] = async (pass, progressCB) => {
+		'completeLoginAndLocalSetup'
+	] = async (pass, progressCB) => {
 		if (!this.completeInitWithoutCache) { throw new Error(
 			`Call method startLoginToRemoteStorage() before calling this.`); }
 		try {
 			const midKeyProgressCB = makeKeyGenProgressCB(0, 50, progressCB);
-			const midKeyGen = async params => (await deriveMidKeyPair(
-				this.cryptor, pass, params, midKeyProgressCB)).skey;
+			const midKeyGen = async (params: ScryptGenParams) => (
+				await deriveMidKeyPair(this.cryptor, pass, params, midKeyProgressCB)
+			).skey;
 			const storeKeyProgressCB = makeKeyGenProgressCB(51, 100, progressCB);
-			const storeKeyGen = params => deriveStorageSKey(
+			const storeKeyGen = (params: ScryptGenParams) => deriveStorageSKey(
 				this.cryptor, pass, params, storeKeyProgressCB);
 			const idManager = await this.completeInitWithoutCache(
 				midKeyGen, storeKeyGen);
@@ -96,17 +98,18 @@ export class SignIn {
 			this.doneBroadcast.next(idManager);
 			return true;
 		} catch(err) {
-			await this.log(err, 'Failing to initialize from a state without cache');
-			throw err;
+			throw await this.logAndWrap(err,
+				'Fail to initialize from a state without cache');
 		}
 	};
 
-	private doneBroadcast = new Subject<IdManager>();
+	private readonly doneBroadcast = new Subject<IdManager>();
 
-	existingUser$ = this.doneBroadcast.asObservable();
+	public readonly existingUser$ = this.doneBroadcast.asObservable();
 
-	private useExistingStorage: SignInService[
-			'useExistingStorage'] = async (user, pass, progressCB) => {
+	private useExistingStorage: SignInService['useExistingStorage'] = async (
+		user, pass, progressCB
+	) => {
 		try {
 			const storeKeyProgressCB = makeKeyGenProgressCB(0, 99, progressCB);
 			const storeKeyGen = params => deriveStorageSKey(
@@ -122,8 +125,9 @@ export class SignIn {
 
 			progressCB(49);
 			const midKeyProgressCB = makeKeyGenProgressCB(50, 99, progressCB);
-			const midKeyGen = async params => (await deriveMidKeyPair(
-				this.cryptor, pass, params, midKeyProgressCB)).skey;
+			const midKeyGen = async (params: ScryptGenParams) => (
+				await deriveMidKeyPair(this.cryptor, pass, params, midKeyProgressCB)
+			).skey;
 			const idManager = await res(midKeyGen);
 
 			if (!idManager) { return false; }
@@ -131,26 +135,31 @@ export class SignIn {
 			this.doneBroadcast.next(idManager);
 			return true;
 		} catch(err) {
-			await this.log(err, 'Failing to start in a state with cache');
-			throw err;
+			throw await this.logAndWrap(err,
+				'Failing to start in a state with cache');
 		}
 	};
 
-	private async log(err: any, msg: string): Promise<void> {
-		await this.logError(errWithCause(err, msg));
+	private async logAndWrap(err: any, msg: string): Promise<ErrorWithCause> {
+		await this.logError(err, msg);
+		return errWithCause(err, msg);
 	}
 
 }
 Object.freeze(SignIn.prototype);
 Object.freeze(SignIn);
-	
-export function makeKeyGenProgressCB(progressStart: number, progressEnd: number,
-		progressCB: (progress: number) => void) {
+
+
+export type ProgressCB = (p: number) => void;
+
+export function makeKeyGenProgressCB(
+	progressStart: number, progressEnd: number, progressCB: ProgressCB
+): ProgressCB {
 	if (progressStart >= progressEnd) { throw new Error(`Invalid progress parameters: start=${progressStart}, end=${progressEnd}.`); }
 	let currentProgress = 0;
 	let totalProgress = progressStart;
 	const progressRange = progressEnd - progressStart;
-	return (p: number): void => {
+	return p => {
 		if (currentProgress >= p) { return; }
 		currentProgress = p;
 		const newProgress = Math.floor(p/100*progressRange + progressStart);

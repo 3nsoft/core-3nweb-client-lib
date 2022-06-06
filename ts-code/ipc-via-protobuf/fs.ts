@@ -24,8 +24,9 @@ import * as file from "./file";
 import { assert } from "../lib-common/assert";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
-import { defer, Deferred } from "../lib-common/processes";
+import { defer, Deferred } from "../lib-common/processes/deferred";
 import { map } from "rxjs/operators";
+import { toRxObserver } from "../lib-common/utils-for-observables";
 
 type ReadonlyFS = web3n.files.ReadonlyFS;
 type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
@@ -38,9 +39,7 @@ type FSEvent = web3n.files.FSEvent;
 type EntryRemovalEvent = web3n.files.EntryRemovalEvent;
 type EntryRenamingEvent = web3n.files.EntryRenamingEvent;
 type EntryAdditionEvent = web3n.files.EntryAdditionEvent;
-type SyncedEvent = web3n.files.SyncedEvent;
-type UnsyncedEvent = web3n.files.UnsyncedEvent;
-type ConflictEvent = web3n.files.ConflictEvent;
+type SyncUploadEvent = web3n.files.SyncUploadEvent;
 type FileEvent = web3n.files.FileEvent;
 type SymLink = web3n.files.SymLink;
 type ListingEntry = web3n.files.ListingEntry;
@@ -473,10 +472,10 @@ interface FSEventMsg {
 	name?: Value<string>;
 	oldName?: Value<string>;
 	newName?: Value<string>;
-	entry?: Value<ListingEntryMsg>;
+	entry?: ListingEntryMsg;
 	current?: Value<number>;
-	lastSynced?: Value<number>;
-	remoteVersion?: Value<number>;
+	uploaded?: Value<number>;
+	moveLabel?: Value<number>;
 }
 
 const fsEventMsgType = ProtoType.for<FSEventMsg>(pb.FSEventMsg);
@@ -491,10 +490,10 @@ function packFSEvent(e: FSEvent): Buffer {
 		oldName: toOptVal((e as EntryRenamingEvent).oldName),
 		newName: toOptVal((e as EntryRenamingEvent).newName),
 		entry: ((e as EntryAdditionEvent).entry ?
-			toVal(lsEntryToMsg((e as EntryAdditionEvent).entry)) : undefined),
-		current: toOptVal((e as SyncedEvent).current),
-		lastSynced: toOptVal((e as UnsyncedEvent).lastSynced),
-		remoteVersion: toOptVal((e as ConflictEvent).remoteVersion)
+			lsEntryToMsg((e as EntryAdditionEvent).entry) : undefined),
+		current: toOptVal((e as SyncUploadEvent).current),
+		uploaded: toOptVal((e as SyncUploadEvent).uploaded),
+		moveLabel: toOptVal((e as EntryAdditionEvent).moveLabel)
 	};
 	return fsEventMsgType.pack(m);
 }
@@ -509,10 +508,10 @@ function unpackFSEvent(buf: EnvelopeBody): FSEvent {
 		name: valOfOpt(m.name),
 		oldName: valOfOpt(m.oldName),
 		newName: valOfOpt(m.newName),
-		entry: (m.entry ? lsEntryFromMsg(m.entry.value): undefined),
+		entry: (m.entry ? lsEntryFromMsg(m.entry): undefined),
 		current: valOfOptInt(m.current),
-		lastSynced: valOfOptInt(m.lastSynced),
-		remoteVersion: valOfOptInt(m.remoteVersion)
+		uploaded: valOfOptInt(m.uploaded),
+		moveLabel: valOfOptInt(m.moveLabel)
 	} as FSEvent;
 	return event;
 }
@@ -534,12 +533,18 @@ function lsEntryToMsg(e: ListingEntry): ListingEntryMsg {
 }
 
 function lsEntryFromMsg(m: ListingEntryMsg): ListingEntry {
-	return {
-		name: m.name,
-		isFile: valOfOpt(m.isFile),
-		isFolder: valOfOpt(m.isFolder),
-		isLink: valOfOpt(m.isLink)
-	};
+	const name = m.name;
+	if (valOfOpt(m.isFile)) {
+		return { name, isFile: true };
+	} else if (valOfOpt(m.isFolder)) {
+		return { name, isFolder: true };
+	} else if (valOfOpt(m.isLink)) {
+		return { name, isLink: true };
+	} else {
+		throw makeIPCException({
+			badReply: true, message: `Missing fs entry type flag`
+		});
+	}
 }
 
 
@@ -570,15 +575,11 @@ namespace watch {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
 				ipcPath, reqWithPathType.pack({ path }), s);
-			s.subscribe({
-				next: buf => {
-					if (obs.next) {
-						obs.next(unpackEvent(buf));
-					}
-				},
-				complete: obs.complete,
-				error: obs.error
-			});
+			s.asObservable()
+			.pipe(
+				map(unpackEvent)
+			)
+			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}
@@ -1265,15 +1266,11 @@ namespace fsCollection {
 			return obs => {
 				const s = new Subject<EnvelopeBody>();
 				const unsub = caller.startObservableCall(path, undefined, s);
-				s.subscribe({
-					next: buf => {
-						if (obs.next) {
-							obs.next(unpackEvent(buf, caller));
-						}
-					},
-					complete: obs.complete,
-					error: obs.error
-				});
+				s.asObservable()
+				.pipe(
+					map(buf => unpackEvent(buf, caller))
+				)
+				.subscribe(toRxObserver(obs));
 				return unsub;
 			};
 		}

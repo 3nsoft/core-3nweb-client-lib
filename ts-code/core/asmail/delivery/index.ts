@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,8 +20,9 @@ import { MailSender } from '../../../lib-client/asmail/sender';
 import { Msg } from './msg';
 import { Attachments, ResourcesForSending } from './common';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
-import { Observer as RxObserver, Subject } from 'rxjs';
+import { Subject } from 'rxjs';
 import { share } from 'rxjs/operators';
+import { toRxObserver } from '../../../lib-common/utils-for-observables';
 
 type WritableFS = web3n.files.WritableFS;
 type DeliveryService = web3n.asmail.DeliveryService;
@@ -136,8 +137,7 @@ export class Delivery {
 			if (observer.complete) { observer.complete(); }
 			return () => {};
 		}
-		const subToProgress = msg.progress$.subscribe(
-			observer as RxObserver<DeliveryProgress>);
+		const subToProgress = msg.progress$.subscribe(toRxObserver(observer));
 		return () => { subToProgress.unsubscribe(); }
 	}
 
@@ -145,7 +145,7 @@ export class Delivery {
 		observer: Observer<{ id:string; progress: DeliveryProgress; }>
 	): () => void {
 		const subToProgress = this.allDeliveries$.subscribe(
-			observer as RxObserver<{ id:string; progress: DeliveryProgress; }>);
+			toRxObserver(observer));
 		return () => subToProgress.unsubscribe();
 	}
 

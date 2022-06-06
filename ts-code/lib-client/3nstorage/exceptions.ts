@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2016, 2019 3NSoft Inc.
+ Copyright (C) 2015 - 2016, 2019, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,21 +12,23 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { ObjId } from "./xsp-fs/common";
 
 export interface StorageException extends web3n.RuntimeException {
 	type: 'storage';
+	remoteStorage?: true;
 	objId?: ObjId;
 	version?: number;
-	objNotFound?: boolean;
-	objExists?: boolean;
-	concurrentTransaction?: boolean;
-	unknownTransaction?: boolean;
-	versionMismatch?: boolean;
+	objNotFound?: true;
+	objExists?: true;
+	concurrentTransaction?: true;
+	unknownTransaction?: true;
+	versionMismatch?: true;
 	currentVersion?: number;
-	storageIsClosed?: boolean;
+	storageIsClosed?: true;
 }
 
 export function makeStorageException(
@@ -43,30 +45,38 @@ export function makeStorageException(
 }
 
 export function makeObjNotFoundExc(
-	objId: ObjId, version?: number
+	objId: ObjId, version?: number, remoteStorage?: true
 ): StorageException {
-	return makeStorageException({ objId, version, objNotFound: true });
+	return makeStorageException({
+		objId, version, objNotFound: true, remoteStorage
+	});
 }
 
 export function makeObjExistsExc(
-	objId: ObjId, version?: number
+	objId: ObjId, version?: number, remoteStorage?: true
 ): StorageException {
-	return makeStorageException({ objId, version, objExists: true });
+	return makeStorageException({
+		objId, version, objExists: true, remoteStorage
+	});
 }
 
 export function makeConcurrentTransExc(objId: ObjId): StorageException {
-	return makeStorageException({ objId, concurrentTransaction: true });
+	return makeStorageException({
+		objId, concurrentTransaction: true, remoteStorage: true
+	});
 }
 
 export function makeUnknownTransactionExc(objId: ObjId): StorageException {
-	return makeStorageException({ objId, unknownTransaction: true });
+	return makeStorageException({
+		objId, unknownTransaction: true, remoteStorage: true
+	});
 }
 
 export function makeVersionMismatchExc(
 	objId: ObjId, currentVersion: number
 ): StorageException {
 	return makeStorageException({
-		objId, versionMismatch: true, currentVersion
+		objId, versionMismatch: true, currentVersion, remoteStorage: true
 	});
 }
 

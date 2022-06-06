@@ -16,7 +16,7 @@
 */
 
 import { stringifyErr } from '../../lib-common/exceptions/error';
-import { SingleProc } from '../../lib-common/processes';
+import { SingleProc } from '../../lib-common/processes/synced';
 import { appendFile, ensureFolderExists, FileException } from '../../lib-common/async-fs-node';
 import { join, dirname } from 'path';
 
@@ -119,11 +119,11 @@ ${stringifyErr(err)}`;
 	
 	function recordUnhandledRejectionsInProcess(): void {
 		process.on('unhandledRejection', (err, p) => {
-			console.log(' -- Unhandled rejection of promise:', err);
+			console.error(' -- Unhandled rejection of promise:', err);
 			logError(err, 'Unhandled rejection of promise');
 		});
 		process.on('uncaughtException', err => {
-			console.log(' -- Unhandled exception:', err);
+			console.error(' -- Unhandled exception:', err);
 			logError(err, 'Unhandled exception');
 		});
 	}

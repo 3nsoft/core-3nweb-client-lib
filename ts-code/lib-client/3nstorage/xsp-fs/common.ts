@@ -18,11 +18,16 @@
 import { ScryptGenParams } from '../../key-derivation';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { objChanged, objRemoved } from '../../../lib-common/service-api/3nstorage/owner';
+import { Observable } from 'rxjs';
+import { UpSyncTaskInfo } from '../../../core/storage/synced/obj-status';
 
 export { AsyncSBoxCryptor } from 'xsp-files';
 export { FolderInJSON } from './folder-node'; 
 
 type StorageType = web3n.files.FSType;
+type FolderEvent = web3n.files.FolderEvent;
+type FileEvent = web3n.files.FileEvent;
+type Stats = web3n.files.Stats;
 
 export interface RemoteObjRemovalEvent extends objRemoved.Event {
 	type: 'remote-delete'
@@ -39,6 +44,7 @@ export interface Node {
 	name: string;
 	type: NodeType;
 	processRemoteEvent: (event: RemoteEvent) => Promise<void>;
+	broadcastUpSyncEvent(task: UpSyncTaskInfo): void;
 	localDelete(): Promise<void>;
 }
 
@@ -79,8 +85,9 @@ export class NodesContainer {
 		this.nodes.set(node.objId, node);
 	}
 
-	getNodeOrPromise<T extends Node>(objId: string):
-			{ node?: T, nodePromise?: Promise<T> } {
+	getNodeOrPromise<T extends Node>(
+		objId: string
+	): { node?: T, nodePromise?: Promise<T> } {
 		const node = this.nodes.get(objId);
 		if (node) { return { node: node as T }; }
 		return { nodePromise: this.promises.get(objId) as Promise<T> };
@@ -121,6 +128,12 @@ export class NodesContainer {
 
 }
 
+export interface NodeEvent {
+	objId: ObjId;
+	parentObjId?: ObjId;
+	event: FolderEvent|FileEvent;
+}
+
 export interface Storage {
 	
 	readonly type: StorageType;
@@ -130,6 +143,12 @@ export interface Storage {
 	readonly cryptor: AsyncSBoxCryptor;
 
 	readonly nodes: NodesContainer;
+
+	getNodeEvents(): Observable<NodeEvent>;
+
+	broadcastNodeEvent(
+		objId: ObjId, parentObjId: ObjId|undefined, ev: FolderEvent|FileEvent
+	): void;
 
 	/**
 	 * This returns a storage of another type, for use by link functionality.
@@ -148,7 +167,7 @@ export interface Storage {
 	 * This returns a promise, resolvable to source for a requested object.
 	 * @param objId
 	 */
-	getObj(objId: string): Promise<ObjSource>;
+	getObj(objId: ObjId): Promise<ObjSource>;
 	
 	/**
 	 * This saves given object, asynchronously.
@@ -156,14 +175,14 @@ export interface Storage {
 	 * @param version
 	 * @param sinkSub is a sink subscribe function
 	 */
-	saveObj(objId: string, version: number, sinkSub: Subscribe): Promise<void>;
+	saveObj(objId: ObjId, version: number, sinkSub: Subscribe): Promise<void>;
 
 	/**
 	 * This asynchronously removes an object. Note that it does not remove
 	 * archived version, only current one.
 	 * @param objId
 	 */
-	removeObj(objId: string): Promise<void>;
+	removeObj(objId: ObjId): Promise<void>;
 	
 	/**
 	 * This asynchronously runs closing cleanup.
@@ -177,6 +196,8 @@ export function wrapStorageImplementation(impl: Storage): Storage {
 		type: impl.type,
 		versioned: impl.versioned,
 		nodes: impl.nodes,
+		getNodeEvents: impl.getNodeEvents.bind(impl),
+		broadcastNodeEvent: impl.broadcastNodeEvent.bind(impl),
 		storageForLinking: impl.storageForLinking.bind(impl),
 		generateNewObjId: impl.generateNewObjId.bind(impl),
 		getObj: impl.getObj.bind(impl),
@@ -197,12 +218,17 @@ export interface SyncedStorage extends Storage {
 	 */
 	getRootKeyDerivParamsFromServer(): Promise<ScryptGenParams>;
 
-	getRemoteConflictObjVersion(objId: string, version: number):
-		Promise<ObjSource>;
+	getRemoteConflictObjVersion(
+		objId: ObjId, version: number
+	): Promise<ObjSource>;
+
+	getObjSyncInfo(objId: ObjId): Promise<Stats['sync']>;
+
 }
 
-export function wrapSyncStorageImplementation(impl: SyncedStorage):
-		SyncedStorage {
+export function wrapSyncStorageImplementation(
+	impl: SyncedStorage
+): SyncedStorage {
 	const storageWrap = wrapStorageImplementation(impl);
 	const wrap: SyncedStorage = {
 		type: storageWrap.type,
@@ -212,14 +238,18 @@ export function wrapSyncStorageImplementation(impl: SyncedStorage):
 		generateNewObjId: storageWrap.generateNewObjId,
 		getObj: storageWrap.getObj,
 		nodes: storageWrap.nodes,
+		getNodeEvents: storageWrap.getNodeEvents,
+		broadcastNodeEvent: storageWrap.broadcastNodeEvent,
 		removeObj: storageWrap.removeObj,
 		saveObj: storageWrap.saveObj,
 		storageForLinking: storageWrap.storageForLinking,
 		getRootKeyDerivParamsFromServer:
 			impl.getRootKeyDerivParamsFromServer.bind(impl),
-		getRemoteConflictObjVersion: impl.getRemoteConflictObjVersion.bind(impl)
+		getRemoteConflictObjVersion: impl.getRemoteConflictObjVersion.bind(impl),
+		getObjSyncInfo: impl.getObjSyncInfo.bind(impl)
 	};
 	return Object.freeze(wrap);
 }
+
 
 Object.freeze(exports);

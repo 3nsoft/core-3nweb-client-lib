@@ -183,7 +183,7 @@ describe('3NStorage', () => {
 
 	});
 
-	describe('synced FS is a web3n.files.WritableFS', () => {
+	function syncedFsSetup(): SetupWithTestFS {
 
 		const fsSetup = {} as SetupWithTestFS;
 
@@ -197,6 +197,13 @@ describe('3NStorage', () => {
 			if (!s.isUp) { return; }
 			await clearFS(fsSetup.testFS);
 		});
+
+		return fsSetup;
+	}
+
+	describe('synced FS is a web3n.files.WritableFS', () => {
+
+		const fsSetup = syncedFsSetup();
 
 		loadSpecs(
 			fsSetup,
@@ -210,22 +217,21 @@ describe('3NStorage', () => {
 
 	describe('synced FS is a web3n.files.WritableFS with versioned API', () => {
 
-		const fsSetup = {} as SetupWithTestFS;
-
-		beforeAllWithTimeoutLog(async () => {
-			if (!s.isUp) { return; }
-			fsSetup.isUp = true;
-			fsSetup.testFS = await w3n.storage!.getAppSyncedFS(allowedAppFS[0]);
-		});
-
-		afterEachCond(async () => {
-			if (!s.isUp) { return; }
-			await clearFS(fsSetup.testFS);
-		});
+		const fsSetup = syncedFsSetup();
 
 		loadSpecs(
 			fsSetup,
 			resolve(__dirname, 'fs-checks/versioned'));
+
+	});
+
+	describe('synced FS is a web3n.files.WritableFS with versioned API', () => {
+
+		const fsSetup = syncedFsSetup();
+
+		loadSpecs(
+			fsSetup,
+			resolve(__dirname, 'fs-checks/synced'));
 
 	});
 
