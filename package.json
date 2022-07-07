@@ -1,6 +1,6 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.26.0",
+  "version": "0.26.1",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",

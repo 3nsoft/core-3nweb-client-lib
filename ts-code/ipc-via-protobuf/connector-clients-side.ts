@@ -25,7 +25,11 @@ import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Ca
 interface FnCall {
 	deferred?: Deferred<EnvelopeBody>;
 	obs?: Subject<EnvelopeBody>;
+	reqEnv: Envelope;
+	countOfDuplicateFnCallNum?: number;
 }
+
+const MAX_DUPLICATE_ATTEMPTS = 100;
 
 
 // XXX can have an optimized use of WeakRef and FinalizationRegistry, when
@@ -106,7 +110,13 @@ export class ClientsSideImpl implements ClientsSide {
 	processCallError(fnCallNum: number, body: EnvelopeBody): void {
 		const call = this.fnCalls.get(fnCallNum);
 		if (!call) { return; }
+		this.fnCalls.delete(fnCallNum);
 		const err = (body ? errFromMsg(errBodyType.unpack(body)) : undefined);
+		if (err && ((err as IPCException).type === 'ipc')
+		&& (err as IPCException).duplicateFnCallNum) {
+			this.retryWithOtherCallNum(call);
+			return;
+		}
 		if (call.obs) {
 			call.obs.error(err);
 		} else if (call.deferred) {
@@ -114,7 +124,30 @@ export class ClientsSideImpl implements ClientsSide {
 		} else {
 			// XXX log presence of fn call without fields to signal reply
 		}
-		this.fnCalls.delete(fnCallNum);
+	}
+
+	private retryWithOtherCallNum(call: FnCall): void {
+		if (call.countOfDuplicateFnCallNum) {
+			call.countOfDuplicateFnCallNum += 1;
+			if (call.countOfDuplicateFnCallNum >= MAX_DUPLICATE_ATTEMPTS) {
+				return;
+			}
+		} else {
+			call.countOfDuplicateFnCallNum = 1;
+		}
+		const fnCallNum = this.nextFnCallNum();
+		call.reqEnv.headers.fnCallNum!.value = fnCallNum;
+		this.fnCalls.set(fnCallNum, call);
+		try {
+			this.sendMsg(call.reqEnv);
+		} catch (err) {
+			this.fnCalls.delete(fnCallNum);
+			if (call.deferred) {
+				call.deferred.reject(err);
+			} else if (call.obs) {
+				call.obs.error(err);
+			}
+		}
 	}
 
 	private nextFnCallNum(): number {
@@ -143,23 +176,31 @@ export class ClientsSideImpl implements ClientsSide {
 		return callerWrap;
 	}
 
-	private startCall(
-		fnCallNum: number, path: string[], body: EnvelopeBody
-	): void {
+	private startCall(reqEnv: Envelope): void {
 		if (this.isStopped) { throw makeIPCException(
 			{ 'ipcNotConnected': true }); }
-		this.sendMsg({
+		this.sendMsg(reqEnv);
+	}
+
+	private setupFnCall(
+		path: string[], body: EnvelopeBody,
+		deferred: FnCall['deferred'], obs: FnCall['obs']
+	): Envelope {
+		const fnCallNum = this.nextFnCallNum();
+		const reqEnv: Envelope = {
 			headers: { fnCallNum: toVal(fnCallNum), msgType: 'start', path },
 			body: toOptVal(body) as Value<Buffer>|undefined
-		});
+		}
+		this.fnCalls.set(fnCallNum, { deferred, obs, reqEnv });
+		return reqEnv;
 	}
 
 	startPromiseCall(path: string[], req: EnvelopeBody): Promise<EnvelopeBody> {
 		const deferred = defer<EnvelopeBody>();
-		const fnCallNum = this.nextFnCallNum();
-		this.fnCalls.set(fnCallNum, { deferred });
+		const reqEnv = this.setupFnCall(path, req, deferred, undefined);
+		const fnCallNum = reqEnv.headers.fnCallNum!.value;
 		try {
-			this.startCall(fnCallNum, path, req);
+			this.startCall(reqEnv);
 			return deferred.promise;
 		} catch (err) {
 			this.fnCalls.delete(fnCallNum);
@@ -170,10 +211,10 @@ export class ClientsSideImpl implements ClientsSide {
 	startObservableCall(
 		path: string[], req: EnvelopeBody, obs: Subject<EnvelopeBody>
 	): () => void {
-		const fnCallNum = this.nextFnCallNum();
-		this.fnCalls.set(fnCallNum, { obs });
+		const reqEnv = this.setupFnCall(path, req, undefined, obs);
+		const fnCallNum = reqEnv.headers.fnCallNum!.value;
 		try {
-			this.startCall(fnCallNum, path, req);
+			this.startCall(reqEnv);
 			return () => this.sendCallCancellation(fnCallNum);
 		} catch (err) {
 			this.fnCalls.delete(fnCallNum);
