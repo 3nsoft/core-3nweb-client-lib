@@ -19,8 +19,8 @@ import { FileException } from '../../../lib-common/exceptions/file';
 import { Observable, from, MonoTypeOperatorFunction } from 'rxjs';
 import { NamedProcs } from '../../../lib-common/processes/synced';
 import { sleep } from '../../../lib-common/processes/sleep';
-import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
+import { ObjId, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { ObjFolders, CanMoveObjToDeeperCache } from '../../../lib-client/objs-on-disk/obj-folders';
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjOnDisk, GetBaseSegsOnDisk, InitDownloadParts } from '../../../lib-client/objs-on-disk/obj-on-disk';
 import { join } from 'path';
@@ -31,59 +31,67 @@ import { mergeMap, filter, tap } from 'rxjs/operators';
 import { FileWrite } from '../../../lib-client/objs-on-disk/file-writing-proc';
 import { flatTap } from '../../../lib-common/utils-for-observables';
 import { GC } from './obj-files-gc';
-import { ObjStatus, readAndCheckStatus, STATUS_FILE_NAME, UpSyncStatus } from './obj-status';
+import { ObjStatus } from './obj-status';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
+import { DiffInfo } from '../../../lib-common/service-api/3nstorage/owner';
+import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
+import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
+import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { saveUploadHeaderFile } from './upload-header-file';
+import { noop } from '../common/utils';
 
-const UNSYNCED_FILE_NAME_EXT = 'unsynced';
-const SYNCED_FILE_NAME_EXT = 'v';
-const REMOTE_FILE_NAME_EXT = 'remote';
+export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
+export const REMOTE_FILE_NAME_EXT = 'v';
 
 
 export class ObjFiles {
 
 	private readonly objs = makeTimedCache<ObjId, SyncedObj>(60*1000);
 	private readonly sync = makeSynchronizer();
-	private readonly gc = new GC(
-		this.sync,
-		obj => {
-			if (this.objs.get(obj.objId) === obj) {
-				this.objs.delete(obj.objId);
-			}
-		},
-		objId => this.folders.removeFolderOf(objId));
+	private readonly downloader: Downloader;
+	private readonly gc: GC;
 	
 	private constructor(
 		private readonly folders: ObjFolders,
-		private readonly downloader: Downloader,
+		remote: RemoteStorage,
 		private readonly logError: LogError
 	) {
+		this.downloader = new Downloader(remote);
+		this.gc = new GC(
+			this.sync,
+			obj => {
+				if (this.objs.get(obj.objId) === obj) {
+					this.objs.delete(obj.objId);
+				}
+			},
+			objId => this.folders.removeFolderOf(objId),
+			remote
+		);
 		Object.freeze(this);
 	}
 
 	static async makeFor(
-		path: string, downloader: Downloader, logError: LogError
+		path: string, remote: RemoteStorage, logError: LogError
 	): Promise<ObjFiles> {
+		const canMove: CanMoveObjToDeeperCache = async (objId, objFolderPath) => {
+			if (objFiles.objs.has(objId)) { return false; }
+			const lst = await fs.readdir(objFolderPath);
+			for (const fName of lst) {
+				if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)) { return false; }
+			}
+			try {
+				return (await ObjStatus.fileShowsObjNotInSyncedState(
+					objFolderPath, objId
+				));
+			} catch (exc) {
+				return false;
+			}
+		};
 		const folders = await ObjFolders.makeWithGenerations(
-			path,
-			async (objId, objFolderPath) => {
-				if (objFiles.objs.has(objId)) { return false; }
-				const lst = await fs.readdir(objFolderPath);
-				for (const fName of lst) {
-					if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)) { return false; }
-					if (fName === STATUS_FILE_NAME) {
-						if (!objFiles.objs.has(objId)) {
-							const status = await readAndCheckStatus(
-								objFolderPath, objId
-							).catch(noop);
-							if (status && status.syncTasks) { return false; }
-						}
-					}
-				}
-				return true;
-			},
-			logError);
-		const objFiles = new ObjFiles(folders, downloader, logError);
+			path, canMove, logError
+		);
+		const objFiles = new ObjFiles(folders, remote, logError);
 		return objFiles;
 	}
 
@@ -99,6 +107,10 @@ export class ObjFiles {
 			this.objs.set(objId, obj);
 			return obj;
 		});
+	}
+
+	getObjInCache(objId: ObjId): SyncedObj|undefined {
+		return this.objs.get(objId);
 	}
 
 	private makeObj(
@@ -132,6 +144,11 @@ export class ObjFiles {
 		});
 	}
 
+	// XXX we'll need getting archived version.
+	//     Getting current may be changed to grub info about all obj versions.
+	//     As currently this.makeByDownloadingCurrentVersion() makes assumptions.
+	//     Should it be a pattern: version not in status -> get info first.
+
 	async makeByDownloadingCurrentVersion(objId: ObjId): Promise<SyncedObj> {
 		// initial download implicitly checks existence of obj on server
 		const download = await this.downloader.getCurrentObjVersion(objId);
@@ -150,7 +167,7 @@ export class ObjFiles {
 		return { fileWrite$, newObj };
 	}
 
-	collectUnsyncedObjs(): Observable<ObjId> {
+	findUnsyncedObjs(): Observable<ObjId> {
 		return from([undefined])
 		.pipe(
 			// listing recent folders, exactly once
@@ -174,12 +191,17 @@ export class ObjFiles {
 		);
 	}
 
+	scheduleGC(obj: SyncedObj): void {
+		this.gc.scheduleCollection(obj);
+	}
+
 }
 Object.freeze(ObjFiles.prototype);
 Object.freeze(ObjFiles);
 
-export type SynchronizerOnObjId =
-	<T>(objId: ObjId, action: () => Promise<T>) => Promise<T>;
+export type SynchronizerOnObjId = <T> (
+	objId: ObjId, action: () => Promise<T>
+) => Promise<T>;
 
 function makeSynchronizer(proc?: NamedProcs): SynchronizerOnObjId {
 	if (!proc) {
@@ -204,21 +226,8 @@ function notFoundOrReThrow(exc: FileException): undefined {
 
 export class SyncedObj {
 
-	/**
-	 * These versions are what simple programs see. It is a local opinion about
-	 * object's versions. Versions here can be either synced, or unsynced.
-	 */
-	private readonly verObjs = makeTimedCache<number, ObjOnDisk>(60*1000);
-
-	/**
-	 * These are conflicting versions, coming from a server. Of course, universal
-	 * truth is spread by server, but in situations of parallel changes, local
-	 * version allows things to work, while conflicting version from server
-	 * should be adopted by conflict resolution process. In other words, these
-	 * versions are not for common use.
-	 */
-	private readonly remoteConflictVerObjs = makeTimedCache<number, ObjOnDisk>(
-		60*1000);
+	private readonly remoteVers = makeTimedCache<number, ObjOnDisk>(60*1000);
+	private readonly localVers = makeTimedCache<number, ObjOnDisk>(60*1000);
 
 	private constructor(
 		public readonly objId: ObjId,
@@ -243,16 +252,16 @@ export class SyncedObj {
 		scheduleGC: GC['scheduleCollection'],
 		version: number, parts: InitDownloadParts, logError: LogError
 	): Promise<SyncedObj> {
-		// XXX let's note that given version is used to be current on server
+		// XXX let's note that given version is also passed as current on server
 		const status = await ObjStatus.makeForDownloadedVersion(
 			objFolder, objId, version, version, logError);
 		const obj = new SyncedObj(
 			objId, objFolder, status, downloader, scheduleGC);
-		const fPath = obj.path(version, true);
+		const fPath = obj.remoteVerPath(version);
 		const objVer = await ObjOnDisk.createFileForExistingVersion(
 			obj.objId, version, fPath,
-			obj.downloader, obj.objSegsGetterFromDisk, parts);
-		obj.verObjs.set(version, objVer);
+			obj.downloader, obj.remoteObjSegsGetterFromDisk, parts);
+		obj.remoteVers.set(version, objVer);
 		return obj;
 	}
 
@@ -264,120 +273,113 @@ export class SyncedObj {
 		return new SyncedObj(objId, objFolder, status, downloader, scheduleGC);
 	}
 
-	sync(): UpSyncStatus {
-		return this.status;
-	}
-
 	scheduleSelfGC(): void {
 		this.scheduleGC(this);
 	}
 
-	private path(version: number, synced: boolean, remote?: true): string {
-		const fileExt = (synced ?
-			SYNCED_FILE_NAME_EXT :
-			(remote ? REMOTE_FILE_NAME_EXT : UNSYNCED_FILE_NAME_EXT));
-		const fName = `${version}.${fileExt}`;
-		return join(this.objFolder, fName);
+	private localVerPath(version: number): string {
+		return join(this.objFolder, `${version}.${UNSYNCED_FILE_NAME_EXT}`);
 	}
 
-	async getObjSrc(version: number): Promise<ObjSource> {
-		let objVer = this.verObjs.get(version);
-		if (objVer) { return objVer.getSrc(); }
-		const isSynced = this.status.isVersionSynced(version);
-		const fPath = this.path(version, isSynced);
-		if (isSynced) {
-			objVer = ((await isOnDisk(fPath)) ?
-				await ObjOnDisk.forExistingFile(
-					this.objId, version, fPath,
-					this.downloader, this.objSegsGetterFromDisk) :
-				await ObjOnDisk.createFileForExistingVersion(
-					this.objId, version, fPath,
-					this.downloader, this.objSegsGetterFromDisk));
-		} else {
-			objVer = await ObjOnDisk.forExistingFile(
+	private remoteVerPath(version: number): string {
+		return join(this.objFolder, `${version}.${REMOTE_FILE_NAME_EXT}`);
+	}
+
+	async getObjSrcFromLocalAndSyncedBranch(
+		version: number
+	): Promise<ObjSource> {
+		const latestSynced = this.status.latestSyncedVersion();
+		const objVer = await ((latestSynced && (latestSynced >= version)) ?
+			this.instanceOfRemoteObjVer(version) :
+			this.instanceOfLocalObjVer(version)
+		);
+		return objVer.getSrc();
+	}
+
+	async getObjSrcFromRemoteAndSyncedBranch(
+		version: number
+	): Promise<ObjSource> {
+		const objVer = await this.instanceOfRemoteObjVer(version);
+		return objVer.getSrc();
+	}
+
+	private async instanceOfLocalObjVer(
+		version: number
+	): Promise<ObjOnDisk> {
+		let objVer = this.localVers.get(version);
+		if (objVer) { return objVer; }
+		const fPath = this.localVerPath(version);
+		objVer = await ObjOnDisk.forExistingFile(
+			this.objId, version, fPath,
+			this.downloader, this.localAndSyncedObjSegsGetterFromDisk);
+		this.localVers.set(version, objVer);
+		return objVer;
+	}
+
+	private async instanceOfRemoteObjVer(version: number): Promise<ObjOnDisk> {
+		let objVer = this.remoteVers.get(version);
+		if (objVer) { return objVer; }
+		const fPath = this.remoteVerPath(version);
+		objVer = ((await isOnDisk(fPath)) ?
+			await ObjOnDisk.forExistingFile(
 				this.objId, version, fPath,
-				this.downloader, this.objSegsGetterFromDisk);
-		}
-		const src = objVer.getSrc();
-		this.verObjs.set(version, objVer);
-		return src;
+				this.downloader, this.remoteObjSegsGetterFromDisk) :
+			await ObjOnDisk.createFileForExistingVersion(
+				this.objId, version, fPath,
+				this.downloader, this.remoteObjSegsGetterFromDisk));
+			this.remoteVers.set(version, objVer);
+		return objVer;
 	}
 
-	private objSegsGetterFromDisk: GetBaseSegsOnDisk = async (ver, ofs, len) => {
-		let obj = this.verObjs.get(ver);
-		if (!obj) {
-			const fPath = this.path(ver, this.status.isVersionSynced(ver));
-			try {
-				obj = await ObjOnDisk.forExistingFile(
-					this.objId, ver, fPath, this.downloader,
-					this.objSegsGetterFromDisk);
-				this.verObjs.set(ver, obj);
-			} catch (exc) {
-				// when file doesn't exist on a disk, we just pass a chunk
-				if (!(exc as FileException).notFound) { throw exc; }
-				return [ { type: 'new', thisVerOfs: ofs, len } ];
-			}
+	private readonly localAndSyncedObjSegsGetterFromDisk: GetBaseSegsOnDisk =
+	async (v, ofs, len) => {
+		const latestSynced = this.status.latestSyncedVersion();
+		if (latestSynced && (latestSynced >= v)) {
+			return this.remoteObjSegsGetterFromDisk(v, ofs, len);
 		}
-		return obj.readSegsOnlyFromDisk(ofs, len);
+		let objVer = this.localVers.get(v);
+		if (!objVer) {
+			objVer = await ObjOnDisk.forExistingFile(
+				this.objId, v, this.localVerPath(v), this.downloader,
+				this.localAndSyncedObjSegsGetterFromDisk);
+			this.localVers.set(v, objVer);
+		}
+		return objVer.readSegsOnlyFromDisk(ofs, len);
 	};
 
-	async getRemoteConflictObjVersion(version: number):Promise<ObjSource> {
-		if (this.status.syncedVersionGreaterOrEqual(version)) {
-			return this.getObjSrc(version);
-		}
-		let obj = this.remoteConflictVerObjs.get(version);
-		if (obj) { return obj.getSrc(); }
-		const fPath = this.path(version, true);
-		obj = ((await isOnDisk(fPath)) ?
-			await ObjOnDisk.forExistingFile(
-				this.objId, version, fPath, this.downloader,
-				this.conflictObjSegsGetterFromDisk) :
-			await ObjOnDisk.createFileForExistingVersion(
-				this.objId, version, fPath, this.downloader,
-				this.conflictObjSegsGetterFromDisk));
-		const src = obj.getSrc();
-		this.verObjs.set(version, obj);
-		return src;
-	}
-
-	private conflictObjSegsGetterFromDisk: GetBaseSegsOnDisk = async (
-		version, ofs, len
-	) => {
-		if (this.status.syncedVersionGreaterOrEqual(version)) {
-			return this.objSegsGetterFromDisk(version, ofs, len);
-		}
-		let obj = this.remoteConflictVerObjs.get(version);
-		if (!obj) {
-			const fPath = this.path(version, true);
+	private readonly remoteObjSegsGetterFromDisk: GetBaseSegsOnDisk =
+	async (v, ofs, len) => {
+		let objVer = this.remoteVers.get(v);
+		if (!objVer) {
 			try {
-				obj = await ObjOnDisk.forExistingFile(
-					this.objId, version, fPath, this.downloader,
-					this.conflictObjSegsGetterFromDisk);
-				this.remoteConflictVerObjs.set(version, obj);
+				objVer = await ObjOnDisk.forExistingFile(
+					this.objId, v, this.remoteVerPath(v), this.downloader,
+					this.remoteObjSegsGetterFromDisk);
+				this.remoteVers.set(v, objVer);
 			} catch (exc) {
 				// when file doesn't exist on a disk, we just pass a chunk
 				if (!(exc as FileException).notFound) { throw exc; }
 				return [ { type: 'new', thisVerOfs: ofs, len } ];
 			}
 		}
-		return obj.readSegsOnlyFromDisk(ofs, len);
+		return objVer.readSegsOnlyFromDisk(ofs, len);
 	};
 
 	async saveNewVersion(
 		version: number, encSub: Subscribe
 	): Promise<{ fileWrite$: Observable<FileWrite[]>; baseVer?: number; }> {
-		if (this.verObjs.has(version)) { throw new Error(
+		if (this.localVers.has(version)) { throw new Error(
 			`Version ${version} already exists in object ${this.objId}`); }
-		const fPath = this.path(version, false);
+		const fPath = this.localVerPath(version);
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, this.downloader,
-			this.objSegsGetterFromDisk);
-		this.verObjs.set(version, obj);
+			this.localAndSyncedObjSegsGetterFromDisk);
+		this.localVers.set(version, obj);
 		const fileWrite$ = write$.pipe(
 			tap({
 				error: err => {
-					if (this.verObjs.get(version) === obj) {
-						this.verObjs.delete(version);
+					if (this.localVers.get(version) === obj) {
+						this.localVers.delete(version);
 					}
 				}
 			}),
@@ -387,63 +389,114 @@ export class SyncedObj {
 		return { fileWrite$, baseVer: obj.getBaseVersion() };
 	}
 
-	isArchived(): boolean {
-		return this.status.isArchived();
+	async combineLocalBaseIfPresent(version: number): Promise<number|undefined> {
+		const bases = this.status.baseOfLocalVersion(version);
+		if (!bases) { return; }
+		const { localBases, syncedBase } = bases;
+		if (localBases) {
+			const objVer = await this.instanceOfLocalObjVer(version);
+			for (const localBase of localBases) {
+				await objVer.absorbImmediateBaseVersion(
+					localBase, this.localVerPath(localBase));
+				this.status.absorbLocalVersionBase(version, localBase);
+			}
+		}
+		return syncedBase;
 	}
 
-	getCurrentVersionOrThrow(): number {
-		return this.status.getCurrentVersionOrThrow();
-	}
-
-	isRemoteVersionGreaterOrEqualTo(newRemoteVersion: number): boolean {
-		return this.status.isRemoteVersionGreaterOrEqualTo(newRemoteVersion);
-	}
-
-	isDeletedOnRemote(): boolean {
-		return this.status.isDeletedOnRemote();
+	async saveUploadHeaderFile(uploadHeader: UploadHeaderChange): Promise<void> {
+		await saveUploadHeaderFile(this.objFolder, uploadHeader);
 	}
 
 	private async setUnsyncedCurrentVersion(
 		version: number, baseVersion: number|undefined
 	): Promise<void> {
-		await this.status.setUnsyncedCurrentVersion(version, baseVersion);
+		await this.status.setLocalCurrentVersion(version, baseVersion);
 		if (version > 1) {
 			this.scheduleSelfGC();
 		}
 	}
 
-	async markVersionSynced(version: number): Promise<void> {
-		const verObj = this.verObjs.get(version);
+	/**
+	 * This renames/moves version file from local to remote.
+	 * Removes upload info from status, updating enumerations of local and
+	 * synced versions.
+	 */
+	async recordUploadCompletion(
+		localVersion: number, uploadVersion: number,
+		headerChange: {
+			newHeader: Uint8Array; originalHeader: Uint8Array;
+		}|undefined
+	): Promise<void> {
+		const verObj = this.localVers.get(localVersion);
+		const remotePath = this.remoteVerPath(uploadVersion);
 		if (verObj) {
-			await verObj.moveFile(this.path(version, true));
+			const syncedVerObj = await verObj.moveFileAndProxyThis(
+				remotePath,
+				(headerChange ? {
+					newHeader: headerChange.newHeader,
+					originalHeader: headerChange.originalHeader,
+					version: uploadVersion
+				} : undefined)
+			);
+			this.remoteVers.set(uploadVersion, syncedVerObj);
 		} else {
-			await fs.rename(this.path(version, false), this.path(version, true));
+			await fs.rename(
+				this.localVerPath(localVersion), remotePath);
 		}
-		await this.status.markVersionSynced(version);
+		await this.status.markLocalVersionSynced(localVersion, uploadVersion);
 		this.scheduleSelfGC();
 	}
 
-	async setRemoteVersion(version: number): Promise<void> {
-		await this.status.setRemoteVersion(version);
+	dropCachedLocalObjVersionsLessOrEqual(version: number): void {
+		for (const version of this.localVers.keys()) {
+			if (version <= version) {
+				this.localVers.delete(version);
+			}
+		}
 	}
 
-	async setDeletedOnRemote(): Promise<void> {
-		await this.status.setDeletedOnRemote();
+	async removeLocalVersionFilesLessThan(version: number): Promise<void> {
+		const lst = await fs.readdir(this.objFolder).catch(noop);
+		if (!lst) { return; }
+		const rmProcs: Promise<void>[] = [];
+		for (const f of lst) {
+			if (!f.endsWith(UNSYNCED_FILE_NAME_EXT)) { continue; }
+			const verStr = f.slice(0, f.length-1-UNSYNCED_FILE_NAME_EXT.length);
+			const ver = parseInt(verStr);
+			if (isNaN(ver) || (ver > version)) { continue; }
+			rmProcs.push(fs.unlink(join(this.objFolder, f)).catch(noop));
+		}
+		if (rmProcs.length > 0) {
+			await Promise.all(rmProcs);
+		}
 	}
 
 	async removeCurrentVersion(): Promise<void> {
-		await this.status.removeCurrentVersion(this.verObjs);
+		await this.status.removeCurrentVersion();
+		// note that gc is tasked with removing current obj version on server
 		this.scheduleSelfGC();
 	}
 
-	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
-		return this.status.getNonGarbageVersions();
+	async diffForUploadOf(
+		version: number
+	): Promise<{ diff: DiffInfo; newSegsPackOrder: FiniteChunk[]; }> {
+		const objVer = await this.instanceOfLocalObjVer(version);
+		if (objVer.getBaseVersion()) {
+			return objVer.diffFromBase();
+		} else {
+			throw new Error(`Version ${version} is not a diff version`);
+		}
 	}
 
-	isStatusFileSaved(): boolean {
-		return this.status.isFileSaved();
+	syncStatus(): SyncedObjStatus {
+		return this.status;
 	}
-	
+
+	statusObj(): ObjStatus {
+		return this.status;
+	}
+
 }
 Object.freeze(SyncedObj.prototype);
 Object.freeze(SyncedObj);
@@ -456,8 +509,6 @@ async function isOnDisk(path: string): Promise<boolean> {
 		throw exc;
 	}));
 }
-
-function noop() {}
 
 
 Object.freeze(exports);

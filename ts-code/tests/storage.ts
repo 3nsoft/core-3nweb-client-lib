@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,11 +22,14 @@ import { resolve } from 'path';
 import { platform } from 'os';
 import { reverseDomain } from '../core/storage';
 import { testApp } from './libs-for-tests/core-runner';
-import { clearFS, SetupWithTestFS, SetupWithTwoFSs } from './fs-checks/test-utils';
+import { clearFS, SetupWithTestFS, SetupWithTwoDevsFSs, SetupWithTwoFSs } from './fs-checks/test-utils';
+import { assert } from '../lib-common/assert';
+import { sleep } from '../lib-common/processes/sleep';
 
 type AppFSSetting = web3n.caps.common.AppFSSetting;
 type commonW3N = web3n.caps.common.W3N;
 type StorageException = web3n.storage.StorageException;
+type WritableFS = web3n.files.WritableFS;
 
 const allowedAppFS = (testApp.capsRequested.storage!.appFS as AppFSSetting[])
 .map(s => reverseDomain(s.domain));
@@ -189,8 +192,9 @@ describe('3NStorage', () => {
 
 		beforeAllWithTimeoutLog(async () => {
 			if (!s.isUp) { return; }
-			fsSetup.isUp = true;
 			fsSetup.testFS = await w3n.storage!.getAppSyncedFS(allowedAppFS[0]);
+			assert(!!fsSetup.testFS.v!.sync);
+			fsSetup.isUp = true;
 		});
 
 		afterEachCond(async () => {
@@ -225,13 +229,13 @@ describe('3NStorage', () => {
 
 	});
 
-	describe('synced FS is a web3n.files.WritableFS with versioned API', () => {
+	describe('synced FS is a web3n.files.WritableFS with sync API', () => {
 
 		const fsSetup = syncedFsSetup();
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/synced'));
+			resolve(__dirname, 'fs-checks/sync-on-one-dev'));
 
 	});
 
@@ -256,6 +260,82 @@ describe('3NStorage', () => {
 		loadSpecs(
 			fsSetup,
 			resolve(__dirname, 'fs-checks/local-to-synced-linking'));
+
+	});
+
+});
+
+describe(`3NStorage`, () => {
+
+	const s = setupWithUsers();
+
+	function syncedFsSetup(): SetupWithTwoDevsFSs {
+
+		const fsSetup = {} as SetupWithTwoDevsFSs;
+
+		const testFolder = `multi-dev-testing`;
+
+		beforeAllWithTimeoutLog(async () => {
+			if (!s.isUp) { return; }
+			const w3n1 = s.testAppCapsByUserIndex(0);
+			const dev2 = await s.sndDevByUserIndex(0);
+
+			const dev1AppFS = await w3n1.storage!.getAppSyncedFS();
+			const dev2AppFS = () => dev2.w3n.storage!.getAppSyncedFS();
+
+			let dev1FS: WritableFS;
+			let dev2FS: WritableFS;
+			fsSetup.dev1FS = () => dev1FS;
+			fsSetup.dev2FS = () => dev2FS;
+
+			fsSetup.dev2 = {
+				start: async () => {
+					await dev2.start();
+					dev2FS = await (await dev2AppFS()).writableSubRoot(testFolder);
+				},
+				stop: async () => {
+					dev2FS = undefined as any;
+					await dev2.stop();
+				}
+			};
+
+			fsSetup.resetFS = async () => {
+				await clearFS(dev1AppFS);
+				dev1FS = await dev1AppFS.writableSubRoot(
+					testFolder, { create: true, exclusive: true });
+				await dev1AppFS.v!.sync!.upload(testFolder);
+				await dev1AppFS.v!.sync!.upload('');
+				const d2AppFS = await dev2AppFS();
+				const status =  await d2AppFS.v!.sync!.updateStatusInfo('');
+				if (status.state === 'behind') {
+					await d2AppFS.v!.sync!.adoptRemote('');
+				} else if (status.state === 'conflicting') {
+					throw new Error(`Test file system on a second device has inconvenient conflicting sync state`);
+				}
+				dev2FS = await d2AppFS.writableSubRoot(
+					testFolder, { create: false });
+			};
+
+			await fsSetup.resetFS();
+
+			fsSetup.isUp = true;
+		}, 20000);
+
+		afterEachCond(async () => {
+			if (!s.isUp) { return; }
+			await fsSetup.resetFS();
+		});
+
+		return fsSetup;
+	}
+
+	describe('sync with two devices', () => {
+
+		const fsSetup = syncedFsSetup();
+
+		loadSpecs(
+			fsSetup,
+			resolve(__dirname, 'fs-checks/sync-with-two-devs'));
 
 	});
 

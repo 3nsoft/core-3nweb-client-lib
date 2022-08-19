@@ -19,6 +19,7 @@ import { mergeMap } from 'rxjs/operators';
 
 type WritableFile = web3n.files.WritableFile;
 type FileEvent = web3n.files.FileEvent;
+type RemoteEvent = web3n.files.RemoteEvent;
 
 export abstract class JsonFileProc<T> {
 	
@@ -40,14 +41,16 @@ export abstract class JsonFileProc<T> {
 			await this.file.writeJSON(fstVal);
 		}
 
-		this.proc = (new Observable<FileEvent>(obs => this.file.watch(obs)))
+		this.proc = (new Observable<FileEvent|RemoteEvent>(
+			obs => this.file.watch(obs))
+		)
 		.pipe(
 			mergeMap(ev => this.onFileEvent(ev), 1)
 		)
 		.subscribe();
 	}
 
-	protected abstract onFileEvent(ev: FileEvent): Promise<void>;
+	protected abstract onFileEvent(ev: FileEvent|RemoteEvent): Promise<void>;
 
 	async close(): Promise<void> {
 		if (!this.proc) { return; }

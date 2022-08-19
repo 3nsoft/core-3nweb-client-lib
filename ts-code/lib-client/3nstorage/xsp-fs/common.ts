@@ -17,9 +17,7 @@
 
 import { ScryptGenParams } from '../../key-derivation';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
-import { objChanged, objRemoved } from '../../../lib-common/service-api/3nstorage/owner';
 import { Observable } from 'rxjs';
-import { UpSyncTaskInfo } from '../../../core/storage/synced/obj-status';
 
 export { AsyncSBoxCryptor } from 'xsp-files';
 export { FolderInJSON } from './folder-node'; 
@@ -27,25 +25,19 @@ export { FolderInJSON } from './folder-node';
 type StorageType = web3n.files.FSType;
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
-type Stats = web3n.files.Stats;
+type RemoteEvent = web3n.files.RemoteEvent;
+type SyncStatus = web3n.files.SyncStatus;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type FSSyncException = web3n.files.FSSyncException;
+type FileException = web3n.files.FileException;
 
-export interface RemoteObjRemovalEvent extends objRemoved.Event {
-	type: 'remote-delete'
-}
-
-export interface RemoteObjChangeEvent extends objChanged.Event {
-	type: 'remote-change'
-}
-
-export type RemoteEvent = RemoteObjRemovalEvent | RemoteObjChangeEvent;
+export type FSChangeSrc = web3n.files.FSChangeEvent['src'];
 
 export interface Node {
 	objId: string;
 	name: string;
 	type: NodeType;
-	processRemoteEvent: (event: RemoteEvent) => Promise<void>;
-	broadcastUpSyncEvent(task: UpSyncTaskInfo): void;
-	localDelete(): Promise<void>;
+	removeObj(src?: FSChangeSrc): Promise<void>;
 }
 
 export type NodeType = 'file' | 'link' | 'folder';
@@ -131,15 +123,15 @@ export class NodesContainer {
 export interface NodeEvent {
 	objId: ObjId;
 	parentObjId?: ObjId;
-	event: FolderEvent|FileEvent;
+	childObjId?: ObjId;
+	event: FolderEvent|FileEvent|RemoteEvent;
 }
 
 export interface Storage {
-	
-	readonly type: StorageType;
 
+	readonly type: StorageType;
 	readonly versioned: boolean;
-	
+
 	readonly cryptor: AsyncSBoxCryptor;
 
 	readonly nodes: NodesContainer;
@@ -147,7 +139,8 @@ export interface Storage {
 	getNodeEvents(): Observable<NodeEvent>;
 
 	broadcastNodeEvent(
-		objId: ObjId, parentObjId: ObjId|undefined, ev: FolderEvent|FileEvent
+		objId: ObjId, parentObjId: ObjId|undefined, childObjId: ObjId|undefined,
+		ev: NodeEvent['event']
 	): void;
 
 	/**
@@ -166,8 +159,9 @@ export interface Storage {
 	/**
 	 * This returns a promise, resolvable to source for a requested object.
 	 * @param objId
+	 * @param version
 	 */
-	getObj(objId: ObjId): Promise<ObjSource>;
+	getObjSrc(objId: ObjId, version?: number): Promise<ObjSource>;
 	
 	/**
 	 * This saves given object, asynchronously.
@@ -189,6 +183,16 @@ export interface Storage {
 	 */
 	close(): Promise<void>;
 
+	status(objId: ObjId): Promise<LocalObjStatus>;
+
+}
+
+export interface LocalObjStatus {
+
+	archiveCurrentVersion(): Promise<void>;
+
+	listVersions(): { current?: number; archived?: number[]; };
+
 }
 
 export function wrapStorageImplementation(impl: Storage): Storage {
@@ -200,10 +204,11 @@ export function wrapStorageImplementation(impl: Storage): Storage {
 		broadcastNodeEvent: impl.broadcastNodeEvent.bind(impl),
 		storageForLinking: impl.storageForLinking.bind(impl),
 		generateNewObjId: impl.generateNewObjId.bind(impl),
-		getObj: impl.getObj.bind(impl),
+		getObjSrc: impl.getObjSrc.bind(impl),
 		saveObj: impl.saveObj.bind(impl),
 		close: impl.close.bind(impl),
 		removeObj: impl.removeObj.bind(impl),
+		status: impl.status.bind(impl),
 		cryptor: impl.cryptor
 	};
 	return Object.freeze(wrap);
@@ -213,42 +218,91 @@ export type StorageGetter = (type: StorageType, location?: string) => Storage;
 
 export interface SyncedStorage extends Storage {
 
+	getObjSrcOfRemoteVersion(objId: ObjId, version: number): Promise<ObjSource>;
+
+	archiveVersionOnServer(objId: ObjId, version: number): Promise<void>;
+
 	/**
 	 * This returns a promise, resolvable to root key generation parameters.
 	 */
 	getRootKeyDerivParamsFromServer(): Promise<ScryptGenParams>;
 
-	getRemoteConflictObjVersion(
+	adoptRemote(
+		objId: ObjId, opts: OptionsToAdopteRemote|undefined
+	): Promise<number|undefined>;
+
+	updateStatusInfo(objId: ObjId): Promise<SyncStatus>;
+
+	isRemoteVersionOnDisk(
 		objId: ObjId, version: number
-	): Promise<ObjSource>;
+	): Promise<'partial'|'complete'|'none'>;
 
-	getObjSyncInfo(objId: ObjId): Promise<Stats['sync']>;
+	download(objId: ObjId, version: number): Promise<void>;
 
+	upload(
+		objId: ObjId, localVersion: number, uploadVersion: number,
+		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean
+	): Promise<void>;
+
+	dropCachedLocalObjVersionsLessOrEqual(
+		objId: ObjId, localVersion: number
+	): void;
+
+	uploadObjRemoval(objId: ObjId): Promise<void>;
+
+	status(objId: ObjId): Promise<SyncedObjStatus>;
+
+}
+
+export interface SyncedObjStatus extends LocalObjStatus {
+
+	syncStatus(): SyncStatus;
+
+	neverUploaded(): boolean;
+
+}
+
+export interface UploadHeaderChange {
+	localVersion: number;
+	uploadVersion: number;
+	localHeader: Uint8Array;
+	uploadHeader: Uint8Array;
 }
 
 export function wrapSyncStorageImplementation(
 	impl: SyncedStorage
 ): SyncedStorage {
 	const storageWrap = wrapStorageImplementation(impl);
-	const wrap: SyncedStorage = {
-		type: storageWrap.type,
-		versioned: storageWrap.versioned,
-		close: storageWrap.close,
-		cryptor: storageWrap.cryptor,
-		generateNewObjId: storageWrap.generateNewObjId,
-		getObj: storageWrap.getObj,
-		nodes: storageWrap.nodes,
-		getNodeEvents: storageWrap.getNodeEvents,
-		broadcastNodeEvent: storageWrap.broadcastNodeEvent,
-		removeObj: storageWrap.removeObj,
-		saveObj: storageWrap.saveObj,
-		storageForLinking: storageWrap.storageForLinking,
-		getRootKeyDerivParamsFromServer:
-			impl.getRootKeyDerivParamsFromServer.bind(impl),
-		getRemoteConflictObjVersion: impl.getRemoteConflictObjVersion.bind(impl),
-		getObjSyncInfo: impl.getObjSyncInfo.bind(impl)
-	};
+	const wrap: SyncedStorage = {} as any;
+	for (const [field, value] of Object.entries(storageWrap)) {
+		wrap[field] = value;
+	}
+	wrap.getRootKeyDerivParamsFromServer =
+		impl.getRootKeyDerivParamsFromServer.bind(impl);
+	wrap.getObjSrcOfRemoteVersion = impl.getObjSrcOfRemoteVersion.bind(impl);
+	wrap.archiveVersionOnServer = impl.archiveVersionOnServer.bind(impl);
+	wrap.isRemoteVersionOnDisk = impl.isRemoteVersionOnDisk.bind(impl);
+	wrap.download = impl.download.bind(impl);
+	wrap.upload = impl.upload.bind(impl);
+	wrap.uploadObjRemoval = impl.uploadObjRemoval.bind(impl);
+	wrap.dropCachedLocalObjVersionsLessOrEqual = impl.dropCachedLocalObjVersionsLessOrEqual.bind(impl);
+	wrap.adoptRemote = impl.adoptRemote.bind(impl);
+	wrap.updateStatusInfo = impl.updateStatusInfo.bind(impl);
 	return Object.freeze(wrap);
+}
+
+export function isSyncedStorage(storage: Storage) {
+	return !!(storage as SyncedStorage).upload;
+}
+
+
+export function setPathInExc(
+	exc: FSSyncException|FileException, path: string
+): FSSyncException|FileException {
+	if ((exc.type === 'fs-sync') || (exc.type === 'file')) {
+		exc.path = path;
+	}
+	return exc;
 }
 
 

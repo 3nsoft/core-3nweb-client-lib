@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8 } from "./protobuf-msg";
+import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
@@ -24,17 +24,22 @@ import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } fr
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { toRxObserver } from "../lib-common/utils-for-observables";
+import { toBuffer } from "../lib-common/buffer-utils";
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
 type WritableFile = web3n.files.WritableFile;
 type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
+type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
 type File = web3n.files.File;
 type Stats = web3n.files.Stats;
-type SyncState = web3n.files.SyncState;
+type SyncStatus = web3n.files.SyncStatus;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type FileEvent = web3n.files.FileEvent;
-type SyncUploadEvent = web3n.files.SyncUploadEvent;
+type RemoteEvent = web3n.files.RemoteEvent;
+type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 
 export function makeFileCaller(
 	caller: Caller, fileMsg: FileMsg
@@ -71,6 +76,7 @@ export function makeFileCaller(
 			readBytes: vReadBytes.makeCaller(caller, vPath),
 			readJSON: vReadJSON.makeCaller(caller, vPath),
 			readTxt: vReadTxt.makeCaller(caller, vPath),
+			listVersions: vListVersions.makeCaller(caller, vPath)
 		} as WritableFileVersionedAPI;
 		if (file.writable) {
 			file.v.copy = vCopy.makeCaller(caller, vPath);
@@ -79,6 +85,22 @@ export function makeFileCaller(
 			file.v.writeBytes = vWriteBytes.makeCaller(caller, vPath);
 			file.v.writeJSON = vWriteJSON.makeCaller(caller, vPath);
 			file.v.writeTxt = vWriteTxt.makeCaller(caller, vPath);
+			file.v.archiveCurrent = vArchiveCurrent.makeCaller(caller, vPath);
+		}
+		if (fileMsg.isSynced) {
+			const vsPath = objPath.concat('v', 'sync');
+			const vsConnectPath = objPath.concat('v', 'sync', 'connect');
+			file.v.sync = {
+				status: vsStatus.makeCaller(caller, vsPath),
+				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(
+					caller, vsPath),
+				download: vsDownload.makeCaller(caller, vsPath),
+				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
+			} as WritableFileSyncAPI;
+			if (file.writable) {
+				file.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
+			}
 		}
 	}
 	caller.registerClientDrop(file, fileMsg.impl);
@@ -119,21 +141,39 @@ export function exposeFileService(
 			listXAttrs: vListXAttrs.wrapService(file.v.listXAttrs),
 			readBytes: vReadBytes.wrapService(file.v.readBytes),
 			readJSON: vReadJSON.wrapService(file.v.readJSON),
-			readTxt: vReadTxt.wrapService(file.v.readTxt)
+			readTxt: vReadTxt.wrapService(file.v.readTxt),
+			listVersions: vListVersions.wrapService(file.v.listVersions)
 		} as ExposedObj<WritableFileVersionedAPI>;
 		if (file.writable) {
-			implExp.copy = vCopy.wrapService(
+			implExp.v.copy = vCopy.wrapService(
 				(file.v as WritableFileVersionedAPI).copy, expServices);
-			implExp.getByteSink = vGetByteSink.wrapService(
+			implExp.v.getByteSink = vGetByteSink.wrapService(
 				(file.v as WritableFileVersionedAPI).getByteSink, expServices);
-			implExp.updateXAttrs = vUpdateXAttrs.wrapService(
+			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService(
 				(file.v as WritableFileVersionedAPI).updateXAttrs);
-			implExp.writeBytes = vWriteBytes.wrapService(
+			implExp.v.writeBytes = vWriteBytes.wrapService(
 				(file.v as WritableFileVersionedAPI).writeBytes);
-			implExp.writeJSON = vWriteJSON.wrapService(
+			implExp.v.writeJSON = vWriteJSON.wrapService(
 				(file.v as WritableFileVersionedAPI).writeJSON);
-			implExp.writeTxt = vWriteTxt.wrapService(
+			implExp.v.writeTxt = vWriteTxt.wrapService(
 				(file.v as WritableFileVersionedAPI).writeTxt);
+			implExp.v.archiveCurrent = vArchiveCurrent.wrapService(
+				(file.v as WritableFileVersionedAPI).archiveCurrent);
+		}
+		if (file.v.sync) {
+			implExp.v.sync = {
+				status: vsStatus.wrapService(file.v.sync.status),
+				updateStatusInfo: vsUpdateStatusInfo.wrapService(
+					file.v.sync.updateStatusInfo),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(
+					file.v.sync.isRemoteVersionOnDisk),
+				download: vsDownload.wrapService(file.v.sync.download),
+				adoptRemote: vsAdoptRemote.wrapService(file.v.sync.adoptRemote),
+			} as ExposedObj<WritableFileSyncAPI>;
+			if (file.writable) {
+				implExp.v.sync.upload = vsUpload.wrapService(
+					(file.v.sync as WritableFileSyncAPI).upload);
+			}
 		}
 	}
 	const impl = expServices.exposeDroppableService<'FileImpl'>(
@@ -143,9 +183,19 @@ export function exposeFileService(
 		isNew: file.isNew,
 		name: file.name,
 		writable: file.writable,
-		isVersioned: !!file.v
+		isVersioned: !!file.v,
+		isSynced: !!(file.v && file.v.sync)
 	};
 	return fileMsg;
+}
+
+export interface FileMsg {
+	writable: boolean;
+	isVersioned: boolean;
+	isSynced: boolean;
+	name: string;
+	isNew: boolean;
+	impl: ObjectReference<'FileImpl'>;
 }
 
 export const fileMsgType = ProtoType.for<FileMsg>(pb.File);
@@ -159,15 +209,6 @@ interface StatsMsg {
 	mtime?: Value<number>;
 	ctime?: Value<number>;
 	version?: Value<number>;
-	sync?: SyncInfo;
-}
-
-interface SyncInfo {
-	state: string;
-	latest?: Value<number>;
-	conflictingRemote?: number[];
-	remote?: Value<number>;
-	deletedOnRemote?: Value<boolean>;
 }
 
 const statsMsgType = ProtoType.for<StatsMsg>(pb.StatsMsg);
@@ -182,13 +223,6 @@ export function packStats(s: Stats): Buffer {
 		mtime: (s.mtime ? toVal(s.mtime.valueOf()) : undefined),
 		size: toOptVal(s.size),
 		version: toOptVal(s.version),
-		sync: (s.sync ? {
-			state: s.sync.state,
-			conflictingRemote: s.sync.conflictingRemote,
-			deletedOnRemote: toOptVal(s.sync.deletedOnRemote),
-			latest: toOptVal(s.sync.latest),
-			remote: toOptVal(s.sync.remote)
-		} : undefined)
 	};
 	return statsMsgType.pack(msg);
 }
@@ -204,26 +238,81 @@ export function unpackStats(buf: Buffer|void): Stats {
 		version: valOfOptInt(m.version),
 		ctime: (m.ctime ? new Date(valOfOptInt(m.ctime)!) : undefined),
 		mtime: (m.mtime ? new Date(valOfOptInt(m.mtime)!) : undefined),
-		sync: (m.sync ? {
-			state: m.sync.state as SyncState,
-			conflictingRemote: ((m.sync.conflictingRemote!.length > 0) ?
-				m.sync.conflictingRemote!.map(fixInt) : undefined),
-			deletedOnRemote: !!valOfOpt(m.sync.deletedOnRemote) || undefined,
-			latest: valOfOptInt(m.sync.latest),
-			remote: valOfOptInt(m.sync.remote)
-		} : undefined),
 	};
 }
 
-export interface FileMsg {
-	writable: boolean;
-	isVersioned: boolean;
-	name: string;
-	isNew: boolean;
-	impl: ObjectReference<'FileImpl'>;
+interface SyncStatusMsg {
+	state: string;
+	synced?: SyncVersionsBranchMsg;
+	local?: SyncVersionsBranchMsg;
+	remote?: SyncVersionsBranchMsg;
+	existsInSyncedParent?: Value<boolean>;
 }
 
-const fileType = ProtoType.for<FileMsg>(pb.File);
+interface SyncVersionsBranchMsg {
+	latest?: Value<number>;
+	archived?: number[];
+	isArchived?: Value<boolean>;
+}
+
+function syncStatusToMsg(
+	s: SyncStatus|undefined
+): SyncStatusMsg|undefined {
+	if (!s) { return; }
+	return {
+		state: s.state,
+		local: syncBranchToMsg(s.local),
+		synced: syncBranchToMsg(s.synced),
+		remote: syncBranchToMsg(s.remote),
+		existsInSyncedParent: toOptVal(s.existsInSyncedParent)
+	};
+}
+
+function msgToSyncStatus(
+	m: SyncStatusMsg|undefined
+): SyncStatus|undefined {
+	if (!m) { return; }
+	return {
+		state: m.state as SyncStatus['state'],
+		local: msgToSyncBranch(m.local),
+		synced: msgToSyncBranch(m.synced),
+		remote: msgToSyncBranch(m.remote),
+		existsInSyncedParent: valOfOpt(m.existsInSyncedParent)
+	};
+}
+
+function syncBranchToMsg(
+	b: SyncVersionsBranch|undefined
+): SyncVersionsBranchMsg|undefined {
+	if (!b) { return; }
+	return {
+		latest: toOptVal(b.latest),
+		archived: (b.archived ? b.archived : undefined),
+		isArchived: toOptVal(b.isArchived)
+	};
+}
+
+function msgToSyncBranch(
+	m: SyncVersionsBranchMsg|undefined
+): SyncVersionsBranch|undefined {
+	if (!m) { return; }
+	return {
+		latest: valOfOptInt(m.latest),
+		archived: ((m.archived!.length > 0) ?
+			m.archived!.map(fixInt) : undefined),
+		isArchived: valOfOpt(m.isArchived)
+	};
+}
+
+const syncStatusMsgType = ProtoType.for<SyncStatusMsg>(pb.SyncStatusMsg);
+
+export function packSyncStatus(s: SyncStatus): Buffer {
+	return syncStatusMsgType.pack(syncStatusToMsg(s)!);
+}
+
+export function unpackSyncStatus(buf: Buffer|void): SyncStatus {
+	return msgToSyncStatus(syncStatusMsgType.unpack(buf))!;
+}
 
 
 namespace stat {
@@ -473,38 +562,85 @@ Object.freeze(getByteSource);
 
 
 interface FileEventMsg {
-	type: string;
+	type: (FileEvent|RemoteEvent)['type'];
 	path: string;
-	isRemote?: Value<boolean>;
+	src?: Value<FileEvent['src']>;
 	newVersion?: Value<number>;
-	current?: Value<number>;
-	uploaded?: Value<number>;
+	removedArchVer?: Value<number>;
+	archivedVersion?: Value<number>;
 }
 
 const fileEventType = ProtoType.for<FileEventMsg>(pb.FileEventMsg);
 
-export function packFileEvent(e: FileEvent): Buffer {
-	const msg: FileEventMsg = {
-		type: e.type,
-		path: e.path,
-		isRemote: toOptVal(e.isRemote),
-		newVersion: toOptVal(e.newVersion),
-		current: toOptVal((e as SyncUploadEvent).current),
-		uploaded: toOptVal((e as SyncUploadEvent).uploaded)
-	};
-	return fileEventType.pack(msg);
+export function packFileEvent(e: FileEvent|RemoteEvent): Buffer {
+	const { type, path } = e;
+	switch (type) {
+		case 'file-change':
+			return fileEventType.pack({
+				type, path,
+				src: toVal(e.src),
+				newVersion: toOptVal(e.newVersion)
+			});
+		case 'removed':
+			return fileEventType.pack({
+				type, path,
+				src: toVal(e.src)
+			});
+		case 'remote-change':
+			return fileEventType.pack({
+				type, path, newVersion: toOptVal(e.newVersion)
+			});
+		case 'remote-removal':
+			return fileEventType.pack({
+				type, path
+			});
+		case 'remote-arch-ver-removal':
+			return fileEventType.pack({
+				type, path, removedArchVer: toOptVal(e.removedArchVer)
+			});
+		case 'remote-version-archival':
+			return fileEventType.pack({
+				type, path, archivedVersion: toOptVal(e.archivedVersion)
+			});
+		default:
+			throw new Error(`Unknown event type ${type}`);
+	}
 }
 
-export function unpackFileEvent(buf: EnvelopeBody): FileEvent {
+export function unpackFileEvent(buf: EnvelopeBody): FileEvent|RemoteEvent {
 	const m = fileEventType.unpack(buf);
-	return {
-		type: m.type,
-		path: m.path,
-		isRemote: valOfOpt(m.isRemote),
-		newVersion: valOfOptInt(m.newVersion),
-		current: valOfOptInt(m.current),
-		uploaded: valOfOptInt(m.uploaded),
-	} as FileEvent;
+	const { type, path } = m;
+	switch (type) {
+		case 'file-change':
+			return {
+				type, path,
+				src: valOf(m.src!),
+				newVersion: valOfOptInt(m.newVersion!)
+			};
+		case 'removed':
+			return {
+				type, path,
+				src: valOf(m.src!)
+			};
+		case 'remote-removal':
+			return {
+				type, path
+			};
+		case 'remote-change':
+			return {
+				type, path, newVersion: intValOf(m.newVersion!)
+			};
+		case 'remote-arch-ver-removal':
+			return {
+				type, path, removedArchVer: intValOf(m.removedArchVer!)
+			};
+		case 'remote-version-archival':
+			return {
+				type, path, archivedVersion: intValOf(m.archivedVersion!)
+			};
+		default:
+			throw new Error(`Unknown event type ${type}`);
+	}
 }
 
 
@@ -512,7 +648,7 @@ namespace watch {
 
 	export function wrapService(fn: ReadonlyFile['watch']): ExposedFn {
 		return buf => {
-			const s = new Subject<FileEvent>();
+			const s = new Subject<FileEvent|RemoteEvent>();
 			const obs = s.asObservable().pipe(
 				map(packFileEvent)
 			);
@@ -813,18 +949,44 @@ export namespace vGetByteSource {
 Object.freeze(vGetByteSource);
 
 
-export namespace updateXAttrs {
+export interface XAttrMsg {
+	xaName: string;
+	str?: Value<string>;
+	json?: Value<string>;
+	bytes?: Value<Buffer>;
+}
 
-	export interface Attr {
-		xaName: string;
-		str?: Value<string>;
-		json?: Value<string>;
-		bytes?: Value<Buffer>;
+export function xattrToMsg(xaName: string, val: any): XAttrMsg {
+	const msg: XAttrMsg = { xaName };
+	if (Buffer.isBuffer(val)) {
+		msg.bytes = toVal(val);
+	} else if (ArrayBuffer.isView(val)) {
+		msg.bytes = toVal(toBuffer(val as Uint8Array));
+	} else if (typeof val === 'string') {
+		msg.str = toVal(val);
+	} else {
+		msg.json = toOptJson(val);
 	}
+	return msg;
+}
+
+export function xattrFromMsg(msg: XAttrMsg): { name: string; value: any; } {
+	const { xaName: name } = msg;
+	if (msg.bytes) {
+		return { name, value: valOf(msg.bytes) };
+	} else if (msg.str) {
+		return { name, value: valOf(msg.str) };
+	} else {
+		return { name, value: valOfOptJson(msg.json) };
+	}
+}
+
+
+export namespace updateXAttrs {
 
 	export interface Request {
 		changes: {
-			set: Attr[];
+			set: XAttrMsg[];
 			remove: string[];
 		};
 	}
@@ -835,14 +997,9 @@ export namespace updateXAttrs {
 		const attrs: XAttrsChanges = {};
 		if (r.set) {
 			attrs.set = {};
-			for (const attr of r.set) {
-				if (attr.bytes) {
-					attrs.set[attr.xaName] = valOf(attr.bytes);
-				} else if (attr.str) {
-					attrs.set[attr.xaName] = valOf(attr.str);
-				} else {
-					attrs.set[attr.xaName] = valOfOptJson(attr.json);
-				}
+			for (const xattr of r.set) {
+				const { name, value } = xattrFromMsg(xattr);
+				attrs.set[name] = value;
 			}
 		}
 		if (r.remove) {
@@ -871,15 +1028,7 @@ export namespace updateXAttrs {
 		};
 		if (changes.set) {
 			for (const [ xaName, val ] of Object.entries(changes.set)) {
-				const attr: Attr = { xaName };
-				if (Buffer.isBuffer(val)) {
-					attr.bytes = toVal(val);
-				} else if (typeof val === 'string') {
-					attr.str = toVal(val);
-				} else {
-					attr.json = toOptJson(val);
-				}
-				r.set.push(attr);
+				r.set.push(xattrToMsg(xaName, val));
 			}
 		}
 		return r;
@@ -1266,6 +1415,304 @@ export namespace vGetByteSink {
 
 }
 Object.freeze(vGetByteSink);
+
+
+namespace vsStatus {
+
+	export function wrapService(fn: WritableFileSyncAPI['status']): ExposedFn {
+		return () => {
+			const promise = fn()
+			.then(packSyncStatus);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['status'] {
+		const path = objPath.concat('status');
+		return () => caller
+		.startPromiseCall(path, undefined)
+		.then(unpackSyncStatus);
+	}
+
+}
+Object.freeze(vsStatus);
+
+
+namespace vsUpdateStatusInfo {
+
+	export function wrapService(
+		fn: WritableFileSyncAPI['updateStatusInfo']
+	): ExposedFn {
+		return () => {
+			const promise = fn()
+			.then(packSyncStatus);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['updateStatusInfo'] {
+		const path = objPath.concat('updateStatusInfo');
+		return () => caller
+		.startPromiseCall(path, undefined)
+		.then(unpackSyncStatus);
+	}
+
+}
+Object.freeze(vsUpdateStatusInfo);
+
+
+namespace vsIsRemoteVersionOnDisk {
+
+	const requestType = ProtoType.for<{
+		version: number;
+	}>(pb.FileSyncIsOnDiskRequestBody);
+
+	const replyType = ProtoType.for<{
+		status: 'partial'|'complete'|'none'
+	}>(pb.FileSyncIsOnDiskReplyBody);
+
+	export function wrapService(
+		fn: WritableFileSyncAPI['isRemoteVersionOnDisk']
+	): ExposedFn {
+		return buf => {
+			const { version } = requestType.unpack(buf);
+			const promise = fn(fixInt(version))
+			.then(status => replyType.pack({ status }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['isRemoteVersionOnDisk'] {
+		const path = objPath.concat('isRemoteVersionOnDisk');
+		return version => caller
+		.startPromiseCall(path, requestType.pack({ version }))
+		.then(buf => replyType.unpack(buf).status);
+	}
+
+}
+Object.freeze(vsIsRemoteVersionOnDisk);
+
+
+namespace vsDownload {
+
+	const requestType = ProtoType.for<{
+		version: number;
+	}>(pb.FileSyncDownloadRequestBody);
+
+	export function wrapService(fn: WritableFileSyncAPI['download']): ExposedFn {
+		return buf => {
+			const { version } = requestType.unpack(buf);
+			const promise = fn(fixInt(version));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['download'] {
+		const path = objPath.concat('download');
+		return version => caller
+		.startPromiseCall(path, requestType.pack({ version })) as Promise<void>;
+	}
+
+}
+Object.freeze(vsDownload);
+
+
+export interface OptionsToUploadLocalMsg {
+	localVersion?: Value<number>;
+	uploadVersion?: Value<number>;
+}
+
+export function optionsToUploadLocalToMsg(
+	opts?: OptionsToUploadLocal
+): OptionsToUploadLocalMsg|undefined {
+	if (!opts) { return; }
+	return {
+		localVersion: toOptVal(opts.localVersion),
+		uploadVersion: toOptVal(opts.uploadVersion)
+	};
+}
+
+export function optionsToUploadLocalFromMsg(
+	opts?: OptionsToUploadLocalMsg
+): OptionsToUploadLocal|undefined {
+	if (!opts) { return; }
+	return {
+		localVersion: valOfOptInt(opts.localVersion),
+		uploadVersion: valOfOptInt(opts.uploadVersion)
+	};
+}
+
+
+namespace vsUpload {
+
+	const requestType = ProtoType.for<{
+		opts?: OptionsToUploadLocalMsg;
+	}>(pb.FileSyncUploadRequestBody);
+
+	export function wrapService(fn: WritableFileSyncAPI['upload']): ExposedFn {
+		return buf => {
+			const { opts } = requestType.unpack(buf);
+			const promise = fn(optionsToUploadLocalFromMsg(opts));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['upload'] {
+		const path = objPath.concat('upload');
+		return opts => caller
+		.startPromiseCall(path, requestType.pack({
+			opts: optionsToUploadLocalToMsg(opts)
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(vsUpload);
+
+
+export interface OptionsToAdopteRemoteMsg {
+	dropLocalVer?: Value<boolean>;
+	remoteVersion?: Value<number>;
+}
+
+export function remoteAdoptionOptsToMsg(
+	opts: OptionsToAdopteRemote|undefined
+): OptionsToAdopteRemoteMsg|undefined {
+	if (!opts) { return; }
+	return {
+		dropLocalVer: toOptVal(opts.dropLocalVer),
+		remoteVersion: toOptVal(opts.remoteVersion)
+	};
+}
+
+export function remoteAdoptionOptsFromMsg(
+	msg: OptionsToAdopteRemoteMsg|undefined
+): OptionsToAdopteRemote|undefined {
+	if (!msg) { return; }
+	return {
+		dropLocalVer: valOfOpt(msg.dropLocalVer),
+		remoteVersion: valOfOptInt(msg.remoteVersion)
+	}
+}
+
+
+namespace vsAdoptRemote {
+
+	const requestType = ProtoType.for<{
+		opts?: OptionsToAdopteRemoteMsg;
+	}>(pb.AdoptRemoteRequestBody);
+
+	export function wrapService(
+		fn: WritableFileSyncAPI['adoptRemote']
+	): ExposedFn {
+		return buf => {
+			const { opts } = requestType.unpack(buf);
+			const promise = fn(remoteAdoptionOptsFromMsg(opts));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['adoptRemote'] {
+		const path = objPath.concat('adoptRemote');
+		return opts => caller
+		.startPromiseCall(path, requestType.pack({
+			opts: remoteAdoptionOptsToMsg(opts)
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(vsAdoptRemote);
+
+
+export namespace vListVersions {
+
+	const replyType = ProtoType.for<{
+		current?: Value<number>;
+		archived?: number[];
+	}>(pb.ListVersionsReplyBody);
+
+	export function packReply(
+		v: { current?: number; archived?: number[]; }
+	): Buffer {
+		return replyType.pack({
+			current: toOptVal(v.current),
+			archived: v.archived
+		});
+	}
+
+	export function unpackReply(
+		b: Buffer
+	): { current?: number; archived?: number[]; } {
+		const r = replyType.unpack(b);
+		return {
+			current: valOfOptInt(r.current),
+			archived: ((r.archived!.length > 0) ?
+				r.archived!.map(fixInt) : undefined)
+		};
+	}
+
+	export function wrapService(
+		fn: ReadonlyFileVersionedAPI['listVersions']
+	): ExposedFn {
+		return () => {
+			const promise = fn()
+			.then(packReply);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFileVersionedAPI['listVersions'] {
+		const path = objPath.concat('listVersions');
+		return () => caller
+		.startPromiseCall(path)
+		.then(unpackReply);
+	}
+
+}
+Object.freeze(vListVersions);
+
+
+namespace vArchiveCurrent {
+
+	const requestType = ProtoType.for<{
+		version?: Value<number>;
+	}>(pb.ArchiveCurrentRequestBody);
+
+	export function wrapService(
+		fn: WritableFileVersionedAPI['archiveCurrent']
+	): ExposedFn {
+		return buf => {
+			const { version } = requestType.unpack(buf);
+			const promise = fn(valOfOptInt(version))
+			.then(packInt);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileVersionedAPI['archiveCurrent'] {
+		const path = objPath.concat('archiveCurrent');
+		return version => caller
+		.startPromiseCall(path, requestType.pack({ version: toOptVal(version) }))
+		.then(unpackInt);
+	}
+
+}
+Object.freeze(vArchiveCurrent);
 
 
 Object.freeze(exports);

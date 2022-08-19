@@ -20,11 +20,11 @@
  * reliance set, exposing to outside only file system's wrap.
  */
 
-import { makeFileException, Code as excCode, FileException } from '../../../lib-common/exceptions/file';
+import { makeFileException, Code as excCode, FileException, Code } from '../../../lib-common/exceptions/file';
 import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject } from './file';
-import { Storage, NodeType, ObjId, NodesContainer, NodeEvent } from './common';
+import { Storage, NodeType, ObjId, NodeEvent, setPathInExc, isSyncedStorage } from './common';
 import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../../files';
 import { selectInFS } from '../../files-select';
 import { posix } from 'path';
@@ -76,6 +76,13 @@ type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type VersionedFileFlags = web3n.files.VersionedFileFlags;
 type XAttrsChanges = web3n.files.XAttrsChanges;
+type WritableFSSyncAPI = web3n.files.WritableFSSyncAPI;
+type SyncStatus = web3n.files.SyncStatus;
+type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
+type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
+type FolderDiff = web3n.files.FolderDiff;
 
 const WRITE_NONEXCL_FLAGS: VersionedFileFlags = {
 	create: true,
@@ -84,6 +91,7 @@ const WRITE_NONEXCL_FLAGS: VersionedFileFlags = {
 };
 
 type BroadcastedEvents = 'close';
+
 
 export class XspFS implements WritableFS {
 	
@@ -100,7 +108,7 @@ export class XspFS implements WritableFS {
 	) {
 		this.store = storage;
 		this.type = this.store.type;
-		this.v = new V(rootNode);
+		this.v = new V(rootNode, this.writable, isSyncedStorage(this.store));
 		Object.seal(this);
 	}
 
@@ -157,7 +165,7 @@ export class XspFS implements WritableFS {
 	static async fromExistingRoot(
 		storage: Storage, key: Uint8Array
 	): Promise<WritableFS> {
-		const objSrc = await storage.getObj(null!);
+		const objSrc = await storage.getObjSrc(null);
 		const root = await FolderNode.rootFromObjBytes(
 			storage, undefined, null, objSrc, key);
 		const fs = new XspFS(storage, true, root);
@@ -171,7 +179,7 @@ export class XspFS implements WritableFS {
 		const fs = new XspFS(storage, false, root, rootName);
 		return wrapIntoVersionlessReadonlyFS(fs);
 	}
-	
+
 	/**
 	 * Note that this method doesn't close storage.
 	 */
@@ -180,24 +188,24 @@ export class XspFS implements WritableFS {
 		this.store = undefined;
 		this.fsObs.done();
 	}
-	
+
 	async makeFolder(path: string, exclusive = false): Promise<void> {
 		const folderPath = splitPathIntoParts(path);
 		const root = this.v.getRootIfNotClosed(path);
-		await root.getFolderInThisSubTree(
-			folderPath, true, exclusive).catch(setExcPath(path));
+		await root.getFolderInThisSubTree(folderPath, true, exclusive)
+		.catch(setExcPath(path));
 	}
 
 	select(path: string, criteria: SelectCriteria):
 			Promise<{ items: FSCollection; completion: Promise<void>; }> {
 		return selectInFS(this, path, criteria);
 	}
-	
+
 	async deleteFolder(path: string, removeContent = false): Promise<void> {
 		const { fileName: folderName, folderPath: parentPath } = split(path);
 		const root = this.v.getRootIfNotClosed(path);
-		const parentFolder = await root.getFolderInThisSubTree(
-			parentPath).catch(setExcPath(parentPath.join('/')));
+		const parentFolder = await root.getFolderInThisSubTree(parentPath)
+		.catch(setExcPath(parentPath.join('/')));
 		if (typeof folderName !== 'string') { throw new Error(
 			'Cannot remove root folder'); }
 		const folder = (await parentFolder.getFolder(folderName)
@@ -207,24 +215,24 @@ export class XspFS implements WritableFS {
 		}
 		await parentFolder.removeChild(folder);
 	}
-	
+
 	async deleteFile(path: string): Promise<void> {
 		const { fileName, folderPath } = split(path);
 		const root = this.v.getRootIfNotClosed(path);
-		const parentFolder = await root.getFolderInThisSubTree(
-			folderPath).catch(setExcPath(path));
+		const parentFolder = await root.getFolderInThisSubTree(folderPath)
+		.catch(setExcPath(path));
 		const file = await parentFolder.getFile(fileName)
 		.catch(setExcPath(path));
 		await parentFolder.removeChild(file!);
 	}
-	
+
 	async deleteLink(path: string): Promise<void> {
 		const { fileName, folderPath } = split(path);
 		const root = this.v.getRootIfNotClosed(path);
-		const parentFolder = await root.getFolderInThisSubTree(
-			folderPath).catch(setExcPath(path));
-		const link = await parentFolder.getLink(
-			fileName).catch(setExcPath(path));
+		const parentFolder = await root.getFolderInThisSubTree(folderPath)
+		.catch(setExcPath(path));
+		const link = await parentFolder.getLink(fileName)
+		.catch(setExcPath(path));
 		await parentFolder.removeChild(link!);
 	}
 	
@@ -260,13 +268,11 @@ export class XspFS implements WritableFS {
 
 	async stat(path: string): Promise<Stats> {
 		const node = await this.v.get(path);
-		const sync = await node.sync();
 		const attrs = node.getAttrs();
 		const stats: Stats = {
 			ctime: new Date(attrs.ctime),
 			mtime: new Date(attrs.mtime),
 			version: node.version,
-			sync,
 			writable: this.writable,
 		};
 		if (node.type === 'file') {
@@ -452,6 +458,7 @@ export class XspFS implements WritableFS {
 		const watchSub = from(nodeProm)
 		.pipe(
 			mergeMap(f => f.event$),
+			map(event => shallowCopyWithPath(event, path)),
 			takeUntil(this.getCloseEvent$())
 		)
 		.subscribe(toRxObserver(observer));
@@ -466,6 +473,7 @@ export class XspFS implements WritableFS {
 		.pipe(
 			mergeMap(folder => folder.getFile(fileName)),
 			mergeMap(f => f!.event$),
+			map(event => shallowCopyWithPath(event, path)),
 			takeUntil(this.getCloseEvent$())
 		)
 		.subscribe(toRxObserver(observer));
@@ -473,24 +481,18 @@ export class XspFS implements WritableFS {
 	}
 
 	watchTree(
-		path: string, observer: Observer<FolderEvent|FileEvent>
+		path: string, depth: number|undefined,
+		observer: Observer<FolderEvent|FileEvent>
 	): () => void {
 		const folderPath = splitPathIntoParts(path);
 		const root = this.v.getRootIfNotClosed(path);
-		const idToPath = new ObjIdToPathMap();
+		const idToPath = new ObjIdToPathMap(depth);
 		const setupFilterMap = root.getFolderInThisSubTree(folderPath, false)
 		.then(rootNode => idToPath.fillFromTree(rootNode));
 		const watchSub = from(setupFilterMap)
 		.pipe(
 			mergeMap(() => this.storage().getNodeEvents()),
-			map(nodeEvent => {
-				const path = idToPath.getPathCorrectingTreeMap(nodeEvent);
-				if (path) {
-					const event = nodeEvent.event;
-					event.path = path;
-					return event;
-				}
-			}, 1),
+			map(nodeEvent => idToPath.copyWithLongPath(nodeEvent)),
 			filter(event => !!event),
 			takeUntil(this.getCloseEvent$())
 		)
@@ -511,13 +513,16 @@ export class XspFS implements WritableFS {
 			if (flags.create && flags.exclusive) { throw makeFileException(
 				excCode.alreadyExists, path); }
 			const fNode = await this.v.getOrCreateFile(path, flags);
-			return wrapWritableFile(
-				FileObject.makeExisting(fNode, true) as WritableFile);
+			return wrapWritableFile(FileObject.makeExisting(
+				fNode, true
+			) as WritableFile);
 		} else {
 			if (!flags.create) { throw makeFileException(excCode.notFound, path); }
 			return wrapWritableFile(FileObject.makeForNotExisiting(
 				posix.basename(path),
-				() => this.v.getOrCreateFile(path, flags)));
+				() => this.v.getOrCreateFile(path, flags),
+				!!this.v.sync
+			));
 		}
 	}
 
@@ -600,15 +605,42 @@ export class XspFS implements WritableFS {
 Object.freeze(XspFS.prototype);
 Object.freeze(XspFS);
 
-type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
 
-class V implements WritableFSVersionedAPI {
+interface N {
+	get(path: string): Promise<NodeInFS<any>>;
+	ensureIsWritable(): void;
+}
 
-	private rootNode: FolderNode|undefined;
 
-	constructor(root: FolderNode) {
-		this.rootNode = root;
+class V implements WritableFSVersionedAPI, N {
+
+	readonly sync: S|undefined;
+
+	constructor(
+		private rootNode: FolderNode|undefined,
+		private readonly writable: boolean,
+		isInSyncedStorage: boolean
+	) {
+		this.sync = (isInSyncedStorage ? new S(this) : undefined);
 		Object.seal(this);
+	}
+
+	async archiveCurrent(path: string, version?: number): Promise<number> {
+		this.ensureIsWritable();
+		const node = await this.get(path);
+		try {
+			const archivedVer = await node.archiveCurrent(version);
+			return archivedVer;
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	async listVersions(
+		path: string
+	): Promise<{ current?: number; archived?: number[]; }> {
+		const node = await this.get(path);
+		return node.listVersions();
 	}
 
 	close(): void {
@@ -650,7 +682,12 @@ class V implements WritableFSVersionedAPI {
 		return node! as NodeInFS<any>;
 	}
 
+	ensureIsWritable(): void {
+		if (!this.writable) { throw new Error(`FS is not writable`); }
+	}
+
 	async updateXAttrs(path: string, changes: XAttrsChanges): Promise<number> {
+		this.ensureIsWritable();
 		const node = await this.get(path);
 		return node.updateXAttrs(changes);
 	}
@@ -685,6 +722,7 @@ class V implements WritableFSVersionedAPI {
 	async writeBytes(
 		path: string, bytes: Uint8Array, flags = WRITE_NONEXCL_FLAGS
 	): Promise<number> {
+		this.ensureIsWritable();
 		const f = await this.getOrCreateFile(path, flags);
 		return f.save(bytes);
 	}
@@ -733,6 +771,7 @@ class V implements WritableFSVersionedAPI {
 	async getByteSink(
 		path: string, flags = WRITE_NONEXCL_FLAGS
 	): Promise<{ sink: FileByteSink; version: number; }> {
+		this.ensureIsWritable();
 		const f = await this.getOrCreateFile(path, flags);
 		return f.writeSink(flags.truncate, flags.currentVersion);
 	}
@@ -751,74 +790,69 @@ Object.freeze(V);
 
 class ObjIdToPathMap {
 
-	private readonly map = new Map<ObjId, string>();
-	private readonly moves = new Map<number, {
-		newPath?: string; objId?: ObjId;
-	}>();
+	private readonly map = new Map<ObjId, { path: string; depth: number; }>();
 
-	constructor() {
+	constructor(
+		private readonly maxDepth: number|undefined
+	) {
 		Object.seal(this);
 	}
 
 	async fillFromTree(root: FolderNode): Promise<void> {
-		for (const [ objId, path ] of await recursiveIdAndPathList(root, '.')) {
-			this.map.set(objId, path);
+		const listOfAll = await recursiveIdAndPathList(root, '.', this.maxDepth);
+		for (const [ objId, path, depth ] of listOfAll) {
+			this.map.set(objId, { path, depth });
 		}
 	}
 
-	getPathCorrectingTreeMap(
-		{ event, objId, parentObjId }: NodeEvent
+	private getPathCorrectingTreeMap(
+		{ event, objId, parentObjId, childObjId }: NodeEvent
 	): string|undefined {
-		let path = this.map.get(objId);
-		if (path) {
-			if (event.type === 'removed') {
-				this.map.delete(objId);
-			} else if (event.type === 'entry-renaming') {
-				const { newName, oldName } = event;
-				const child = this.findObjIdByPath(`${path}/${oldName}`);
-				if (child) {
-					this.map.set(child, `${path}/${newName}`);
-				}
-			} else if (event.type === 'entry-removal') {
-				const { moveLabel, name } = event;
-				if (moveLabel) {
-					const child = this.findObjIdByPath(`${path}/${name}`);
-					if (child) {
-						const moveInfo = this.moves.get(moveLabel);
-						if (moveInfo) {
-							this.map.set(child, moveInfo.newPath!);
-							this.moves.delete(moveLabel);
-						} else {
-							this.moves.set(moveLabel, { objId: child });
-						}
-					}
-				}
-			} else if (event.type === 'entry-addition') {
-				const { moveLabel, entry: { name } } = event;
-				const newPath = `${path}/${name}`;
-				if (moveLabel) {
-					const moveInfo = this.moves.get(moveLabel);
-					if (moveInfo) {
-						this.map.set(moveInfo.objId!, newPath);
-						this.moves.delete(moveLabel);
-					} else {
-						this.moves.set(moveLabel, { newPath });
-					}
-				}
-			}
+		let pathAndDepth = this.map.get(objId);
+		if (pathAndDepth) {
+			const { path, depth } = pathAndDepth;
+			this.updateFoundObjMapOnEvent(objId, path, depth, childObjId, event);
 			return path;
 		}
-		const parentPath = this.map.get(parentObjId!);
-		if (!parentPath || (event.type === 'removed')) { return; }
-		path = `${parentPath}/${event.path}`;
-		this.map.set(objId, path);
+		if (event.type === 'removed') { return; }
+		if (parentObjId === undefined) { return; }
+		const parent = this.map.get(parentObjId);
+		if (!parent) { return; }
+		if ((this.maxDepth !== undefined)
+		&& (this.maxDepth <= parent.depth)) { return; }
+		const path = `${parent.path}/${event.path}`;
+		this.map.set(objId, { path, depth: parent.depth+1 });
 		return path;
 	}
 
-	private findObjIdByPath(path: string): ObjId|undefined {
-		for (const [ objId, p ] of this.map.entries()) {
-			if (p === path) { return objId; }
+	private updateFoundObjMapOnEvent(
+		objId: ObjId, path: string, depth: number,
+		childObjId: NodeEvent['childObjId'], event: NodeEvent['event']
+	): void {
+		if (event.type === 'removed') {
+			this.map.delete(objId);
+			return;
 		}
+		if ((this.maxDepth !== undefined) && (this.maxDepth <= depth)) { return; }
+		if (event.type === 'entry-renaming') {
+			const childEntry = this.map.get(childObjId!);
+			if (childEntry) {
+				childEntry.path === `${path}/${event.newName}`;
+			}
+		} else if (event.type === 'entry-removal') {
+			const childEntry = this.map.get(childObjId!);
+			if (childEntry && (childEntry.path === `${path}/${event.name}`)) {
+				this.map.delete(childObjId!);
+			}
+		} else if (event.type === 'entry-addition') {
+			this.map.set(childObjId!,
+				{ path: `${path}/${event.entry.name}`, depth: depth+1 });
+		}
+	}
+
+	copyWithLongPath(nodeEvent: NodeEvent): NodeEvent['event']|undefined {
+		const path = this.getPathCorrectingTreeMap(nodeEvent);
+		return (path ? shallowCopyWithPath(nodeEvent.event, path) : undefined);
 	}
 
 }
@@ -827,22 +861,143 @@ Object.freeze(ObjIdToPathMap);
 
 
 async function recursiveIdAndPathList(
-	folder: FolderNode, path: string
-): Promise<[ ObjId, string ][]> {
+	folder: FolderNode, path: string, maxDepth: number|undefined, depth = 0
+): Promise<[ ObjId, string, number ][]> {
 	const { lst } = folder.list();
-	const idAndPaths: [ ObjId, string ][] = [ [ folder.objId, path ] ];
+	const idAndPaths: [ ObjId, string, number ][] = [
+		[ folder.objId, path, depth ]
+	];
+	if ((maxDepth !== undefined) && (depth === maxDepth)) {
+		return idAndPaths;
+	}
 	for (const item of lst) {
+		const childPath = `${path}/${item.name}`;
 		if (item.isFile || item.isLink) {
-
+			const { objId } = folder.getNodeInfo(item.name)!;
+			idAndPaths.push([ objId, childPath, depth+1 ]);
 		} else if (item.isFolder) {
 			const child = await folder.getFolder(item.name);
 			const childLst = await recursiveIdAndPathList(
-				child!, `${path}/${item.name}`);
+				child!, childPath, maxDepth, depth+1);
 			idAndPaths.push(... childLst);
 		}
 	}
 	return idAndPaths;
 }
+
+function shallowCopyWithPath(
+	event: NodeEvent['event'], path: string
+): NodeEvent['event'] {
+	const shallowCopy = {} as NodeEvent['event'];
+	for (const [field, value] of Object.entries(event)) {
+		shallowCopy[field] = value;
+	}
+	shallowCopy.path = path;
+	return shallowCopy;
+}
+
+
+class S implements WritableFSSyncAPI {
+
+	constructor(
+		private readonly n: N,
+	) {
+		Object.freeze(this);
+	}
+
+	async upload(path: string, opts?: OptionsToUploadLocal): Promise<void> {
+		this.n.ensureIsWritable();
+		const node = await this.n.get(path);
+		try {
+			await node.upload(opts);
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		};
+	}
+
+	async status(path: string): Promise<SyncStatus> {
+		const node = await this.n.get(path);
+		try {
+			const status = await node.syncStatus();
+			return status;
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	async updateStatusInfo(path: string): Promise<SyncStatus> {
+		const node = await this.n.get(path);
+		const status = await node.updateStatusInfo();
+		return status;
+	}
+
+	async isRemoteVersionOnDisk(
+		path: string, version: number
+	): Promise<'complete' | 'partial' | 'none'> {
+		const node = await this.n.get(path);
+		try {
+			const isOnDisk = await node.isSyncedVersionOnDisk(version);
+			return isOnDisk;
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	async download(path: string, version: number): Promise<void> {
+		const node = await this.n.get(path);
+		try {
+			await node.download(version);
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	async adoptRemote(
+		path: string, opts?: OptionsToAdopteRemote
+	): Promise<void> {
+		const node = await this.n.get(path);
+		try {
+			await node.adoptRemote(opts);
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	private async getFolderNode(path: string): Promise<FolderNode> {
+		const node = await this.n.get(path);
+		if (node.type !== 'folder') {
+			throw makeFileException(Code.notDirectory, path);
+		}
+		return node as FolderNode;
+	}
+
+	async diffCurrentAndRemoteFolderVersions(
+		path: string, remoteVersion?: number
+	): Promise<FolderDiff|undefined> {
+		const node = await this.getFolderNode(path);
+		try {
+			const diff = await node.diffCurrentAndRemote(remoteVersion);
+			return diff;
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+	async adoptRemoteFolderItem(
+		path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
+	): Promise<number> {
+		const node = await this.getFolderNode(path);
+		try {
+			const newVersion = await node.adoptRemoteFolderItem(itemName, opts);
+			return newVersion;
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+	}
+
+}
+Object.freeze(S.prototype);
+Object.freeze(S);
 
 
 Object.freeze(exports);

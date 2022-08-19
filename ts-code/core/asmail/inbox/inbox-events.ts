@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -25,6 +25,8 @@ import { toRxObserver } from '../../../lib-common/utils-for-observables';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type Observer<T> = web3n.Observer<T>;
+type Events = msgRecievedCompletely.Event;
+type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
 
@@ -40,12 +42,12 @@ export class InboxEvents {
 		getMsg: (msgId: string) => Promise<IncomingMessage>,
 		logError: LogError
 	) {
-		const serverEvents = new ServerEvents(
+		const serverEvents = new ServerEvents<EventNames, Events>(
 			() => msgReceiver.openEventSource(),
-			SERVER_EVENTS_RESTART_WAIT_SECS);
+			SERVER_EVENTS_RESTART_WAIT_SECS
+		);
 
-		this.newMsg$ = serverEvents.observe<msgRecievedCompletely.Event>(
-			msgRecievedCompletely.EVENT_NAME)
+		this.newMsg$ = serverEvents.observe(msgRecievedCompletely.EVENT_NAME)
 		.pipe(
 			mergeMap(ev => getMsg(ev.msgId)
 				.catch(async (err) => {

@@ -32,6 +32,7 @@ export const Code: web3n.files.exceptionCode = {
 	notImplemented: 'ENOSYS',
 	isEndless: 'is-endless',
 	storageClosed: 'storage-closed',
+	versionMismatch: 'version-mismatch',
 };
 Object.freeze(Code);
 
@@ -79,6 +80,8 @@ export function makeFileException(
 		err.isEndless = true;
 	} else if (code === Code.storageClosed) {
 		err.storageClosed = true;
+	} else if (code === Code.versionMismatch) {
+		err.versionMismatch = true;
 	}
 	return err;
 }

@@ -17,7 +17,7 @@
 
 import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
 import { ObjOnDisk, GetBaseSegsOnDisk } from '../../../lib-client/objs-on-disk/obj-on-disk';
-import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { LocalObjStatus, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ObjSource, Subscribe } from 'xsp-files';
 import { NamedProcs } from '../../../lib-common/processes/synced';
 import { join } from 'path';
@@ -179,16 +179,12 @@ export class LocalObj {
 		this.scheduleGC(this);
 	}
 
-	isArchived(): boolean {
-		return this.status.isArchived();
+	localStatus(): LocalObjStatus {
+		return this.status;
 	}
 
-	getCurrentVersionOrThrow(): number {
-		return this.status.getCurrentVersionOrThrow();
-	}
-
-	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
-		return this.status.getNonGarbageVersions();
+	statusObj(): ObjStatus {
+		return this.status;
 	}
 
 	async removeCurrentVersion(): Promise<void> {

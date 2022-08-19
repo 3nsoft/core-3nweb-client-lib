@@ -23,7 +23,7 @@ import { SpecIt } from '../test-utils';
 type FileException = web3n.files.FileException;
 
 export const specs: SpecDescribe = {
-	description: '.readBytes',
+	description: '.v.readBytes',
 	its: []
 };
 
@@ -33,7 +33,7 @@ it.func = async function(s) {
 	let fName = 'unknown-file';
 	expect(await testFS.checkFilePresence(fName)).toBe(false);
 	try {
-		await testFS.readBytes(fName)
+		await testFS.v!.readBytes(fName)
 		fail('reading bytes must fail, when file does not exist');
 	} catch (err) {
 		expect((err as FileException).notFound).toBe(true);

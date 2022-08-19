@@ -16,8 +16,8 @@
 */
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
-import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { makeObjNotFoundExc, makeObjExistsExc } from '../../../lib-client/3nstorage/exceptions';
+import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/3nstorage/exceptions';
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
@@ -25,17 +25,17 @@ import { bytes as randomBytes } from '../../../lib-common/random-node';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { AsyncSBoxCryptor, NONCE_LENGTH, Subscribe, ObjSource } from 'xsp-files';
-import { Downloader } from './downloader';
 import { RemoteEvents } from './remote-events';
 import { UpSyncer } from './upsyncer';
 import { NetClient } from '../../../lib-client/request-utils';
 import { Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
-import { UpSyncTaskInfo } from './obj-status';
+import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
-type Stats = web3n.files.Stats;
+type SyncStatus = web3n.files.SyncStatus;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 
 
 export class SyncedStore implements ISyncedStorage {
@@ -54,11 +54,11 @@ export class SyncedStore implements ISyncedStorage {
 		public readonly cryptor: AsyncSBoxCryptor,
 		private readonly logError: LogError
 	) {
-		const getFSNodes = (objId: ObjId) => this.nodes.get(objId);
 		this.remoteEvents = new RemoteEvents(
-			this.remoteStorage, this.files, getFSNodes, this.logError);
-		this.uploader = new UpSyncer(this.remoteStorage, this.logError,
-			this.broadcastUpSyncEvent.bind(this));
+			this.remoteStorage, this.files,
+			this.broadcastNodeEvent.bind(this), this.logError
+		);
+		this.uploader = new UpSyncer(this.remoteStorage, this.logError);
 		Object.seal(this);
 	}
 
@@ -66,12 +66,10 @@ export class SyncedStore implements ISyncedStorage {
 		path: string, user: string, getSigner: IGetMailerIdSigner,
 		getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
 		remoteServiceUrl: () => Promise<string>,
-		makeNet: () => NetClient, logError: LogError
+		net: NetClient, logError: LogError
 	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
-		const remote = new RemoteStorage(
-			user, getSigner, remoteServiceUrl, makeNet());
-		const objFiles = await ObjFiles.makeFor(
-			path, new Downloader(remote), logError);
+		const remote = new RemoteStorage(user, getSigner, remoteServiceUrl, net);
+		const objFiles = await ObjFiles.makeFor(path, remote, logError);
 		const s = new SyncedStore(
 			objFiles, remote, getStorages, cryptor, logError);
 		s.uploader.start();
@@ -88,15 +86,10 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	broadcastNodeEvent(
-		objId: ObjId, parentObjId: ObjId|undefined, event: FolderEvent|FileEvent
+		objId: ObjId, parentObjId: ObjId|undefined, childObjId: ObjId|undefined,
+		event: FolderEvent|FileEvent
 	): void {
-		this.events.next({ objId, parentObjId, event });
-	}
-
-	private broadcastUpSyncEvent(objId: ObjId, task: UpSyncTaskInfo): void {
-		const node = this.nodes.get(objId);
-		if (!node) { return; }
-		node.broadcastUpSyncEvent(task);
+		this.events.next({ objId, parentObjId, childObjId, event });
 	}
 
 	storageForLinking(type: web3n.files.FSType, location?: string): IStorage {
@@ -109,12 +102,104 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	async getObjSyncInfo(objId: ObjId): Promise<Stats['sync']> {
-		const obj = await this.files.findObj(objId);
-		if (!obj) { return; }
-		return obj.sync().stat();
+	async status(objId: ObjId): Promise<SyncedObjStatus> {
+		const obj = await this.getObjOrThrow(objId);
+		return obj.syncStatus();
 	}
-	
+
+	async adoptRemote(
+		objId: ObjId, opts: OptionsToAdopteRemote|undefined
+	): Promise<number|undefined> {
+		const obj = await this.getObjOrThrow(objId);
+		const objStatus = obj.statusObj();
+		await objStatus.adoptRemoteVersion(
+			opts?.remoteVersion, opts?.dropLocalVer
+		);
+		if (opts && opts.download) {
+
+			// XXX this needs implementation
+
+		}
+		this.files.scheduleGC(obj);
+		return objStatus.syncStatus().synced!.latest!;
+	}
+
+	async updateStatusInfo(objId: ObjId): Promise<SyncStatus> {
+		const obj = await this.getObjOrThrow(objId, true);
+		try {
+			const statusOnServer = await this.remoteStorage.getObjStatus(objId);
+			const objStatus = obj.statusObj();
+			await objStatus.recordStatusFromServer(statusOnServer);
+			return objStatus.syncStatus();
+		} catch (exc) {
+			if (((exc as StorageException).type === 'storage')
+			&& (exc as StorageException).objNotFound) {
+				const objStatus = obj.statusObj();
+				await objStatus.recordStatusFromServer({});
+				return objStatus.syncStatus();	
+			}
+			throw exc;
+		}
+	}
+
+	isRemoteVersionOnDisk(
+		objId: ObjId, version: number
+	): Promise<'complete'|'partial'|'none'> {
+		// XXX
+		//  - check that given version is synced
+		//  - get state of file
+		// But, should this be renamed to isRemoteVersionOnDisk ?
+		// 
+
+		throw new Error('SyncedStore.isRemoteVersionOnDisk() not implemented.');
+	}
+
+	download(objId: ObjId, version: number): Promise<void> {
+		// XXX 
+
+		throw new Error('SyncedStore.download() not implemented.');
+	}
+
+	async upload(
+		objId: ObjId, localVersion: number, uploadVersion: number,
+		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean
+	): Promise<void> {
+		const obj = await this.getObjOrThrow(objId, true);
+		const syncedBase = await obj.combineLocalBaseIfPresent(localVersion);
+		if (uploadHeader) {
+			await obj.saveUploadHeaderFile(uploadHeader);
+		}
+		await this.uploader.uploadFromDisk(
+			obj, localVersion, uploadVersion, uploadHeader?.uploadHeader,
+			syncedBase, createOnRemote
+		);
+		await obj.recordUploadCompletion(
+			localVersion, uploadVersion,
+			(uploadHeader ? {
+				newHeader: uploadHeader.uploadHeader,
+				originalHeader: uploadHeader.localHeader
+			} : undefined)
+		);
+		if (localVersion > uploadVersion) {
+			await obj.removeLocalVersionFilesLessThan(localVersion);
+		}
+	}
+
+	async uploadObjRemoval(objId: ObjId): Promise<void> {
+		if (!objId) { return; }
+		await this.remoteStorage.deleteObj(objId);
+	}
+
+	dropCachedLocalObjVersionsLessOrEqual(objId: ObjId, version: number): void {
+		const obj = this.files.getObjInCache(objId);
+		if (!obj) { return; }
+		obj.dropCachedLocalObjVersionsLessOrEqual(version);
+	}
+
+	async archiveVersionOnServer(objId: ObjId, version: number): Promise<void> {
+		await this.remoteStorage.archiveObjVersion(objId, version);
+	}
+
 	getRootKeyDerivParamsFromServer(): Promise<ScryptGenParams> {
 		return this.remoteStorage.getKeyDerivParams();
 	}
@@ -135,23 +220,30 @@ export class SyncedStore implements ISyncedStorage {
 		return await this.files.makeByDownloadingCurrentVersion(objId);
 	}
 
-	private async getObjNonArchOrThrow(objId: ObjId): Promise<SyncedObj> {
+	private async getObjOrThrow(
+		objId: ObjId, allowArchived = false
+	): Promise<SyncedObj> {
 		const obj = await this.objFromDiskOrDownload(objId);
-		if (obj.isArchived()) { throw makeObjNotFoundExc(objId); }
-		return obj;
+		if (!allowArchived && obj.statusObj().isArchived()) {
+			throw makeObjNotFoundExc(objId);
+		} else {
+			return obj;
+		}
 	}
 
-	async getObj(objId: ObjId): Promise<ObjSource> {
-		const obj = await this.getObjNonArchOrThrow(objId);
-		const currentVer = obj.getCurrentVersionOrThrow();
-		return obj.getObjSrc(currentVer);
+	async getObjSrc(objId: ObjId, version?: number): Promise<ObjSource> {
+		const obj = await this.getObjOrThrow(objId);
+		if (!version) {
+			version = obj.statusObj().getCurrentLocalOrSynced();
+		}
+		return obj.getObjSrcFromLocalAndSyncedBranch(version);
 	}
 
-	async getRemoteConflictObjVersion(
+	async getObjSrcOfRemoteVersion(
 		objId: ObjId, version: number
 	): Promise<ObjSource> {
-		const obj = await this.getObjNonArchOrThrow(objId);
-		return obj.getRemoteConflictObjVersion(version);
+		const obj = await this.getObjOrThrow(objId);
+		return obj.getObjSrcFromRemoteAndSyncedBranch(version);
 	}
 
 	async saveObj(
@@ -160,31 +252,23 @@ export class SyncedStore implements ISyncedStorage {
 		if (version === 1) {
 			const obj = await this.files.findObj(objId);
 			if (obj) { throw makeObjExistsExc(objId); }
-			const { fileWrite$, newObj } = await this.files.saveFirstVersion(
+			const { fileWrite$ } = await this.files.saveFirstVersion(
 				objId, encSub);
-			await fileWrite$
-			.pipe(
-				this.uploader.tapFileWrite(newObj, true, version)
-			)
-			.toPromise();
+			await fileWrite$.toPromise();
 		} else {
-			const obj = await this.files.findObj(objId);
-			if (!obj) { throw makeObjNotFoundExc(objId); }
-			const { fileWrite$, baseVer } = await obj.saveNewVersion(
-				version, encSub);
-			await fileWrite$
-			.pipe(
-				this.uploader.tapFileWrite(obj, false, version, baseVer)
-			)
-			.toPromise();
+			const obj = await this.getObjOrThrow(objId);
+			const { fileWrite$ } = await obj.saveNewVersion(version, encSub);
+			await fileWrite$.toPromise();
 		}
 	}
 
 	async removeObj(objId: string): Promise<void> {
-		const obj = await this.files.findObj(objId);
+		const obj = await this.getObjOrThrow(objId)
+		.catch((exc: StorageException) => {
+			if (!exc.objNotFound) { throw exc; }
+		});
 		if (!obj) { return; }
 		await obj.removeCurrentVersion();
-		await this.uploader.removeCurrentVersionOf(obj);
 	}
 
 	async close(): Promise<void> {

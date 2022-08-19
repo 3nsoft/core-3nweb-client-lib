@@ -14,6 +14,7 @@ message FS {
 	// impl is a reference to object with methods of either
 	// ReadonlyFS or WritableFS
 	common.ObjectReference impl = 5;
+	bool is_synced = 6;
 }
 
 
@@ -78,15 +79,15 @@ message SymLinkTargetReplyBody {
 message FSEventMsg {
 	string type = 1;
 	string path = 2;
-	common.BooleanValue is_remote = 3;
+	common.StringValue src = 3;
 	common.UInt64Value new_version = 4;
-	common.StringValue name = 10;
-	common.StringValue old_name = 11;
-	common.StringValue new_name = 12;
-	ListingEntryMsg entry = 13;
-	common.UInt64Value current = 14;
-	common.UInt64Value uploaded = 15;
-	common.UInt64Value move_label = 16;
+	common.StringValue name = 5;
+	common.StringValue old_name = 6;
+	common.StringValue new_name = 7;
+	ListingEntryMsg entry = 8;
+	common.UInt64Value move_label = 9;
+	common.UInt64Value removed_arch_ver = 10;
+	common.UInt64Value archived_version = 11;
 }
 
 // --- ReadonlyFS.watchFile ---
@@ -96,6 +97,10 @@ message FSEventMsg {
 // --- ReadonlyFS.watchTree ---
 // Its an observable call, and initial request is PathOnlyRequestBody
 // Observer expects FSEventMsg in next.
+message WatchTreeRequestBody {
+	string path = 1;
+	common.UInt32Value depth = 2;
+}
 
 // --- ReadonlyFS.close ---
 // Request body is empty
@@ -255,6 +260,10 @@ message VersionedListFolderReplyBody {
 // --- ReadonlyFSVersionedAPI.getByteSource ---
 // Request body is PathOnlyRequestBody
 // Reply body is file.VersionedGetByteSourceReplyBody
+
+// --- ReadonlyFSVersionedAPI.getByteSource ---
+// Request body is PathOnlyRequestBody
+// Reply body is file.ListVersionsReplyBody
 
 
 // ==== WritableFS referable as impl object (extends ReadonlyFS) ====
@@ -430,3 +439,93 @@ message VersionedGetByteSinkRequestBody {
 	VersionedFileFlags flags = 2;
 }
 
+// --- WritableFSVersionedAPI.archiveCurrent ---
+// Reply body is common.UInt64Value
+message ArchiveCurrentRequestBody {
+	string path = 1;
+	common.UInt64Value version = 2;
+}
+
+
+// ==== ReadonlyFSSyncAPI referable object ====
+
+// --- ReadonlyFSSyncAPI.status ---
+// Request body is PathOnlyRequestBody
+// Reply body is file.SyncState
+
+// --- ReadonlyFSSyncAPI.updateStatusInfo ---
+// Request body is PathOnlyRequestBody
+// Reply body is file.SyncState
+
+// --- ReadonlyFSSyncAPI.isRemoteVersionOnDisk ---
+message FSSyncIsOnDiskRequestBody {
+	string path = 1;
+	uint64 version = 2;
+}
+message FSSyncIsOnDiskReplyBody {
+	string status = 1;
+}
+
+// --- ReadonlyFSSyncAPI.download ---
+// Reply has only status and body is empty
+message FSSyncDownloadRequestBody {
+	string path = 1;
+	uint64 version = 2;
+}
+
+// --- ReadonlyFSSyncAPI.adoptRemote ---
+// Reply has only status and body is empty
+message AdoptRemoteRequestBody {
+	string path = 1;
+	file.OptionsToAdopteRemote opts = 2;
+}
+
+// --- ReadonlyFSSyncAPI.diffCurrentAndRemote ---
+message DiffCurrentAndRemoteRequestBody {
+	string path = 1;
+	common.UInt64Value remote_version = 2;
+}
+message DiffCurrentAndRemoteReplyBody {
+	FolderDiff diff = 1;
+}
+
+message FolderDiff {
+	message TimeStamps {
+		uint64 current = 1;
+		common.UInt64Value remote = 2;
+	}
+	message XAttrs {
+		repeated file.NameAndXAttrValue in_current = 1;
+		repeated file.NameAndXAttrValue in_remote = 2;
+		repeated string name_overlaps = 3;
+	}
+	uint64 current_version = 1;
+	common.UInt64Value remote_version = 2;
+	repeated ListingEntryMsg in_current = 3;
+	repeated ListingEntryMsg in_remote = 4;
+	repeated string name_overlaps = 5;
+	TimeStamps ctime = 6;
+	TimeStamps mtime = 7;
+	XAttrs xattrs = 8;
+}
+
+
+// ==== WritableFSSyncAPI referable object ====
+
+// --- WritableFSSyncAPI.upload ---
+// Reply has only status and body is empty
+message FSSyncUploadRequestBody {
+	string path = 1;
+	file.OptionsToUploadLocal opts = 2;
+}
+
+// --- WritableFSSyncAPI.adoptRemoteFolderItem ---
+message AdoptRemoteFolderItemRequestBody {
+	message Options {
+		common.UInt64Value local_version = 1;
+		common.UInt64Value upload_version = 2;
+	}
+	string path = 1;
+	string item_name = 2;
+	Options opts = 3;
+}

@@ -183,6 +183,9 @@ export class IdManager {
 			};
 			await this.localFS.writeJSONFile(LOGIN_KEY_FILE_NAME, json);
 			await this.syncedFS.writeJSONFile(LOGIN_KEY_FILE_NAME, json);
+			// XXX must add work with not-online condition
+			await this.syncedFS.v!.sync!.upload(LOGIN_KEY_FILE_NAME);
+			await this.syncedFS.v!.sync!.upload('');
 		} else {
 			await this.ensureLocalCacheOfKeys();
 		}

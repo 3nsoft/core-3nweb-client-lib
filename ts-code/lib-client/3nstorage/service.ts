@@ -27,6 +27,7 @@ import * as keyGen from '../key-derivation';
 import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc } from './exceptions';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from './xsp-fs/common';
+import { assert } from '../../lib-common/assert';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
@@ -213,26 +214,58 @@ export class StorageOwner extends ServiceUser {
 	 * complete, or to a transaction id, which must be used for subsequent
 	 * request(s).
 	 * @param objId is object's id, with null value for root object
-	 * @param bytes are bytes to upload
 	 * @param fstReq is options object for the first request
 	 * @param followReq is options object for subsequent request(s)
+	 * @param bytes is an object with header, diff and segs bytes to upload
 	 */
 	async saveNewObjVersion(
-		objId: ObjId, bytes: Uint8Array|Uint8Array[],
-		fstReq: FirstSaveReqOpts|undefined,
-		followReq: FollowingSaveReqOpts|undefined
+		objId: ObjId,
+		fstReq: { create?: true; ver: number; last?: true; }|undefined,
+		followReq: { trans: string; ofs: number; last?: boolean; }|undefined,
+		{ header, diff, segs }: {
+			header?: Uint8Array; diff?: Uint8Array;
+			segs?: Uint8Array|Uint8Array[];
+		}
 	): Promise<string|undefined> {
 		let appPath: string;
 		if (fstReq) {
+			assert(!!header);
+			const { create, ver, last } = fstReq;
+			const reqOpts: FirstSaveReqOpts = {
+				create, ver, last,
+				header: header!.length,
+				diff: (diff ? diff.length : undefined)
+			};
 			appPath = (objId ?
-				api.currentObj.firstPutReqUrlEnd(objId, fstReq):
-				api.currentRootObj.firstPutReqUrlEnd(fstReq));
+				api.currentObj.firstPutReqUrlEnd(objId, reqOpts):
+				api.currentRootObj.firstPutReqUrlEnd(reqOpts));
 		} else if (followReq) {
+			const { ofs, trans, last } = followReq;
+			// XXX segs argument will introduce difference between these two
+			const reqOpts: FollowingSaveReqOpts = {
+				ofs, trans, last
+			};
 			appPath = (objId ?
-				api.currentObj.secondPutReqUrlEnd(objId, followReq):
-				api.currentRootObj.secondPutReqUrlEnd(followReq));
+				api.currentObj.secondPutReqUrlEnd(objId, reqOpts):
+				api.currentRootObj.secondPutReqUrlEnd(reqOpts));
 		} else {
 			throw new Error(`Missing request options`);
+		}
+
+		// ordering body bytes in accordance with protocol expectation
+		const bytes: Uint8Array[] = [];
+		if (diff) {
+			bytes.push(diff);
+		}
+		if (header) {
+			bytes.push(header);
+		}
+		if (segs) {
+			if (Array.isArray(segs)) {
+				bytes.push(...segs);
+			} else {
+				bytes.push(segs);
+			}
 		}
 
 		const rep = await this.doBinarySessionRequest<api.currentObj.ReplyToPut>(
@@ -257,6 +290,42 @@ export class StorageOwner extends ServiceUser {
 		}
 	}
 
+	async archiveObjVersion(objId: ObjId, currentVer: number): Promise<void> {
+		const rep = await this.doBodylessSessionRequest<void>({
+			appPath: (objId ?
+				api.archiveObj.postAndDelReqUrlEnd(objId, currentVer) :
+				api.archiveRoot.postAndDelReqUrlEnd(currentVer)),
+			method: 'POST'
+		});
+		if (rep.status === api.archiveObj.SC.okPost) {
+			return;
+		} else if (rep.status === api.currentObj.SC.unknownObj) {
+			throw makeObjNotFoundExc(objId!, undefined, true);
+		} else if (rep.status === api.currentObj.SC.unknownObjVer) {
+			throw makeObjNotFoundExc(objId!, currentVer, true);
+		} else {
+			throw makeException(rep, 'Unexpected status');
+		}
+	}
+
+	async getObjStatus(objId: ObjId): Promise<api.ObjStatus> {
+		const rep = await this.doBodylessSessionRequest<api.ObjStatus>({
+			appPath: (objId ?
+				api.objStatus.getReqUrlEnd(objId) :
+				api.rootStatus.getReqUrlEnd()),
+			method: 'GET',
+			responseType: 'json'
+		});
+		if (rep.status === api.objStatus.SC.ok) {
+			// XXX we may want to add sanity check(s)
+			return rep.data;
+		} else if (rep.status === api.objStatus.SC.unknownObj) {
+			throw makeObjNotFoundExc(objId!, undefined, true);
+		} else {
+			throw makeException(rep, 'Unexpected status');
+		}
+	}
+
 	/**
 	 * This deletes object from being available as currently existing one.
 	 * But, it does not remove archived versions of it, even if current varsion
@@ -266,15 +335,14 @@ export class StorageOwner extends ServiceUser {
 	 */
 	async deleteObj(objId: string): Promise<void> {
 		const rep = await this.doBodylessSessionRequest<void>({
-			appPath: api.currentObj.getReqUrlEnd(objId),
+			appPath: api.currentObj.delReqUrlEnd(objId),
 			method: 'DELETE'
 		});
-		if (rep.status === api.currentObj.SC.okDelete) {
+		if ((rep.status === api.currentObj.SC.okDelete)
+		|| (rep.status === api.currentObj.SC.unknownObj)) {
 			return;
 		} else if (rep.status === api.currentObj.SC.concurrentTransaction) {
 			throw makeConcurrentTransExc(objId);
-		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId, undefined, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

@@ -15,58 +15,76 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { ObjId, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { join } from 'path';
-import { makeStorageException } from '../../../lib-client/3nstorage/exceptions';
+import { makeFSSyncException, makeStorageException } from '../../../lib-client/3nstorage/exceptions';
 import { JSONSavingProc } from '../common/json-saving';
-import { addWithBasesTo, nonGarbageVersionsIn, readJSONInfoFileIn, rmCurrentVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
+import { addArchived, addWithBasesTo, isEmptyVersions, isVersionIn, NonGarbageVersions, nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionFrom, rmCurrentVersionIn, rmNonArchVersionsIn, rmVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
 import { LogError } from '../../../lib-client/logging/log-to-file';
-import { copy as deepCopy } from '../../../lib-common/json-utils';
+import { assert } from '../../../lib-common/assert';
+import { DiffInfo, ObjStatus as RemoteObjStatus } from '../../../lib-common/service-api/3nstorage/owner';
+import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
+import { UploadStatusRecorder } from './upsyncer';
 
 type FileException = web3n.files.FileException;
-type Stats = web3n.files.Stats;
+type SyncStatus = web3n.files.SyncStatus;
+type SyncState = web3n.files.SyncState;
+type LocalVersion = web3n.files.LocalVersion;
+type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 
 /**
- * Storage object can be in following states:
- * 1. Synced state indicates that current local version and one on the server
- *    are same.
- * 2. Behind state indicates that while current local version is synced,
- *    server already has a newer version.
- * 3. Unsynced state indicates that current local version hasn't been uploaded
- *    to the server. Current is just the next version, following the server one.
- * 4. Conflicting state indicates that current unsynced local version conflicts
- *    with version on the server, uploaded by other client.
+ * This is status information of an object in synced storage.
+ * Local references versions that haven't been synced/uploaded.
+ * Remote enumerates versions on the server.
+ * Synced marks version of latest synchronized moment.
+ * Local versions must be on disk as it is the only copy. Remote versions can
+ * be present as needed/desired.
  */
-export type SyncState = 'synced' | 'behind' | 'unsynced' | 'conflicting';
-
 export interface ObjStatusInfo {
 	objId: ObjId;
+	local?: LocalVersions;
+	synced?: SyncMarker;
+	remote: VersionsOnServer;
+}
+
+export interface LocalVersions extends VersionsInfo {
 	isArchived?: boolean;
-	versions: VersionsInfo;
-	sync: {
-		state: SyncState;
-		latest?: number;
-		conflictingRemote?: number[];
-		remote?: number;
-		deletedOnRemote?: true;
-	};
-	syncTasks?: {
-		queued: UpSyncTaskInfo[];
-		current?: UpSyncTaskInfo;
-	};
+	archived?: undefined;
+	upload?: UploadInfo;
+}
+
+export interface SyncMarker {
+	version?: number;
+	isArchived?: boolean;
+	base?: number;
+}
+
+export interface VersionsOnServer extends VersionsInfo {
+	isArchived?: boolean;
 }
 
 export interface UploadInfo {
-	type: 'upload';
-	transactionId?: string;
-	createObj?: true;
-	needUpload?: {
-		header?: number;
-		segs: BytesSection[];
-		allByteOnDisk?: true;
-	};
-	version: number;
+	localVersion: number;
+	uploadVersion: number;
 	baseVersion?: number;
+	needUpload?: WholeVerOrderedUpload|DiffVerOrderedUpload;
+}
+
+export interface WholeVerOrderedUpload {
+	type: 'ordered-whole';
+	createObj?: boolean;
+	header?: number;
+	segsLeft: number;
+	segsOfs: number;
+	transactionId?: string;
+}
+
+export interface DiffVerOrderedUpload {
+	type: 'ordered-diff';
+	diff: DiffInfo;
+	header?: number;
+	newSegsLeft: FiniteChunk[];
+	transactionId?: string;
 }
 
 export interface BytesSection {
@@ -74,35 +92,101 @@ export interface BytesSection {
 	len: number;
 }
 
-export interface RemovalInfo {
-	type: 'removal',
-	archivedVersions?: number[]|number;
-	currentVersion?: true;
+function makeVersions<T extends VersionsInfo>(): T {
+	return {
+		baseToDiff: {},
+		diffToBase: {},
+	} as T;
 }
 
-export interface ArchivalInfo {
-	type: 'archiving',
-	archivalOfCurrent?: true;
+function makeObjStatusInfo(objId: ObjId): ObjStatusInfo {
+	return {
+		objId,
+		remote: makeVersions()
+	};
 }
 
-export type UpSyncTaskInfo = UploadInfo | RemovalInfo | ArchivalInfo;
+function syncStateOf({ local, synced, remote }: ObjStatusInfo): SyncState {
+	const syncedIsCurrent = isSyncedCurrentWithRemote(synced, remote);
+	if (local) {
+		switch (syncedIsCurrent) {
+			case undefined:
+			case true:
+				return ((local.isArchived && synced?.isArchived) ?
+					'synced' : 'unsynced');
+			case false:
+				return 'conflicting';
+		}
+	} else {
+		switch (syncedIsCurrent) {
+			case undefined:
+				return 'unsynced';
+			case true:
+				return 'synced';
+			case false:
+				return 'behind';
+		}
+	}
+}
 
-export interface UpSyncStatus {
-	queueTask(t: UpSyncTaskInfo): void;
-	getTaskForProcessing(): Promise<UpSyncTaskInfo|undefined>;
-	glanceOnNextTask(): UpSyncTaskInfo|undefined;
-	recordInterimStateOfCurrentTask(t: UploadInfo): Promise<void>;
-	recordTaskCompletion(t: UpSyncTaskInfo): Promise<void>;
-	isSyncDone(): boolean;
-	stat(): NonNullable<Stats['sync']>;
+function isSyncedCurrentWithRemote(
+	synced: ObjStatusInfo['synced'], remote: ObjStatusInfo['remote']
+): boolean|undefined {
+	if (synced) {
+		return ((synced.version === remote.current)
+			&& (synced.isArchived === remote.isArchived));
+	} else {
+		return (isRemoteEmpty(remote) ? undefined : false);
+	}
+}
+
+function isRemoteEmpty(remote: ObjStatusInfo['remote']): boolean {
+	return isEmptyVersions(remote) && !remote.isArchived;
+}
+
+export interface NonGarbage {
+	local?: NonGarbageVersions;
+	remote: NonGarbageVersions;
+	uploadVersion?: number;
+}
+
+function nonGarbageWithMaxVer(v: VersionsInfo): NonGarbageVersions {
+	return {
+		gcMaxVer: v.current,
+		nonGarbage: nonGarbageVersionsIn(v)
+	}
+}
+
+function identifyNonGarbage(status: ObjStatusInfo): NonGarbage {
+	let local: NonGarbage['local'] = undefined;
+	let uploadVersion: number|undefined = undefined;
+	if (status.local) {
+		local = nonGarbageWithMaxVer(status.local);
+		if (status.local.upload) {
+			const { localVersion } = status.local.upload;
+			if (status.local.current !== localVersion) {
+				addWithBasesTo(local.nonGarbage, localVersion, status.local);
+			}
+			uploadVersion = status.local.upload.uploadVersion;
+		}
+	}
+	const remote = nonGarbageWithMaxVer(status.remote);
+	if (status.synced?.version) {
+		remote.nonGarbage.add(status.synced.version);
+		if (status.synced.base) {
+			addWithBasesTo(remote.nonGarbage, status.synced.base, status.remote);
+		}
+	}
+	return { local, remote, uploadVersion };
 }
 
 export const STATUS_FILE_NAME = 'status';
 
 
-export class ObjStatus implements UpSyncStatus {
+export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 
 	private readonly saveProc: JSONSavingProc<ObjStatusInfo>;
+	private stateIndicator: SyncState;
 
 	private constructor (
 		private readonly objFolder: string,
@@ -112,7 +196,8 @@ export class ObjStatus implements UpSyncStatus {
 		this.saveProc = new JSONSavingProc(
 			join(this.objFolder, STATUS_FILE_NAME),
 			() => this.status);
-		Object.freeze(this);
+		this.updateStateIndicator();
+		Object.seal(this);
 	}
 
 	static async readFrom(
@@ -125,16 +210,7 @@ export class ObjStatus implements UpSyncStatus {
 	static async makeNew(
 		objFolder: string, objId: ObjId, logError: LogError
 	): Promise<ObjStatus> {
-		const status: ObjStatusInfo = {
-			objId,
-			sync: {
-				state: 'unsynced'
-			},
-			versions: {
-				baseToDiff: {},
-				diffToBase: {},
-			}
-		};
+		const status = makeObjStatusInfo(objId);
 		const s = new ObjStatus(objFolder, status, logError);
 		await s.triggerSaveProc();
 		return s;
@@ -144,19 +220,14 @@ export class ObjStatus implements UpSyncStatus {
 		objFolder: string, objId: ObjId, version: number, currentRemote: number,
 		logError: LogError
 	): Promise<ObjStatus> {
-		const status: ObjStatusInfo = {
-			objId,
-			sync: {
-				state: 'synced',
-				remote: currentRemote,
-				latest: currentRemote,
-			},
-			versions: {
-				current: version,
-				baseToDiff: {},
-				diffToBase: {}
-			}
-		};
+		const status = makeObjStatusInfo(objId);
+		status.remote.current = currentRemote;
+		status.synced = { version: currentRemote };
+		if (currentRemote > version) {
+			status.remote.archived = [ version ];
+		} else if (currentRemote !== version) {
+			throw new Error(`Downloaded version can't be greater than current remote`);
+		}
 		const s = new ObjStatus(objFolder, status, logError);
 		await s.triggerSaveProc();
 		return s;
@@ -166,63 +237,47 @@ export class ObjStatus implements UpSyncStatus {
 		objFolder: string, objId: ObjId
 	): Promise<boolean> {
 		const status = await readAndCheckStatus(objFolder, objId);
-		return (status.sync.state !== 'synced');
+		return (syncStateOf(status) !== 'synced');
+	}
+
+	private updateStateIndicator(): void {
+		this.stateIndicator = syncStateOf(this.status);
 	}
 
 	isArchived(): boolean {
-		return !!this.status.isArchived;
+		return !!this.status.local?.isArchived;
 	}
 
-	getCurrentVersionOrThrow(): number {
-		if (typeof this.status.versions.current !== 'number') { throw new Error(
-			`Object ${this.status.objId} has no current version.`); }
-		return this.status.versions.current;
-	}
-
-	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
-		const versions = this.status.versions;
-		const nonGarbage = nonGarbageVersionsIn(versions);
-		if (this.status.syncTasks) {
-			const tasks = this.status.syncTasks;
-			if (tasks.current) {
-				addWithBasesTo(
-					nonGarbage, nonGarbageVersionInTask(tasks.current), versions);
-			}
-			for (const t of tasks.queued) {
-				addWithBasesTo(nonGarbage, nonGarbageVersionInTask(t), versions);
-			}
+	getCurrentLocalOrSynced(): number {
+		const state = this.stateIndicator;
+		const current = (((state === 'unsynced') || (state === 'conflicting')) ?
+			this.status.local?.current : this.status.synced?.version);
+		if (current) {
+			return current;
+		} else {
+			throw makeStorageException({
+				objNotFound: true,
+				message: 'Current version is not found'
+			});
 		}
-		return {
-			nonGarbage,
-			gcMaxVer: versions.current
-		};
 	}
 
-	isRemoteVersionGreaterOrEqualTo(newRemoteVersion: number): boolean {
-		return ((typeof this.status.sync.remote === 'number') ?
-			(this.status.sync.remote >= newRemoteVersion) : false);
+	getNonGarbageVersions(): NonGarbage {
+		return identifyNonGarbage(this.status);
 	}
 
-	isDeletedOnRemote(): boolean {
-		return !!this.status.sync.deletedOnRemote;
-	}
-
-	syncedVersionGreaterOrEqual(version: number): boolean {
-		return ((typeof this.status.sync.latest !== 'number') ?
-			false : (version <= this.status.sync.latest));
-	}
-
-	async removeCurrentVersion(
-		verObjs: ContainerWithDelete<number>
-	): Promise<void> {
-		this.status.isArchived = true;
-		const current = rmCurrentVersionIn(this.status.versions);
-		if (typeof current === 'number') {
-			verObjs.delete(current);
+	async removeCurrentVersion(): Promise<void> {
+		let { local, synced } = this.status;
+		if (synced?.isArchived || local?.isArchived) { return; }
+		if (local) {
+			rmCurrentVersionIn(local);
+		} else {
+			local = makeVersions() as LocalVersions;
 		}
-		this.addRemoveCurrentToQueue();
+		local.isArchived = true;
+		this.updateStateIndicator();;
 		await this.triggerSaveProc().catch((exc: FileException) => {
-			if (exc.notFound && this.status.isArchived) {
+			if (exc.notFound && this.status.local?.isArchived) {
 				return;
 			} else {
 				throw exc;
@@ -246,219 +301,310 @@ export class ObjStatus implements UpSyncStatus {
 		}
 	}
 
-	async setDeletedOnRemote(): Promise<void> {
-		this.status.sync.deletedOnRemote = true;
-		await this.triggerSaveProc();
-	}
-
-	async setRemoteVersion(version: number): Promise<void> {
-		if (this.status.sync.remote! >= version) { return; }
-		this.status.sync.remote = version;
-		if (this.status.sync.state === 'synced') {
-			if (this.status.versions.current! < this.status.sync.remote) {
-				this.status.sync.state = 'behind';
-			}
-		} else if (this.status.sync.state === 'unsynced') {
-			this.status.sync.state = 'conflicting';
+	recordUploadStart(info: UploadInfo): Promise<void> {
+		assert(!!this.status.local);
+		const local = this.status.local!;
+		if (local.upload) {
+			throw makeFSSyncException('obj-status', {
+				alreadyUploading: true,
+				message: `Status already has upload of version ${local.upload.uploadVersion} and can't start another upload with version ${info.uploadVersion}`
+			});
 		}
-		await this.triggerSaveProc();
+		if (info.localVersion === local.current) {
+			local.upload = info;
+		} else {
+			throw makeFSSyncException('obj-status', {
+				localVersion: info.localVersion,
+				versionNotFound: true
+			});
+		}
+		return this.triggerSaveProc();
 	}
 
-	async markVersionSynced(version: number): Promise<void> {
-		if (!this.status.sync.latest
-		|| (this.status.sync.latest < version)) {
-			this.status.sync.latest = version;
-			if (this.status.versions.current === version) {
-				this.status.sync.state = 'synced';
+	recordUploadInterimState(info: UploadInfo): Promise<void> {
+		assert(!!this.status.local);
+		const local = this.status.local!;
+		assert(!!local.upload &&
+			(local.upload.uploadVersion === info.uploadVersion));
+		local.upload = info;
+		return this.triggerSaveProc();
+	}
+
+	recordUploadCancellation(info: UploadInfo): Promise<void> {
+		assert(!!this.status.local);
+		const local = this.status.local!;
+		assert(!!local.upload &&
+			(local.upload.uploadVersion === info.uploadVersion));
+		local.upload = undefined;
+		return this.triggerSaveProc();
+	}
+
+	async recordArchVersionRemoval(version: number): Promise<void> {
+		if (rmArchVersionFrom(this.status.remote, version)) {
+			return this.triggerSaveProc();
+		}
+	}
+
+	async recordVersionArchival(version: number): Promise<void> {
+		if (addArchived(this.status.remote, version)) {
+			return this.triggerSaveProc();
+		}
+	}
+
+	async recordRemoteRemoval(): Promise<void> {
+		const { local, synced, remote } = this.status;
+		if (local?.isArchived || synced?.isArchived) { return; }
+		remote.isArchived = true;
+		rmCurrentVersionIn(remote);
+		this.updateStateIndicator();
+		return this.triggerSaveProc();
+	}
+
+	async recordRemoteChange(version: number): Promise<void> {
+		const { local, synced, remote } = this.status;
+		if ((local?.upload && (local.upload.uploadVersion === version))
+		|| (synced?.version && (synced.version >= version))) { return; }
+		remote.current = version;
+		this.updateStateIndicator();
+		return this.triggerSaveProc();
+	}
+
+	recordSyncOfObjRemoval(): Promise<void> {
+		this.status.local = undefined;
+		rmCurrentVersionIn(this.status.remote);
+		this.status.remote.isArchived = true;
+		if (this.status.synced) {
+			this.status.synced.isArchived = true;
+			this.status.synced.version = undefined;
+			if (this.status.synced.base) {
+				rmNonArchVersionsIn(this.status.remote, this.status.synced.base);
+				this.status.synced.base = undefined;
 			}
+		} else {
+			this.status.synced = { isArchived: true };
+		}
+		this.updateStateIndicator();
+		return this.triggerSaveProc();
+	}
+
+	async recordStatusFromServer(
+		{ archived, current }: RemoteObjStatus
+	): Promise<void> {
+		const remote = this.status.remote;
+		let changedCurrent = false;
+		if (current) {
+			if (!remote.current) {
+				remote.current = current;
+				changedCurrent = true;
+			} else if (remote.current < current) {
+				rmCurrentVersionIn(remote);
+				remote.current = current;
+				changedCurrent = true;
+			}
+		} else if (remote.current) {
+			rmCurrentVersionIn(remote);
+			remote.isArchived = true;
+			changedCurrent = true;
+		}
+		const rmArchived = removeArchVersionsNotInList(remote, archived);
+		const addedArchived = addArchVersionsFromList(remote, archived);
+		if (rmArchived || addedArchived || changedCurrent) {
+			this.updateStateIndicator();
 			await this.triggerSaveProc();
 		}
-	}
-
-	async setUnsyncedCurrentVersion(
-		version: number, baseVer: number|undefined
-	): Promise<void> {
-		setCurrentVersionIn(this.status.versions, version, baseVer);
-		this.status.sync.state = 'unsynced';
-		await this.triggerSaveProc();
 	}
 
 	/**
-	 * This method ignores remote conflicting versions.
-	 * @param version 
+	 * When given object version is a diff on some base, this method returns
+	 * a whole trace of local base versions up to synced one.
+	 * Local bases, if present, are return in an array with highest version
+	 * first.
+	 * This returns undefined, when given object version is not a diff.
+	 * @param version that is local, for which we want to get base versions, if
+	 * it is a diff version.
 	 */
-	isVersionSynced(version: number): boolean {
-		if (this.status.versions.current === undefined) { return false; }
-		if (this.status.sync.state == 'synced') { return true; }
-		if (this.status.sync.latest === undefined) { return false; }
-		return (this.status.sync.latest >= version);
+	baseOfLocalVersion(version: number): {
+		localBases?: number[]; syncedBase?: number;
+	} | undefined {
+		assert(!!this.status.local);
+		const local = this.status.local!;
+		assert(isVersionIn(version, local));
+		let base = local.diffToBase[version];
+		if (!base) { return; }
+		if (isVersionIn(base, this.status.remote)) {
+			return { syncedBase: base };
+		}
+		const localBases: number[] = [];
+		do {
+			localBases.push(base);
+			base = local.diffToBase[base];
+		} while (base);
+		const lastBase = localBases[localBases.length-1];
+		if (isVersionIn(lastBase, this.status.remote)) {
+			return {
+				localBases: localBases.slice(0, localBases.length-1),
+				syncedBase: lastBase
+			};
+		 } else {
+			return { localBases };
+		 }
 	}
 
-	isVersionArchived(version: number): boolean {
-		if (!this.status.versions.archived) { return false; }
-		return this.status.versions.archived.includes(version);
-	}
-
-	queueTask(t: UpSyncTaskInfo): void {
-		if (t.type === 'upload') {
-			this.addUploadToQueue(t);
-		} else if (t.type === 'removal') {
-			if (t.currentVersion) {
-				throw new Error(`Removal of current task needs other method`);
-			} else if (t.archivedVersions) {
-				this.addRemoveArchivedToQueue(t.archivedVersions);
+	markLocalVersionSynced(
+		localVersion: number, uploadVersion: number
+	): Promise<void> {
+		const { local, synced, remote } = this.status;
+		assert(!!local?.upload &&
+			(local?.upload.uploadVersion === uploadVersion));
+		const syncedBase = local!.upload!.baseVersion;
+		if (!remote.current || (remote.current <= uploadVersion)) {
+			setCurrentVersionIn(remote, uploadVersion, syncedBase);
+		}
+		if (synced) {
+			synced.version = uploadVersion;
+			if (synced.base && (synced.base !== syncedBase)) {
+				rmNonArchVersionsIn(remote, synced.base);
 			}
-		} else if (t.type === 'archiving') {
-			this.addArchivalToQueue(t);
+			synced.base = syncedBase;
 		} else {
-			throw new Error(`Unsupported upsync task type`);
+			this.status.synced = { version: uploadVersion, base: syncedBase };
+		}
+		if (local!.current === localVersion) {
+			this.status.local = undefined;
+		} else {
+			local!.upload = undefined;
+		}
+		this.updateStateIndicator();
+		return this.triggerSaveProc();
+	}
+
+	async setLocalCurrentVersion(
+		version: number, baseVer: number|undefined
+	): Promise<void> {
+		if (!this.status.local) {
+			this.status.local = makeVersions();
+		}
+		setCurrentVersionIn(this.status.local, version, baseVer);
+		this.updateStateIndicator();
+		await this.triggerSaveProc();
+	}
+
+	listVersions(): { current?: number; archived?: number[]; } {
+		const { local, synced, remote } = this.status;
+		switch (this.stateIndicator) {
+			case 'unsynced':
+			case 'conflicting':
+				assert(!!local);
+				return {
+					current: local!.current,
+					archived: (synced?.version ?
+						versionsToBranch(remote, synced.version, false).archived :
+						undefined)
+				};
+			case 'synced':
+			case 'behind':
+				assert(!!synced);
+				return {
+					current: synced!.version,
+					archived: (synced?.version ?
+						versionsToBranch(remote, synced.version, false).archived :
+						remote.archived?.slice())
+				};
+			default:
+				throw new Error(`Unimplemented state ${this.stateIndicator}`);
 		}
 	}
 
-	private addUploadToQueue(u: UploadInfo): void {
-		if (!this.status.syncTasks) {
-			this.status.syncTasks = { queued: [ u ] };
+	async archiveCurrentVersion(): Promise<void> {
+		const { synced, remote } = this.status;
+		assert(!!synced?.version);
+		addArchived(remote, synced!.version!);
+		await this.triggerSaveProc();
+	}
+
+	absorbLocalVersionBase(version: number, localBase: number): Promise<void> {
+		assert(!!this.status.local);
+		const local = this.status.local!;
+		assert(local.diffToBase[version] === localBase);
+		const lowerBase = local.diffToBase[localBase];
+		if (localBase) {
+			local.diffToBase[version] = lowerBase;
+			local.baseToDiff[lowerBase] = version;
 		} else {
-			const q = this.status.syncTasks.queued;
-			const last = lastIn(q);
-			if (last) {
-				if (last.type === 'upload') {
-					if (!this.isVersionArchived(last.version)) {
-						if (last.createObj) {
-							u.createObj = true;
-						}
-						q[q.length-1] = u;
-					} else {
-						q.push(u);
-					}
-				} else if (last.type === 'archiving') {
-					q.push(u);
-				} else if ((last.type === 'removal') && last.archivedVersions) {
-					q.push(u);
-				}
+			delete local.diffToBase[version];
+		}
+		delete local.diffToBase[localBase];
+		delete local.baseToDiff[localBase];
+		return this.triggerSaveProc();
+	}
+
+	latestSyncedVersion(): number|undefined {
+		return this.status.synced?.version;
+	}
+
+	syncStatus(): SyncStatus {
+		const { remote, synced } = splitVersionsIntoBranches(
+			this.status.remote, this.status.synced);
+		return {
+			state: this.stateIndicator,
+			local: localVersionFromStatus(this.status.local),
+			remote,
+			synced
+		};
+	}
+
+	neverUploaded(): boolean {
+		const synced = this.status.synced;
+		return (!synced?.version && !synced?.isArchived);
+	}
+
+	async adoptRemoteVersion(
+		version?: number, dropLocalVer = false
+	): Promise<void> {
+		const { local, remote } = this.status;
+		if (this.stateIndicator !== 'behind') {
+			if (this.stateIndicator === 'synced') {
+				return;
+			} else if (!dropLocalVer) {
+				throw makeFSSyncException('', {
+					localVersion: local?.current,
+					remoteVersion: remote.current,
+					conflict: true,
+					message: `Can't adopt remote version in '${this.stateIndicator}' state`
+				});
+			}
+		}
+		if (version) {
+			if ((remote.current === version)
+			|| remote.archived?.includes(version)) {
+				this.status.synced = { version, base: remote.diffToBase[version] };
 			} else {
-				q.push(u);
+				throw makeFSSyncException('', {
+					remoteVersion: remote.current,
+					versionNotFound: true,
+					message: `Remote version ${version} is not in status info`
+				});
 			}
-		}
-		this.triggerSaveProc(true);
-	}
-
-	private addRemoveCurrentToQueue(): void {
-		const r: RemovalInfo = { type:'removal', currentVersion: true };
-		if (this.status.syncTasks) {
-			const q = this.status.syncTasks!.queued;
-			const last = lastIn(q);
-			if (last) {
-				if (last.type === 'archiving') {
-					q.push(r);
-				} else if (last.type === 'upload') {
-					if (this.isVersionArchived(last.version)) {
-						q.push(r);
-					} else if (this.status.sync.latest
-					|| this.status.syncTasks!.current) {
-						q[q.length-1] = r;
-					} else {
-						q.splice(q.length-1, 1);
-						this.addRemoveCurrentToQueue();
-						return;
-					}
-				}
-			} else if (this.status.sync.latest
-			|| this.status.syncTasks!.current) {
-				q.push(r);
-			} else {
-				this.status.syncTasks = undefined;
-			}
+		} else if (remote.current) {
+			version = remote.current;
+			this.status.synced = { version, base: remote.diffToBase[version] };
 		} else {
-			if (this.status.sync.latest) {
-				this.status.syncTasks = { queued: [ r ] };
-			}
+			throw makeFSSyncException('', {
+				versionMismatch: true,
+				message: `Current remote version is not set in status info`
+			});
 		}
-	}
-
-	private addRemoveArchivedToQueue(archVer: number|number[]): void {
-		const r: RemovalInfo = { type:'removal', archivedVersions: archVer };
-		if (this.status.syncTasks) {
-			this.status.syncTasks!.queued.push(r);
-		} else {
-				this.status.syncTasks = { queued: [ r ] };
+		if (local) {
+			this.status.local = undefined;
 		}
-		this.triggerSaveProc(true);
-	}
-
-	private addArchivalToQueue(a: ArchivalInfo): void {
-		if (!this.status.syncTasks) {
-			this.status.syncTasks = { queued: [ a ] };
-		} else {
-			this.status.syncTasks!.queued.push(a);
-		}
-		this.triggerSaveProc(true);
-	}
-
-	async getTaskForProcessing(): Promise<UpSyncTaskInfo | undefined> {
-		const syncTasks = this.status.syncTasks;
-		if (!syncTasks) { return; }
-		if (syncTasks.current) { return syncTasks.current; }
-		syncTasks.current = syncTasks.queued.shift();
-		if (syncTasks.current) {
-			await this.triggerSaveProc();
-		}
-		return syncTasks.current;
-	}
-
-	glanceOnNextTask(): UpSyncTaskInfo | undefined {
-		const syncTasks = this.status.syncTasks;
-		if (!syncTasks) { return; }
-		if (syncTasks.current) {
-			return syncTasks.current;
-		} else if (syncTasks.queued.length > 0) {
-			return syncTasks.queued[0];
-		}
-	}
-
-	async recordInterimStateOfCurrentTask(t: UploadInfo): Promise<void> {
-		const syncTasks = this.status.syncTasks;
-		if (!syncTasks) { throw new Error(`This method is called too early.`); }
-		if (syncTasks.current === t) {
-			await this.triggerSaveProc();
-		} else {
-			throw new Error(`Can save interim state of a current task only`);
-		}
-	}
-
-	async recordTaskCompletion(t: UpSyncTaskInfo): Promise<void> {
-		const syncTasks = this.status.syncTasks;
-		if (!syncTasks) { throw new Error(`This method is called too early.`); }
-		if (syncTasks.current === t) {
-			if (syncTasks.queued.length > 0) {
-				syncTasks.current = undefined;
-			} else {
-				this.status.syncTasks = undefined;
-			}
-			await this.triggerSaveProc();
-		}
-	}
-
-	isSyncDone(): boolean {
-		return !this.status.syncTasks;
-	}
-
-	isFileSaved(): boolean {
-		return this.saveProc.isSaved();
-	}
-
-	stat(): NonNullable<Stats['sync']> {
-		return deepCopy(this.status.sync);
+		this.updateStateIndicator();
+		await this.triggerSaveProc();
 	}
 
 }
 Object.freeze(ObjStatus.prototype);
 Object.freeze(ObjStatus);
 
-
-interface ContainerWithDelete<T> {
-	delete(key: T): void;
-}
 
 export async function readAndCheckStatus(
 	objFolder: string, objId: ObjId
@@ -474,20 +620,105 @@ export async function readAndCheckStatus(
 	// XXX we may do some checks and sanitization here
 
 	if (objId !== status.objId) {
-		throw makeStorageException({ message: `Invalid objId in status file for obj ${objId}, in folder ${objFolder}.\nInvalid content:\n${JSON.stringify(status, null, 2)}` });
+		throw makeStorageException({
+			message: `Invalid objId in status file for obj ${objId}, in folder ${objFolder}.\nInvalid content:\n${JSON.stringify(status, null, 2)}`
+		});
 	}
 
 	return status;
 }
 
-function lastIn<T>(arr: T[]): T|undefined {
-	return ((arr.length > 0) ? arr[arr.length - 1] : undefined);
+function localVersionFromStatus(
+	tagged: LocalVersions|undefined
+): LocalVersion|undefined {
+	return (tagged ? {
+		latest: tagged.current,
+		isArchived: tagged.isArchived
+	} : undefined);
 }
 
-function nonGarbageVersionInTask(task: UpSyncTaskInfo): number|undefined {
-	if (task.type === 'upload') {
-		return task.version;
+function splitVersionsIntoBranches(
+	remote: ObjStatusInfo['remote'], synced: ObjStatusInfo['synced']
+): { remote?: SyncStatus['remote']; synced?: SyncStatus['synced'] } {
+	if (synced) {
+		if (isSyncedCurrentWithRemote(synced, remote)) {
+			return {
+				synced: versionsToBranch(remote)
+			};
+		} else {
+			assert(!!synced.version);
+			return {
+				synced: versionsToBranch(remote, synced.version, false),
+				remote: versionsToBranch(remote, synced.version, true)
+			};
+		}
+	} else {
+		return (isRemoteEmpty(remote) ? {} : {
+			remote: versionsToBranch(remote)
+		});
 	}
+}
+
+function versionsToBranch(
+	{ current, archived, isArchived }: VersionsOnServer,
+	splitVersion?: number, aboveSplit?: boolean
+): SyncVersionsBranch {
+	if (splitVersion) {
+		let splitArchived: number[]|undefined = undefined;
+		if (archived) {
+			const indAboveSplit = archived.findIndex(v => (v > splitVersion));
+			if (aboveSplit) {
+				if (indAboveSplit >= 0) {
+					splitArchived = archived.slice(indAboveSplit);
+				}
+			} else {
+				if (indAboveSplit > 0) {
+					splitArchived = archived.slice(0, indAboveSplit);
+				} else {
+					splitArchived = archived.slice();
+				}
+			}
+		}
+		return {
+			archived: splitArchived,
+			latest: (aboveSplit ? current : splitVersion),
+			isArchived: isArchived
+		};
+	} else {
+		return {
+			archived: archived?.slice(),
+			latest: current,
+			isArchived: isArchived
+		};
+	}
+}
+
+function removeArchVersionsNotInList(
+	remote: VersionsOnServer, versionsToKeep: number[]|undefined
+): boolean {
+	let isAnythingChanged = false;
+	if (remote.archived) {
+		for (const v of remote.archived) {
+			if (!versionsToKeep?.includes(v)) {
+				rmArchVersionFrom(remote, v);
+				isAnythingChanged = true;
+			}
+		}
+	}
+	return isAnythingChanged;
+}
+
+function addArchVersionsFromList(
+	remote: VersionsOnServer, existingVersions: number[]|undefined
+): boolean {
+	if (!existingVersions) { return false; }
+	let isAnythingChanged = false;
+	for (const v of existingVersions) {
+		if (!remote.archived?.includes(v)) {
+			addArchived(remote, v);
+		}
+	}
+	return isAnythingChanged;
 }
 
 

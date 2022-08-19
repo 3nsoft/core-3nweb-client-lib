@@ -176,9 +176,12 @@ export class ClientsSideImpl implements ClientsSide {
 		return callerWrap;
 	}
 
+	private throwIfStopped(): void {
+		if (this.isStopped) { throw makeIPCException({ ipcNotConnected: true }); }
+	}
+
 	private startCall(reqEnv: Envelope): void {
-		if (this.isStopped) { throw makeIPCException(
-			{ 'ipcNotConnected': true }); }
+		this.throwIfStopped();
 		this.sendMsg(reqEnv);
 	}
 
@@ -253,14 +256,12 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	listObj(path: string[]): string[] {
-		if (this.isStopped) { throw makeIPCException(
-			{ 'ipcNotConnected': true }); }
+		this.throwIfStopped();
 		return this.syncReqToListObj!(path);
 	}
 
 	listObjAsync(path: string[]): Promise<string[]> {
-		if (this.isStopped) { throw makeIPCException(
-			{ 'ipcNotConnected': true }); }
+		this.throwIfStopped();
 		return this.asyncReqToListObj!(path);
 	}
 

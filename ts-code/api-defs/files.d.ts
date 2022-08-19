@@ -60,6 +60,24 @@ declare namespace web3n.files {
 		notImplemented: 'ENOSYS';
 		isEndless: 'is-endless';
 		storageClosed: 'storage-closed';
+		versionMismatch: 'version-mismatch';
+	}
+
+	interface FSSyncException extends RuntimeException {
+		type: 'fs-sync';
+		path: string;
+		localVersion?: number;
+		remoteVersion?: number;
+		alreadyUploading?: true;
+		versionNotFound?: true;
+		childNeverUploaded?: true;
+		childName?: string;
+		removedOnServer?: true;
+		versionMismatch?: true;
+		conflict?: true;
+		notSynced?: true;
+		remoteIsArchived?: true;
+		remoteFolderItemNotFound?: true;
 	}
 
 	/**
@@ -126,18 +144,39 @@ declare namespace web3n.files {
 		 */
 		version?: number;
 
-		/**
-		 * This tells object's latest sync state.
-		 * If such information cannot be provided, this field will be absent.
-		 */
-		sync?: {
-			state: SyncState;
-			latest?: number;
-			conflictingRemote?: number[];
-			remote?: number;
-			deletedOnRemote?: true;
-		};
+	}
 
+	/**
+	 * Sync status contains info about possible version branches with possible
+	 * states:
+	 * 1. unsynced - have local branch, and possibly synced one.
+	 *    Local version(s) should be uploaded to get into synced state.
+	 * 2. synced - have only synced branch.
+	 * 3. behind - have both synced and remote branches.
+	 *    Should explicitly advance to newer version to get into synced state.
+	 * 4. conflicting - have conflicting local and remote branches, with possible
+	 *    common synced history branch.
+	 *    Conflict gets fixed by uploading some local version with value greater
+	 *    than remote's latest. Making this version is a custom magic of
+	 *    conflict resolution that you do for your app.
+	 */
+	interface SyncStatus {
+		state: SyncState;
+		synced?: SyncVersionsBranch;
+		local?: LocalVersion;
+		remote?: SyncVersionsBranch;
+		existsInSyncedParent?: boolean;
+	}
+
+	interface LocalVersion {
+		latest?: number;
+		isArchived?: boolean;
+	}
+
+	interface SyncVersionsBranch {
+		latest?: number;
+		archived?: number[];
+		isArchived?: boolean;
 	}
 
 	type SyncState = 'synced' | 'behind' | 'unsynced' | 'conflicting';
@@ -328,7 +367,7 @@ declare namespace web3n.files {
 		 */
 		getByteSource(): Promise<FileByteSource>;
 
-		watch(observer: Observer<FileEvent>): () => void;
+		watch(observer: Observer<FileEvent|RemoteEvent>): () => void;
 
 	}
 
@@ -398,8 +437,9 @@ declare namespace web3n.files {
 		 * greater than file length, all available bytes are read. If parameter
 		 * is missing, read will be done to file's end.
 		 */
-		readBytes(start?: number, end?: number):
-			Promise<{ bytes: Uint8Array|undefined; version: number; }>;
+		readBytes(
+			start?: number, end?: number
+		): Promise<{ bytes: Uint8Array|undefined; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to text, read from file, assuming
@@ -417,6 +457,10 @@ declare namespace web3n.files {
 		 * allows random reads, and a file version
 		 */
 		getByteSource(): Promise<{ src: FileByteSource; version: number; }>;
+
+		listVersions(): Promise<{ current?: number; archived?: number[]; }>;
+
+		sync?: ReadonlyFileSyncAPI;
 
 	}
 
@@ -460,8 +504,9 @@ declare namespace web3n.files {
 		 * When current version is given, an error is thrown, if file version at
 		 * the moment of writing is different.
 		 */
-		getByteSink(truncateFile?: boolean, currentVersion?: number):
-			Promise<{ sink: FileByteSink; version: number; }>;
+		getByteSink(
+			truncateFile?: boolean, currentVersion?: number
+		): Promise<{ sink: FileByteSink; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to new file's version when copying
@@ -469,7 +514,48 @@ declare namespace web3n.files {
 		 * @param file which content will be copied into this file
 		 */
 		copy(file: File): Promise<number>;
-		
+
+		archiveCurrent(version?: number): Promise<number>;
+
+		sync?: WritableFileSyncAPI;
+
+	}
+
+	interface ReadonlyFileSyncAPI {
+
+		/**
+		 * Returns synchronization status of this object, as is currently known
+		 * here without checking remote server.
+		 */
+		status(): Promise<SyncStatus>;
+
+		updateStatusInfo(): Promise<SyncStatus>;
+
+		isRemoteVersionOnDisk(
+			version: number
+		): Promise<'partial'|'complete'|'none'>;
+
+		download(version: number): Promise<void>;
+
+		adoptRemote(opts?: OptionsToAdopteRemote): Promise<void>;
+
+	}
+
+	interface OptionsToAdopteRemote {
+		dropLocalVer?: boolean;
+		remoteVersion?: number;
+		download?: boolean;
+	}
+
+	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
+
+		upload(opts?: OptionsToUploadLocal): Promise<void>;
+
+	}
+
+	interface OptionsToUploadLocal {
+		localVersion?: number;
+		uploadVersion?: number;
 	}
 
 	type FSType = 'device' | 'synced' | 'local' | 'share' | 'asmail-msg';
@@ -498,8 +584,9 @@ declare namespace web3n.files {
 		 * throwing of an exception, when folder does not exist. Default value is
 		 * false.
 		 */
-		checkFolderPresence(path: string, throwIfMissing?: boolean):
-			Promise<boolean>;
+		checkFolderPresence(
+			path: string, throwIfMissing?: boolean
+		): Promise<boolean>;
 		
 		/**
 		 * This returns a promise, resolvable to true, if file exists, and to
@@ -509,8 +596,9 @@ declare namespace web3n.files {
 		 * throwing of an exception, when file does not exist. Default value is
 		 * false.
 		 */
-		checkFilePresence(path: string, throwIfMissing?: boolean):
-			Promise<boolean>;
+		checkFilePresence(
+			path: string, throwIfMissing?: boolean
+		): Promise<boolean>;
 		
 		/**
 		 * This returns a promise, resolvable to true, if link exists, and to
@@ -520,8 +608,9 @@ declare namespace web3n.files {
 		 * throwing of an exception, when link does not exist. Default value is
 		 * false.
 		 */
-		checkLinkPresence(path: string, throwIfMissing?: boolean):
-			Promise<boolean>;
+		checkLinkPresence(
+			path: string, throwIfMissing?: boolean
+		): Promise<boolean>;
 		
 		/**
 		 * This returns a promise, resolvable to stats of an entity at a given
@@ -546,12 +635,18 @@ declare namespace web3n.files {
 
 		readLink(path: string): Promise<SymLink>;
 
-		watchFolder(path: string, observer: Observer<FolderEvent>): () => void;
+		watchFolder(
+			path: string, observer: Observer<FolderEvent|RemoteEvent>
+		): () => void;
 
-		watchFile(path: string, observer: Observer<FileEvent>): () => void;
+		watchFile(
+			path: string, observer: Observer<FileEvent|RemoteEvent>
+		): () => void;
 
-		watchTree(path: string, observer: Observer<FolderEvent|FileEvent>):
-			() => void;
+		watchTree(
+			path: string, depth: number|undefined,
+			observer: Observer<FolderEvent|FileEvent|RemoteEvent>
+		): () => void;
 
 		close(): Promise<void>;
 
@@ -593,8 +688,9 @@ declare namespace web3n.files {
 		 * greater than file length, all available bytes are read. If parameter
 		 * is missing, read will be done to file's end.
 		 */
-		readBytes(path: string, start?: number, end?: number):
-			Promise<Uint8Array|undefined>;
+		readBytes(
+			path: string, start?: number, end?: number
+		): Promise<Uint8Array|undefined>;
 
 		/**
 		 * This returns a promise, resolvable to bytes source with seek, which
@@ -619,8 +715,9 @@ declare namespace web3n.files {
 		 * @param path 
 		 * @param criteria 
 		 */
-		select(path: string, criteria: SelectCriteria):
-			Promise<{ items: FSCollection; completion: Promise<void>; }>;
+		select(
+			path: string, criteria: SelectCriteria
+		): Promise<{ items: FSCollection; completion: Promise<void>; }>;
 
 	}
 
@@ -752,8 +849,9 @@ declare namespace web3n.files {
 		 * @param overwrite is a flag that with a true value allows
 		 * overwrite of existing dst file. Default value is false.
 		 */
-		copyFile(src: string, dst: string, overwrite?: boolean):
-			Promise<void>;
+		copyFile(
+			src: string, dst: string, overwrite?: boolean
+		): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable when folder has been recursively
@@ -764,8 +862,9 @@ declare namespace web3n.files {
 		 * merge into existing folder and files overwriting inside. Default
 		 * value is false.
 		 */
-		copyFolder(src: string, dst: string, mergeAndOverwrite?: boolean):
-			Promise<void>;
+		copyFolder(
+			src: string, dst: string, mergeAndOverwrite?: boolean
+		): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable when file has been saved.
@@ -785,8 +884,9 @@ declare namespace web3n.files {
 		 * merge into existing folder and files overwriting inside. Default
 		 * value is false.
 		 */
-		saveFolder(folder: FS, dst: string, mergeAndOverwrite?: boolean):
-			Promise<void>;
+		saveFolder(
+			folder: FS, dst: string, mergeAndOverwrite?: boolean
+		): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable when file has been removed
@@ -830,8 +930,9 @@ declare namespace web3n.files {
 		 * @param flags are optional flags. Default flags are create=true,
 		 * exclusive=false.
 		 */
-		writeBytes(path: string, bytes: Uint8Array, flags?: FileFlags):
-			Promise<void>;
+		writeBytes(
+			path: string, bytes: Uint8Array, flags?: FileFlags
+		): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable to byte sink with seek
@@ -887,8 +988,9 @@ declare namespace web3n.files {
 
 	interface ReadonlyFSVersionedAPI {
 
-		getXAttr(path: string, xaName: string):
-			Promise<{ attr: any; version: number; }>;
+		getXAttr(
+			path: string, xaName: string
+		): Promise<{ attr: any; version: number; }>;
 	
 		listXAttrs(path: string): Promise<{ lst: string[]; version: number; }>;
 
@@ -897,8 +999,9 @@ declare namespace web3n.files {
 		 * for entries in the folder, and a folder's version.
 		 * @param path of a folder that should be listed
 		 */
-		listFolder(path: string):
-			Promise<{ lst: ListingEntry[]; version: number; }>;
+		listFolder(
+			path: string
+		): Promise<{ lst: ListingEntry[]; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to json, read from file, and a
@@ -925,16 +1028,24 @@ declare namespace web3n.files {
 		 * greater than file length, all available bytes are read. If parameter
 		 * is missing, read will be done to file's end.
 		 */
-		readBytes(path: string, start?: number, end?: number):
-			Promise<{ bytes: Uint8Array|undefined; version: number; }>;
+		readBytes(
+			path: string, start?: number, end?: number
+		): Promise<{ bytes: Uint8Array|undefined; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to bytes source with seek, which
 		 * allows random reads, and a file version
 		 * @param path of a file from which to read bytes
 		 */
-		getByteSource(path: string):
-			Promise<{ src: FileByteSource; version: number; }>;
+		getByteSource(
+			path: string
+		): Promise<{ src: FileByteSource; version: number; }>;
+
+		listVersions(
+			path: string
+		): Promise<{ current?: number; archived?: number[]; }>;
+
+		sync?: ReadonlyFSSyncAPI;
 
 	}
 
@@ -956,8 +1067,9 @@ declare namespace web3n.files {
 		 * @param flags are optional flags. Default flags are create=true,
 		 * exclusive=false.
 		 */
-		writeJSONFile(path: string, json: any, flags?: VersionedFileFlags):
-			Promise<number>;
+		writeJSONFile(
+			path: string, json: any, flags?: VersionedFileFlags
+		): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to new file's version when file is
@@ -967,8 +1079,9 @@ declare namespace web3n.files {
 		 * @param flags are optional flags. Default flags are create=true,
 		 * exclusive=false.
 		 */
-		writeTxtFile(path: string, txt: string, flags?: VersionedFileFlags):
-			Promise<number>;
+		writeTxtFile(
+			path: string, txt: string, flags?: VersionedFileFlags
+		): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to new file's version when file is
@@ -978,8 +1091,9 @@ declare namespace web3n.files {
 		 * @param flags are optional flags. Default flags are create=true,
 		 * exclusive=false.
 		 */
-		writeBytes(path: string, bytes: Uint8Array, flags?: VersionedFileFlags):
-			Promise<number>;
+		writeBytes(
+			path: string, bytes: Uint8Array, flags?: VersionedFileFlags
+		): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to byte sink with seek, and a file
@@ -988,53 +1102,148 @@ declare namespace web3n.files {
 		 * @param flags are optional flags. Default flags are create=true,
 		 * exclusive=false, truncate=true.
 		 */
-		getByteSink(path: string, flags?: VersionedFileFlags):
-			Promise<{ sink: FileByteSink; version: number; }>;
+		getByteSink(
+			path: string, flags?: VersionedFileFlags
+		): Promise<{ sink: FileByteSink; version: number; }>;
 
+		archiveCurrent(path: string, version?: number): Promise<number>;
+
+		sync?: WritableFSSyncAPI;
+
+	}
+
+	interface ReadonlyFSSyncAPI {
+
+		/**
+		 * Returns synchronization status of this object, as is currently known
+		 * here without checking remote server.
+		 */
+		status(path: string): Promise<SyncStatus>;
+
+		updateStatusInfo(path: string): Promise<SyncStatus>;
+
+		isRemoteVersionOnDisk(
+			path: string, version: number
+		): Promise<'partial'|'complete'|'none'>;
+
+		download(path: string, version: number): Promise<void>;
+
+		adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void>;
+
+		diffCurrentAndRemoteFolderVersions(
+			path: string, remoteVersion?: number
+		): Promise<FolderDiff|undefined>;
+
+	}
+
+	interface FolderDiff {
+		currentVersion: number;
+		isCurrentLocal: boolean;
+		remoteVersion?: number;
+		isRemoteArchived: boolean;
+		inCurrent?: ListingEntry[];
+		inRemote?: ListingEntry[];
+		nameOverlaps?: string[];
+		ctime: {
+			remote?: Date;
+			current: Date;
+		};
+		mtime: {
+			remote?: Date;
+			current: Date;
+		};
+		xattrs?: {
+			inCurrent?: { name: string; value: any; }[];
+			inRemote?: { name: string; value: any; }[];
+			nameOverlaps?: string[];
+		};
+	}
+
+	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
+
+		upload(path: string, opts?: OptionsToUploadLocal): Promise<void>;
+
+		adoptRemoteFolderItem(
+			path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
+		): Promise<number>;
+
+	}
+
+	interface OptionsToAdoptRemoteItem {
+		localVersion?: number;
+		remoteVersion?: number;
 	}
 
 	interface FSEvent {
-		type: string;
 		path: string;
-		isRemote?: boolean;
-		newVersion?: number;
 	}
 
-	interface RemovedEvent extends FSEvent {
+	interface FSChangeEvent {
+		path: string;
+		src: 'local'|'sync';
+	}
+
+	interface RemovedEvent extends FSChangeEvent {
 		type: 'removed';
 	}
 
-	interface SyncUploadEvent extends FSEvent {
-		type: 'sync-upload';
-		uploaded: number;
-		current: number;
+	interface VersionChangeOnUpload extends FSChangeEvent {
+		type: 'version-change-on-upload';
+		src: 'sync';
+		newVersion: number;
 	}
 
 	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
-		EntryRenamingEvent | RemovedEvent | SyncUploadEvent;
+		EntryRenamingEvent | RemovedEvent | VersionChangeOnUpload;
 
-	interface EntryRemovalEvent extends FSEvent {
+	interface EntryRemovalEvent extends FSChangeEvent {
 		type: 'entry-removal';
 		name: string;
 		moveLabel?: number;
+		newVersion?: number;
 	}
 
-	interface EntryAdditionEvent extends FSEvent {
+	interface EntryAdditionEvent extends FSChangeEvent {
 		type: 'entry-addition';
 		entry: ListingEntry;
 		moveLabel?: number;
+		newVersion?: number;
 	}
 
-	interface EntryRenamingEvent extends FSEvent {
+	interface EntryRenamingEvent extends FSChangeEvent {
 		type: 'entry-renaming';
 		oldName: string;
 		newName: string;
+		newVersion?: number;
 	}
 
-	type FileEvent = FileChangeEvent | RemovedEvent | SyncUploadEvent;
+	type FileEvent = FileChangeEvent | RemovedEvent | VersionChangeOnUpload;
 
-	interface FileChangeEvent extends FSEvent {
+	interface FileChangeEvent extends FSChangeEvent {
 		type: 'file-change';
+		newVersion?: number;
+	}
+
+	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
+		RemoteRemovalEvent | RemoteChangeEvent;
+
+	interface RemoteVersionArchivalEvent extends FSEvent {
+		type: 'remote-version-archival';
+		archivedVersion: number;
+	}
+
+	interface RemoteArchVerRemovalEvent extends FSEvent {
+		type: 'remote-arch-ver-removal';
+		removedArchVer: number;
+	}
+
+	interface RemoteRemovalEvent extends FSEvent {
+		type: 'remote-removal';
+	}
+
+	interface RemoteChangeEvent extends FSEvent {
+		type: 'remote-change';
+		newVersion: number;
 	}
 
 }

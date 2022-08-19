@@ -60,6 +60,7 @@ class LinkPersistance extends NodePersistance {
 Object.freeze(LinkPersistance.prototype);
 Object.freeze(LinkPersistance);
 
+
 type SymLink = web3n.files.SymLink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 
@@ -97,6 +98,7 @@ function makeLinkToStorage(
 	}
 }
 
+
 export class LinkNode extends NodeInFS<LinkPersistance> {
 
 	private linkParams: LinkParameters<any> = (undefined as any);
@@ -126,12 +128,18 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 		storage: Storage, parentId: string, name: string,
 		objId: string, key: Uint8Array
 	): Promise<LinkNode> {
-		const src = await storage.getObj(objId);
+		const src = await storage.getObjSrc(objId);
 		const link = new LinkNode(
 			storage, name, objId, src.version, parentId, key);
 		const { params, attrs, xattrs } = await link.crypto.read(src);
 		link.setUpdatedState(params, src.version, attrs, xattrs);
+		link.setCurrentStateFrom(src);
 		return link;
+	}
+
+	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
+		const { params, attrs, xattrs } = await this.crypto.read(src);
+		this.setUpdatedState(params, src.version, attrs, xattrs);
 	}
 
 	private setUpdatedState(

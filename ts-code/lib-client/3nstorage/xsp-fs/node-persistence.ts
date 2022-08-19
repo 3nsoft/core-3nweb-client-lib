@@ -30,8 +30,6 @@ import * as pv2 from './xsp-payload-v2';
 
 const SEG_SIZE = 16;	// in 256-byte blocks = 4K in bytes
 
-const EMPTY_BYTE_ARR = new Uint8Array(0);
-
 /**
  * This does reading and writing, keeping keys. This and extending objects are
  * used in file system nodes as thematic place with persistence functionality.
@@ -88,7 +86,8 @@ export abstract class NodePersistance {
 		const version = src.version;
 		const header = await src.readHeader();
 		const segReader = await makeSegmentsReader(
-			this.key, this.zerothHeaderNonce, version, header, this.cryptor)
+			this.key, this.zerothHeaderNonce, version, header, this.cryptor
+		);
 		return {
 			version,
 			byteSrc: makeDecryptedByteSource(src.segSrc, segReader),
@@ -201,15 +200,15 @@ export abstract class NodePersistance {
 		};
 	}
 
-	reencryptHeader = async (
+	async reencryptHeader(
 		initHeader: Uint8Array, newVersion: number
-	): Promise<Uint8Array> => {
+	): Promise<Uint8Array> {
 		if (!this.key) { throw new Error("Cannot use wiped object."); }
 		const headerContent = await this.cryptor.formatWN.open(
 			initHeader, this.key);
 		const n = calculateNonce(this.zerothHeaderNonce, newVersion);
 		return this.cryptor.formatWN.pack(headerContent, n, this.key);
-	};
+	}
 
 }
 Object.freeze(NodePersistance.prototype);

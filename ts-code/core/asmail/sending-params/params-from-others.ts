@@ -54,7 +54,7 @@ export class ParamsFromOthers extends JsonFileProc<ParamsForSending[]> {
 	}
 
 	protected async onFileEvent(ev: FileEvent): Promise<void> {
-		if (!ev.isRemote) { return; }
+		if (ev.src === 'local') { return; }
 		if (ev.type === 'removed') { throw new Error(
 			`Unexpected removal of file with invites info`); }
 		if (ev.type !== 'file-change') { return; }

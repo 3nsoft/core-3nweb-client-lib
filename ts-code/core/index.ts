@@ -44,6 +44,8 @@ export interface CoreConf {
 	signUpUrl: string;
 }
 
+export type MakeNet = () => NetClient;
+
 
 export class Core {
 
@@ -55,7 +57,7 @@ export class Core {
 	private closingProc: Promise<void>|undefined = undefined;
 
 	private constructor(
-		private readonly makeNet: () => NetClient,
+		private readonly makeNet: MakeNet,
 		private readonly makeResolver: ServiceLocatorMaker,
 		makeCryptor: makeCryptor,
 		private readonly appDirs: AppDirs,
@@ -72,7 +74,7 @@ export class Core {
 	}
 
 	static make(
-		conf: CoreConf, makeNet: () => NetClient,
+		conf: CoreConf, makeNet: MakeNet,
 		makeResolver: ServiceLocatorMaker, makeCryptor: makeCryptor
 	): Core {
 		const dirs = appDirs(conf.dataDir);
@@ -84,7 +86,7 @@ export class Core {
 
 	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
 		const signUp = new SignUp(
-			this.signUpUrl, this.cryptor.cryptor, this.makeNet,
+			this.signUpUrl, this.cryptor.cryptor, () => this.makeNet(),
 			this.appDirs.getUsersOnDisk, this.logger.logError);
 		const signIn = new SignIn(
 			this.cryptor.cryptor,
@@ -119,7 +121,7 @@ export class Core {
 		// 1) init of id manager without setting fs
 		const idManager = await IdManager.initInOneStepWithoutStore(
 			u.address, u.midSKey.default,
-			this.makeResolver('mailerid'), this.makeNet,
+			this.makeResolver('mailerid'), () => this.makeNet(),
 			this.logger.logError, this.logger.logWarning);
 		if (!idManager) { throw new Error(
 			`Failed to provision MailerId identity`); }
@@ -144,7 +146,7 @@ export class Core {
 	) => {
 		// 1) init of id manager without setting fs
 		const stepTwo = await IdManager.initWithoutStore(
-			address, this.makeResolver('mailerid'), this.makeNet,
+			address, this.makeResolver('mailerid'), () => this.makeNet(),
 			this.logger.logError, this.logger.logWarning);
 		if (!stepTwo) { return; }
 		return async (midLoginKey, storageKey) => {
@@ -177,7 +179,7 @@ export class Core {
 
 		const idManager = await IdManager.initFromLocalStore(address,
 			await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
-			this.makeResolver('mailerid'), this.makeNet,
+			this.makeResolver('mailerid'), () => this.makeNet(),
 			this.logger.logError, this.logger.logWarning);
 
 		if (idManager) {
@@ -190,7 +192,8 @@ export class Core {
 
 		return async (midLoginKey) => {
 			const idManager = await IdManager.initInOneStepWithoutStore(
-				address, midLoginKey, this.makeResolver('mailerid'), this.makeNet,
+				address, midLoginKey, this.makeResolver('mailerid'),
+				() => this.makeNet(),
 				this.logger.logError, this.logger.logWarning);
 			if (!idManager) { return; }
 			const res = await completeStorageInit!(idManager.getSigner);

@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { CorrespondentKeys, ReceptionPair, msgMasterDecryptor }
 	from './correspondent-keys';
@@ -71,21 +72,22 @@ export class KeyRing {
 	/**
 	 * This is a map from correspondents' canonical addresses to key objects.
 	 */
-	corrKeys = new Map<string, CorrespondentKeys>();
+	private readonly corrKeys = new Map<string, CorrespondentKeys>();
 
-	pairIdToEmailMap = new IdToEmailMap();
+	readonly pairIdToEmailMap = new IdToEmailMap();
 
 	private storage: KeyringStorage = (undefined as any);
 
 	constructor(
-		private cryptor: AsyncSBoxCryptor,
-		private publishedKeys: ConfigOfASMailServer['publishedKeys']
+		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly publishedKeys: ConfigOfASMailServer['publishedKeys']
 	) {
 		Object.seal(this);
 	}
 	
-	private addCorrespondent(address: string|undefined, serialForm?: string):
-			CorrespondentKeys {
+	private addCorrespondent(
+		address: string|undefined, serialForm?: string
+	): CorrespondentKeys {
 		const ck = (serialForm ?
 			new CorrespondentKeys(this, undefined, serialForm) :
 			new CorrespondentKeys(this, address));
@@ -119,9 +121,10 @@ export class KeyRing {
 		}
 	}
 
-	static async makeAndStart(cryptor: AsyncSBoxCryptor, fs: WritableFS,
-			publishedKeys: ConfigOfASMailServer['publishedKeys']):
-			Promise<KeyRing> {
+	static async makeAndStart(
+		cryptor: AsyncSBoxCryptor, fs: WritableFS,
+		publishedKeys: ConfigOfASMailServer['publishedKeys']
+	): Promise<KeyRing> {
 		const kr = new KeyRing(cryptor, publishedKeys);
 		await kr.init(fs);
 		return kr;
@@ -144,7 +147,7 @@ export class KeyRing {
 		return !this.corrKeys.has(address);
 	};
 	
-	generateKeysToSend: SendingResources['generateKeysToSend'] =
+	readonly generateKeysToSend: SendingResources['generateKeysToSend'] =
 			async (address, introPKeyFromServer) => {
 		address = toCanonicalAddress(address);
 
@@ -166,7 +169,7 @@ export class KeyRing {
 		return { encryptor, currentPair, msgCount };
 	};
 
-	nextCrypto: SendingResources['nextCrypto'] = async (address) => {
+	readonly nextCrypto: SendingResources['nextCrypto'] = async (address) => {
 		address = toCanonicalAddress(address);
 		let ck = this.corrKeys.get(address);
 		if (!ck) { throw new Error(
@@ -309,8 +312,9 @@ export class KeyRing {
 		this.saveChanges();
 	}
 
-	decrypt: ReceptionResources['msgDecryptor'] = async (
-			msgMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts) => {
+	readonly decrypt: ReceptionResources['msgDecryptor'] = async (
+		msgMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts
+	) => {
 
 		let decrInfo: MsgKeyInfo|undefined;
 		let incrMsgCount: ((msgCount: number) => void)|undefined;

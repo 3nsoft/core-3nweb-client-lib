@@ -21,7 +21,7 @@ import { SpecIt } from '../test-utils';
 type FileException = web3n.files.FileException;
 
 export const specs: SpecDescribe = {
-	description: '.writeTxtFile',
+	description: '.v.writeTxtFile',
 	its: []
 };
 
@@ -29,7 +29,7 @@ let it: SpecIt = { expectation: 'if not allowed to create, fails for missing fil
 it.func = async function(s) {
 	const { testFS } = s;
 	let txt = 'Should I be at BlackHat conference or working?';
-	await testFS.writeTxtFile('non-existing-file', txt, {})
+	await testFS.v!.writeTxtFile('non-existing-file', txt, {})
 	.then(() => {
 		fail('should fail for missing file');
 	}, (e: FileException) => {

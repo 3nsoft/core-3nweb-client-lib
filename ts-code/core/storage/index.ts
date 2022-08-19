@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2021 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -28,13 +28,14 @@ import { FileException, makeFileException, Code as excCode } from '../../lib-com
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-collection';
 import { asyncFind } from '../../lib-common/async-iter';
-import { DeviceFS } from '../../lib-client/local-files/device-fs';
 import { join } from 'path';
 import * as fs from '../../lib-common/async-fs-node';
 import { errWithCause } from '../../lib-common/exceptions/error';
-import { NetClient } from '../../lib-client/request-utils';
 import { StoragePathForUser } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
+import { MakeNet } from '..';
+import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from './system-folders';
+import { AppDataFolders } from './system-folders/apps-data';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -118,7 +119,7 @@ async function readRootKeyDerivParamsFromCache(
 /**
  * This function tries to get key derivation parameters from cache on a disk.
  * If not found, it will ask storage server for it with a provided function.
- * @param fs 
+ * @param folder 
  * @param getFromServer 
  */
 async function getRootKeyDerivParams(
@@ -135,28 +136,12 @@ async function getRootKeyDerivParams(
 	return params;
 }
 
-export const sysFolders = {
-	appData: 'Apps Data',
-	apps: 'Apps Code',
-	packages: 'App&Lib Packs',
-	sharedLibs: 'Shared Libs',
-	userFiles: 'User Files'
-};
-Object.freeze(sysFolders);
-
-/**
- * This function creates initial folder structure in a given root.
- * @param root 
- */
-export async function initSysFolders(root: WritableFS): Promise<void> {
-	for (const sysFolder of Object.values(sysFolders)) {
-		await root.makeFolder(sysFolder);
-	}
-}
 
 class StorageAndFS<T extends Storage> {
 	
 	rootFS: WritableFS = (undefined as any);
+
+	private syncedAppDataRoots: AppDataFolders|undefined = undefined;
 	
 	private constructor(
 		public storage: T
@@ -170,6 +155,9 @@ class StorageAndFS<T extends Storage> {
 		const s = new StorageAndFS(storage);
 		try {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
+			if (s.rootFS.v?.sync) {
+				s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
+			}
 			return s;
 		} catch (err) {
 			if ((err as EncryptionException).failedCipherVerification) {
@@ -186,11 +174,17 @@ class StorageAndFS<T extends Storage> {
 		const s = new StorageAndFS(storage);
 		try {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
+			if (s.rootFS.v?.sync) {
+				s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
+			}
 			return s;
 		} catch (err) {
 			if ((err as BaseStorageExc).objNotFound) {
 				s.rootFS = await xspFS.makeNewRoot(s.storage, key);
 				await initSysFolders(s.rootFS);
+				if (s.rootFS.v?.sync) {
+					s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
+				}
 				return s;
 			} else if ((err as EncryptionException).failedCipherVerification) {
 				return;
@@ -200,14 +194,23 @@ class StorageAndFS<T extends Storage> {
 		}
 	}
 
-	makeAppFS(appFolder: string): Promise<WritableFS> {
-		if (('string' !== typeof appFolder) ||
-				(appFolder.length === 0) ||
-				(appFolder.indexOf('/') >= 0)) {
+	/**
+	 * This creates app data folder.
+	 * Folder objects are uploaded, if this is a synced storage.
+	 * @param appFolder 
+	 */
+	async makeAppFS(appFolder: string): Promise<WritableFS> {
+		if (('string' !== typeof appFolder) || (appFolder.length === 0)
+		|| (appFolder.indexOf('/') >= 0)
+		|| (appFolder === '.') || (appFolder === '..')) {
 			throw makeBadAppNameExc(appFolder);
 		}
 		if (!this.rootFS) { throw new Error('Storage is not initialized.'); }
-		return this.rootFS.writableSubRoot(`${sysFolders.appData}/${appFolder}`);
+		const appDataFS = await (this.syncedAppDataRoots ?
+			this.syncedAppDataRoots.getOrMake(appFolder) :
+			this.rootFS.writableSubRoot(`${sysFolders.appData}/${appFolder}`)
+		);
+		return appDataFS;
 	}
 
 	userFS(): Promise<WritableFS> {
@@ -232,12 +235,18 @@ class StorageAndFS<T extends Storage> {
 
 	async close(): Promise<void> {
 		if (!this.rootFS) { return; }
+		this.syncedAppDataRoots?.stopSync();
 		await this.rootFS.close();
 		await this.storage.close();
+		this.syncedAppDataRoots = undefined;
 		this.rootFS = (undefined as any);
 		this.storage = (undefined as any);
 	}
+
 }
+Object.freeze(StorageAndFS.prototype);
+Object.freeze(StorageAndFS);
+
 
 export class Storages implements FactoryOfFSs {
 
@@ -311,7 +320,7 @@ export class Storages implements FactoryOfFSs {
 
 	async startInitFromCache(
 		user: string, keyGen: GenerateKey,
-		makeNet: () => NetClient, resolver: ServiceLocator, logError: LogError
+		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
 	): Promise<((getSigner: GetSigner) => Promise<boolean>)|undefined> {
 		const storageDir = this.storageDirForUser(user);
 		const params = await readRootKeyDerivParamsFromCache(storageDir);
@@ -331,8 +340,8 @@ export class Storages implements FactoryOfFSs {
 				user, getSigner,
 				this.storageGetterForSyncedStorage,
 				this.cryptor,
-				() => resolver(user),
-				makeNet, logError);
+				() => resolver(user), makeNet(),
+				logError);
 			this.synced = await StorageAndFS.existing(syncedStore, key);
 			key.fill(0);
 			if (!this.synced) { return false; }
@@ -343,7 +352,7 @@ export class Storages implements FactoryOfFSs {
 
 	async initFromRemote(
 		user: string, getSigner: GetSigner, keyOrGen: GenerateKey|Uint8Array,
-		makeNet: () => NetClient, resolver: ServiceLocator, logError: LogError
+		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
 	): Promise<boolean> {
 		const storageDir = this.storageDirForUser(user);
 		const { startObjProcs, syncedStore } = await SyncedStore.makeAndStart(
@@ -351,8 +360,8 @@ export class Storages implements FactoryOfFSs {
 			user, getSigner,
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
-			() => resolver(user),
-			makeNet, logError);
+			() => resolver(user), makeNet(),
+			logError);
 		// getting parameters records them locally on a disk
 		const params = await getRootKeyDerivParams(
 			storageDir, syncedStore.getRootKeyDerivParamsFromServer);
@@ -444,31 +453,6 @@ export class Storages implements FactoryOfFSs {
 Object.freeze(Storages.prototype);
 Object.freeze(Storages);
 
-export async function userFilesOnDevice(): Promise<WritableFS> {
-	if (process.platform === 'win32') {
-		return DeviceFS.makeWritable(process.env.USERPROFILE!);
-	} else {
-		return DeviceFS.makeWritable(process.env.HOME!);
-	}
-}
-
-
-export async function sysFilesOnDevice(): Promise<FSItem> {
-	const c = makeFSCollection();
-	if (process.platform === 'win32') {
-		const sysDrive = process.env.SystemDrive!;
-		await c.set!(sysDrive, {
-			isFolder: true,
-			item: await DeviceFS.makeWritable(sysDrive)
-		});
-	} else {
-		await c.set!('', {
-			isFolder: true,
-			item: await DeviceFS.makeWritable('/')
-		});
-	}
-	return { isCollection: true, item: c };
-}
 
 export interface FactoryOfFSs {
 	makeSyncedFSForApp(appFolder: string): Promise<WritableFS>;
@@ -546,8 +530,7 @@ export class PerAppStorage {
 	 */
 	private ensureAppFSAllowed(appFolder: string, type: 'local'|'synced'): void {
 		if (typeof appFolder !== 'string') { throw makeBadAppNameExc(appFolder); }
-		if (CORE_APPS_PREFIX ===
-				appFolder.substring(0, CORE_APPS_PREFIX.length)) {
+		if (appFolder.startsWith(CORE_APPS_PREFIX)) {
 			throw makeNotAllowedToOpenAppFSExc(appFolder);
 		}
 		if (!this.policy.canOpenAppFS(appFolder, type)) {
@@ -588,6 +571,7 @@ export class PerAppStorage {
 }
 Object.freeze(PerAppStorage.prototype);
 Object.freeze(PerAppStorage);
+
 
 async function applyPolicyToFSItem(
 	fsi: FSItem, policy: 'w'|'r', path?: string
@@ -659,5 +643,6 @@ async function applyPolicyToFSCollection(
 		return fs.readonlySubRoot(path);
 	}
 }
+
 
 Object.freeze(exports);

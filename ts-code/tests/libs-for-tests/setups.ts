@@ -146,8 +146,12 @@ export  interface MultiUserSetup {
 
 	users: User[];
 	runners: Map<string, CoreRunner>;
+
 	testAppCapsByUserIndex(i: number, viaIPC?: boolean): CommonW3N;
 	testAppCapsByUser(u: User, viaIPC?: boolean): CommonW3N;
+
+	sndDevByUserIndex(userNum: number, viaIPC?: boolean): Promise<DevForSetup>;
+	sndDevByUser(u: User, viaIPC?: boolean): Promise<DevForSetup>;
 
 	isUp: boolean;
 
@@ -162,6 +166,7 @@ function makeMultiUserSetupObject(
 } {
 	
 	const runners = new Map<string, CoreRunner>();
+	const sndDevRunners = new Map<string, CoreRunner>();
 	const server = new ServicesRunner(SERVICE_PORT, domains);
 	const users: User[] = [];
 	let isUp = false;
@@ -177,10 +182,29 @@ function makeMultiUserSetupObject(
 		}
 	}
 
-	function testAppCapsByUserIndex(i: number, viaIPC = true): CommonW3N {
+	function testAppCapsByUserIndex(i: number, viaIPC?: boolean): CommonW3N {
 		const u = users[i];
 		assert(!!u, `Given index ${i} is not pointing to existing user`);
 		return testAppCapsByUser(u, viaIPC);
+	}
+
+	async function sndDevByUser(
+		u: User, viaIPC = true
+	): Promise<DevForSetup> {
+		let r = sndDevRunners.get(u.userId)!;
+		if (!r) {
+			const mainR = runners.get(u.userId)!;
+			assert(!!mainR, `Core runner is missing for user ${u.userId}`);
+			r = await mainR.makeAndLoginNewCore();
+			sndDevRunners.set(u.userId, r);
+		}
+		return new DevForSetup(r, viaIPC);
+	}
+
+	function sndDevByUserIndex(i: number, viaIPC = true): Promise<DevForSetup> {
+		const u = users[i];
+		assert(!!u, `Given index ${i} is not pointing to existing user`);
+		return sndDevByUser(u, viaIPC);
 	}
 
 	const s: MultiUserSetup = {
@@ -188,7 +212,9 @@ function makeMultiUserSetupObject(
 		users,
 		get isUp() { return isUp; },
 		testAppCapsByUser,
-		testAppCapsByUserIndex
+		testAppCapsByUserIndex,
+		sndDevByUser,
+		sndDevByUserIndex
 	};
 
 	async function createUser(userId: string): Promise<User> {
@@ -221,19 +247,21 @@ function makeMultiUserSetupObject(
 		isStopped = true;
 		await sleep(1000);
 		try {
-			for (const runner of runners.values()) {
-				try {
-					await runner.close()
-					.catch(err => {
-						console.error(`\n>>> error in closing core's runner`, err);
-						throw err;
-					});
-				} finally {
-					await runner.cleanup(true)
-					.catch(err => {
-						console.error(`\n>>> error in cleanup of core's runner`, err);
-						throw err;
-					});
+			for (const iter of [ runners.values(), sndDevRunners.values() ]) {
+				for (const runner of iter) {
+					try {
+						await runner.close()
+						.catch(err => {
+							console.error(`\n>>> error in closing core's runner`, err);
+							throw err;
+						});
+					} finally {
+						await runner.cleanup(true)
+						.catch(err => {
+							console.error(`\n>>> error in cleanup of core's runner`, err);
+							throw err;
+						});
+					}
 				}
 			}
 		} finally {
@@ -255,7 +283,7 @@ function makeMultiUserSetupObject(
  * Setup automatically sets DNS for domains from these ids.
  * @return a setup object, for access to cores, for restarting mid-test, etc.
  */
-export function setupWithUsers(
+ export function setupWithUsers(
 	setupTestAppCaps = true,
 	users = ['Bob Marley @rock.cafe']
 ): MultiUserSetup {
@@ -321,6 +349,35 @@ export function serviceWithMailerIdLogin(): {
 	}
 	return { serviceUrl, isSessionValid };
 }
+
+
+export class DevForSetup {
+
+	constructor(
+		private readonly runner: CoreRunner,
+		private readonly viaIPC = true
+	) {
+		Object.seal(this);
+	}
+
+	async start(): Promise<void> {
+		await this.runner.loginUser();
+		this.runner.setupTestAppCaps();
+	}
+
+	async stop(): Promise<void> {
+		await this.runner.close();
+	}
+
+	get w3n(): web3n.caps.common.W3N {
+		return (this.viaIPC ?
+			this.runner.appCapsViaIPC :
+			this.runner.rawAppCaps);
+	}
+
+}
+Object.freeze(DevForSetup.prototype);
+Object.freeze(DevForSetup);
 
 
 Object.freeze(exports);

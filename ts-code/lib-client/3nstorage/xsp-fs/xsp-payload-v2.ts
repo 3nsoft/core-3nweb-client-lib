@@ -536,7 +536,7 @@ class WritablePayloadV2 implements WritablePayload {
 					c.len = lenBefore;
 					const beforeIndInSink = this.sectionsInSink.indexOf(c);
 					assert(beforeIndInSink >= 0);
-					this.sectionsInSink.splice(beforeIndInSink, 0, after);
+					this.sectionsInSink.splice(beforeIndInSink+1, 0, after);
 				}
 				before = c;
 				indToSplice = i+1;

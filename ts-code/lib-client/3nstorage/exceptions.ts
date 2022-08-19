@@ -17,6 +17,8 @@
 
 import { ObjId } from "./xsp-fs/common";
 
+type FSSyncException = web3n.files.FSSyncException;
+
 export interface StorageException extends web3n.RuntimeException {
 	type: 'storage';
 	remoteStorage?: true;
@@ -83,5 +85,20 @@ export function makeVersionMismatchExc(
 export function makeStorageIsClosedExc(): StorageException {
 	return makeStorageException({ storageIsClosed: true });
 }
+
+export function makeFSSyncException(
+	path: string, fields: Partial<FSSyncException>
+): FSSyncException {
+	const exc: FSSyncException = {
+		runtimeException: true,
+		type: 'fs-sync',
+		path
+	};
+	for (const [ key, value ] of Object.entries(fields)) {
+		exc[key] = value;
+	}
+	return exc;
+}
+
 
 Object.freeze(exports);

@@ -177,12 +177,17 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		storage: Storage, parentId: string|undefined, fileName: string,
 		objId: string, key: Uint8Array
 	): Promise<FileNode> {
-		const src = await storage.getObj(objId);
+		const src = await storage.getObjSrc(objId);
 		const file = new FileNode(
-			storage, fileName, objId, src.version, parentId, key);
-		const fileAttrs = await file.crypto.getAttrs(src);
-		file.setUpdatedState(src.version, fileAttrs);
+			storage, fileName, objId, src.version, parentId, key
+		);
+		await file.setCurrentStateFrom(src);
 		return file;
+	}
+
+	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
+		const fileAttrs = await this.crypto.getAttrs(src);
+		this.setUpdatedState(src.version, fileAttrs);
 	}
 
 	private setUpdatedState(version: number, fileAttrs: FileAttrs): void {
@@ -195,7 +200,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	}
 
 	async readSrc(): Promise<{ src: FileByteSource; version: number; }> {
-		const objSrc = await this.storage.getObj(this.objId);
+		const objSrc = await this.storage.getObjSrc(this.objId);
 		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
 			const version = objSrc.version;
 			if (this.version < version) {
@@ -218,7 +223,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	async readBytes(
 		start: number|undefined, end: number|undefined
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
-		const objSrc = await this.storage.getObj(this.objId);
+		const objSrc = await this.storage.getObjSrc(this.objId);
 		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
 			const version = objSrc.version;
 			if (this.version < version) {
@@ -303,7 +308,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		const { attrs, xattrs, newVersion } = super.getParamsForUpdate(changes);
 		const base = ((truncate || (this.version === 0)) ?
 			undefined :
-			await this.storage.getObj(this.objId));
+			await this.storage.getObjSrc(this.objId));
 		const {
 			sinkPromise, sub
 		} = await this.crypto.getFileSink(newVersion, attrs, xattrs, base);
@@ -320,6 +325,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		this.broadcastEvent({
 			type: 'file-change',
 			path: this.name,
+			src: 'local',
 			newVersion
 		});
 	}

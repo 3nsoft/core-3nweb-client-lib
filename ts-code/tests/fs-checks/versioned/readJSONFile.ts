@@ -22,7 +22,7 @@ import { SpecIt } from '../test-utils';
 type FileException = web3n.files.FileException;
 
 export const specs: SpecDescribe = {
-	description: '.readJSONFile',
+	description: '.v.readJSONFile',
 	its: []
 };
 
@@ -31,7 +31,7 @@ it.func = async function(s) {
 	const { testFS } = s;
 	let fName = 'unknown-file';
 	expect(await testFS.checkFilePresence(fName)).toBe(false);
-	await testFS.readJSONFile(fName)
+	await testFS.v!.readJSONFile(fName)
 	.then(() => {
 		fail('reading json must fail, when file does not exist');
 	}, (err: FileException) => {

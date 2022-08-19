@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018 3NSoft Inc.
+ Copyright (C) 2016 - 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,12 +16,20 @@
 */
 
 type FS = web3n.files.FS;
+type FSType = web3n.files.FSType;
 type ReadonlyFS = web3n.files.ReadonlyFS;
 type WritableFS = web3n.files.WritableFS;
+type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
+type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
+type ReadonlyFSSyncAPI = web3n.files.ReadonlyFSSyncAPI;
+type WritableFSSyncAPI = web3n.files.WritableFSSyncAPI;
 type File = web3n.files.File;
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type WritableFile = web3n.files.WritableFile;
-type FSType = web3n.files.FSType;
+type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
+type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
+type ReadonlyFileSyncAPI = web3n.files.ReadonlyFileSyncAPI;
+type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
 
 export interface LinkParameters<T> {
 	storageType: FSType;
@@ -78,8 +86,6 @@ function ensureWritable(o: { writable: boolean }): void {
 	}
 }
 
-type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
-
 function wrapWritableFileVersionedAPI(
 	vImpl: WritableFileVersionedAPI|undefined
 ): WritableFileVersionedAPI|undefined {
@@ -96,7 +102,25 @@ function wrapWritableFileVersionedAPI(
 		readTxt: vImpl.readTxt.bind(vImpl),
 		writeBytes: vImpl.writeBytes.bind(vImpl),
 		writeJSON: vImpl.writeJSON.bind(vImpl),
-		writeTxt: vImpl.writeTxt.bind(vImpl)
+		writeTxt: vImpl.writeTxt.bind(vImpl),
+		archiveCurrent: vImpl.archiveCurrent.bind(vImpl),
+		listVersions: vImpl.listVersions.bind(vImpl),
+		sync: wrapWritableFileSyncAPI(vImpl.sync)
+	};
+	return Object.freeze(w);
+}
+
+function wrapWritableFileSyncAPI(
+	sImpl: WritableFileSyncAPI|undefined
+): WritableFileSyncAPI|undefined {
+	if (!sImpl) { return; }
+	const w: WritableFileSyncAPI = {
+		status: sImpl.status.bind(sImpl),
+		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
+		download: sImpl.download.bind(sImpl),
+		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
+		upload: sImpl.upload.bind(sImpl),
+		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -125,8 +149,6 @@ export function wrapReadonlyFile(fImpl: ReadonlyFile): ReadonlyFile {
 	return addParamsAndFreezeFileWrap(w, fImpl);
 }
 
-type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
-
 function wrapReadonlyFileVersionedAPI(
 	vImpl: ReadonlyFileVersionedAPI|undefined
 ): ReadonlyFileVersionedAPI|undefined {
@@ -137,7 +159,23 @@ function wrapReadonlyFileVersionedAPI(
 		getByteSource: vImpl.getByteSource.bind(vImpl),
 		readBytes: vImpl.readBytes.bind(vImpl),
 		readJSON: vImpl.readJSON.bind(vImpl) as ReadonlyFileVersionedAPI['readJSON'],
-		readTxt: vImpl.readTxt.bind(vImpl)
+		readTxt: vImpl.readTxt.bind(vImpl),
+		listVersions: vImpl.listVersions.bind(vImpl),
+		sync: wrapReadonlyFileSyncAPI(vImpl.sync)
+	};
+	return Object.freeze(w);
+}
+
+function wrapReadonlyFileSyncAPI(
+	sImpl: ReadonlyFileSyncAPI|undefined
+): ReadonlyFileSyncAPI|undefined {
+	if (!sImpl) { return; }
+	const w: ReadonlyFileSyncAPI = {
+		status: sImpl.status.bind(sImpl),
+		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
+		download: sImpl.download.bind(sImpl),
+		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
+		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -203,8 +241,6 @@ function addParamsAndFreezeFSWrap<T extends ReadonlyFS>(w: T, fsImpl: T): T {
 	return Object.freeze(w);
 }
 
-type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
-
 function wrapWritableFSVersionedAPI(
 	vImpl: WritableFSVersionedAPI|undefined
 ): WritableFSVersionedAPI|undefined {
@@ -222,6 +258,27 @@ function wrapWritableFSVersionedAPI(
 		readTxtFile: vImpl.readTxtFile.bind(vImpl),
 		writeJSONFile: vImpl.writeJSONFile.bind(vImpl),
 		writeTxtFile: vImpl.writeTxtFile.bind(vImpl),
+		archiveCurrent: vImpl.archiveCurrent.bind(vImpl),
+		listVersions: vImpl.listVersions.bind(vImpl),
+		sync: wrapWritableFSSyncAPI(vImpl.sync)
+	};
+	return Object.freeze(w);
+}
+
+function wrapWritableFSSyncAPI(
+	sImpl: WritableFSSyncAPI|undefined
+): WritableFSSyncAPI|undefined {
+	if (!sImpl) { return; }
+	const w: WritableFSSyncAPI = {
+		status: sImpl.status.bind(sImpl),
+		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
+		download: sImpl.download.bind(sImpl),
+		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
+		adoptRemote: sImpl.adoptRemote.bind(sImpl),
+		diffCurrentAndRemoteFolderVersions:
+			sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
+		upload: sImpl.upload.bind(sImpl),
+		adoptRemoteFolderItem: sImpl.adoptRemoteFolderItem.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -255,8 +312,6 @@ export function wrapReadonlyFS(fsImpl: ReadonlyFS): ReadonlyFS {
 	return addParamsAndFreezeFSWrap(w, fsImpl);
 }
 
-type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
-
 function wrapReadonlyFSVersionedAPI(
 	vImpl: ReadonlyFSVersionedAPI|undefined
 ): ReadonlyFSVersionedAPI|undefined {
@@ -268,7 +323,25 @@ function wrapReadonlyFSVersionedAPI(
 		readBytes: vImpl.readBytes.bind(vImpl),
 		listFolder: vImpl.listFolder.bind(vImpl),
 		readJSONFile: vImpl.readJSONFile.bind(vImpl) as ReadonlyFSVersionedAPI['readJSONFile'],
-		readTxtFile: vImpl.readTxtFile.bind(vImpl)
+		readTxtFile: vImpl.readTxtFile.bind(vImpl),
+		listVersions: vImpl.listVersions.bind(vImpl),
+		sync: wrapReadonlyFSSyncAPI(vImpl.sync)
+	};
+	return Object.freeze(w);
+}
+
+function wrapReadonlyFSSyncAPI(
+	sImpl: ReadonlyFSSyncAPI|undefined
+): ReadonlyFSSyncAPI|undefined {
+	if (!sImpl) { return; }
+	const w: ReadonlyFSSyncAPI = {
+		status: sImpl.status.bind(sImpl),
+		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
+		download: sImpl.download.bind(sImpl),
+		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
+		adoptRemote: sImpl.adoptRemote.bind(sImpl),
+		diffCurrentAndRemoteFolderVersions:
+			sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -296,7 +369,6 @@ export function wrapIntoVersionlessReadonlyFS(
 		stat: async (path: string) => {
 			const stats = await fs.stat(path);
 			delete stats.version;
-			delete stats.sync;
 			return stats;
 		},
 		readonlyFile: async (path: string) => toVersionlessReadonlyFile(
@@ -335,7 +407,6 @@ function toVersionlessReadonlyFile(f: ReadonlyFile): ReadonlyFile {
 		stat: async () => {
 			const stats = await f.stat();
 			delete stats.version;
-			delete stats.sync;
 			return stats;
 		},
 		watch: f.watch.bind(f),

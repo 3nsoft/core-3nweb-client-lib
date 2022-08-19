@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8 } from "./protobuf-msg";
+import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8, intValOf } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { fs as pb } from '../protos/fs.proto';
 import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
@@ -32,15 +32,13 @@ type ReadonlyFS = web3n.files.ReadonlyFS;
 type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
 type WritableFS = web3n.files.WritableFS;
 type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
+type WritableFSSyncAPI = web3n.files.WritableFSSyncAPI;
 type FS = web3n.files.FS;
 type File = web3n.files.File;
 type WritableFile = web3n.files.WritableFile;
-type FSEvent = web3n.files.FSEvent;
-type EntryRemovalEvent = web3n.files.EntryRemovalEvent;
-type EntryRenamingEvent = web3n.files.EntryRenamingEvent;
-type EntryAdditionEvent = web3n.files.EntryAdditionEvent;
-type SyncUploadEvent = web3n.files.SyncUploadEvent;
+type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
+type RemoteEvent = web3n.files.RemoteEvent;
 type SymLink = web3n.files.SymLink;
 type ListingEntry = web3n.files.ListingEntry;
 type XAttrsChanges = web3n.files.XAttrsChanges;
@@ -50,6 +48,8 @@ type SelectCriteria = web3n.files.SelectCriteria;
 type FSItem = web3n.files.FSItem;
 type FSCollection = web3n.files.FSCollection;
 type CollectionEvent = web3n.files.CollectionEvent;
+type FolderDiff = web3n.files.FolderDiff;
+type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
 
 export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	checkRefObjTypeIs('FSImpl', fsMsg.impl);
@@ -76,7 +76,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 		stat: stat.makeCaller(caller, objPath),
 		watchFolder: watch.makeFolderCaller(caller, objPath),
 		watchFile: watch.makeFileCaller(caller, objPath),
-		watchTree: watch.makeTreeCaller(caller, objPath),
+		watchTree: watchTree.makeCaller(caller, objPath),
 	} as WritableFS;
 	if (fsMsg.writable) {
 		fs.copyFile = copyFile.makeCaller(caller, objPath);
@@ -107,13 +107,33 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 			readBytes: vReadBytes.makeCaller(caller, vPath),
 			readJSONFile: vReadJSONFile.makeCaller(caller, vPath),
 			readTxtFile: vReadTxtFile.makeCaller(caller, vPath),
+			listVersions: vListVersions.makeCaller(caller, vPath)
 		} as WritableFSVersionedAPI;
-		if (fsMsg.writable) {
+		if (fs.writable) {
 			fs.v.getByteSink = vGetByteSink.makeCaller(caller, vPath);
 			fs.v.writeBytes = vWriteBytes.makeCaller(caller, vPath);
 			fs.v.writeJSONFile = vWriteJSONFile.makeCaller(caller, vPath);
 			fs.v.writeTxtFile = vWriteTxtFile.makeCaller(caller, vPath);
 			fs.v.updateXAttrs = vUpdateXAttrs.makeCaller(caller, vPath);
+			fs.v.archiveCurrent = vArchiveCurrent.makeCaller(caller, vPath);
+		}
+		if (fsMsg.isSynced) {
+			const vsPath = objPath.concat('v', 'sync');
+			fs.v.sync = {
+				status: vsStatus.makeCaller(caller, vsPath),
+				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(
+					caller, vsPath),
+				download: vsDownload.makeCaller(caller, vsPath),
+				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
+				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(
+					caller, vsPath)
+			} as WritableFSSyncAPI;
+			if (fs.writable) {
+				fs.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
+				fs.v.sync!.adoptRemoteFolderItem =
+					vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
+			}
 		}
 	}
 	caller.registerClientDrop(fs, fsMsg.impl);
@@ -141,7 +161,7 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 		stat: stat.wrapService(fs.stat),
 		watchFolder: watch.wrapService(fs.watchFolder, packFSEvent),
 		watchFile: watch.wrapService(fs.watchFile, packFileEvent),
-		watchTree: watch.wrapService(fs.watchTree, packFSEvent),
+		watchTree: watchTree.wrapService(fs.watchTree),
 	} as ExposedObj<WritableFS>;
 	if (fs.writable) {
 		implExp.copyFile = copyFile.wrapService((fs as WritableFS).copyFile);
@@ -186,6 +206,7 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 			readBytes: vReadBytes.wrapService(fs.v.readBytes),
 			readJSONFile: vReadJSONFile.wrapService(fs.v.readJSONFile),
 			readTxtFile: vReadTxtFile.wrapService(fs.v.readTxtFile),
+			listVersions: vListVersions.wrapService(fs.v.listVersions)
 		} as ExposedObj<WritableFSVersionedAPI>;
 		if (fs.writable) {
 			implExp.v.getByteSink = vGetByteSink.wrapService(
@@ -198,6 +219,29 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 				(fs.v as WritableFSVersionedAPI).writeTxtFile);
 			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService(
 				(fs.v as WritableFSVersionedAPI).updateXAttrs);
+			implExp.v.archiveCurrent = vArchiveCurrent.wrapService(
+				(fs.v as WritableFSVersionedAPI).archiveCurrent);
+		}
+		if (fs.v.sync) {
+			implExp.v.sync = {
+				status: vsStatus.wrapService(fs.v.sync.status),
+				updateStatusInfo: vsUpdateStatusInfo.wrapService(
+					fs.v.sync.updateStatusInfo),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(
+					fs.v.sync.isRemoteVersionOnDisk),
+				download: vsDownload.wrapService(fs.v.sync.download),
+				adoptRemote: vsAdoptRemote.wrapService(fs.v.sync.adoptRemote),
+				diffCurrentAndRemoteFolderVersions:
+					vsDiffCurrentAndRemoteFolderVersions.wrapService(
+						fs.v.sync.diffCurrentAndRemoteFolderVersions)
+			} as ExposedObj<WritableFSSyncAPI>;
+			if (fs.writable) {
+				implExp.v.sync.upload = vsUpload.wrapService(
+					(fs.v.sync as WritableFSSyncAPI).upload);
+				implExp.v.sync.adoptRemoteFolderItem =
+					vsAdoptRemoteFolderItem.wrapService(
+						(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem);
+			}
 		}
 	}
 	const impl = expServices.exposeDroppableService<'FSImpl'>(
@@ -205,6 +249,7 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 	const fsMsg: FSMsg = {
 		impl,
 		isVersioned: !!fs.v,
+		isSynced: !!(fs.v && fs.v.sync),
 		name: fs.name,
 		type: fs.type,
 		writable: fs.writable
@@ -215,6 +260,7 @@ export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
 export interface FSMsg {
 	type: string;
 	isVersioned: boolean;
+	isSynced: boolean;
 	writable: boolean;
 	name: string;
 	impl: ObjectReference<'FSImpl'>;
@@ -465,55 +511,141 @@ Object.freeze(readLink);
 
 
 interface FSEventMsg {
-	type: string;
+	type: (FolderEvent|FileEvent|RemoteEvent)['type'];
 	path: string;
-	isRemote?: Value<boolean>;
+	src?: Value<FileEvent['src']>;
 	newVersion?: Value<number>;
 	name?: Value<string>;
 	oldName?: Value<string>;
 	newName?: Value<string>;
 	entry?: ListingEntryMsg;
-	current?: Value<number>;
-	uploaded?: Value<number>;
 	moveLabel?: Value<number>;
+	removedArchVer?: Value<number>;
+	archivedVersion?: Value<number>;
 }
 
 const fsEventMsgType = ProtoType.for<FSEventMsg>(pb.FSEventMsg);
 
-function packFSEvent(e: FSEvent): Buffer {
-	const m: FSEventMsg = {
-		type: e.type,
-		path: e.path,
-		isRemote: toOptVal(e.isRemote),
-		newVersion: toOptVal(e.newVersion),
-		name: toOptVal((e as EntryRemovalEvent).name),
-		oldName: toOptVal((e as EntryRenamingEvent).oldName),
-		newName: toOptVal((e as EntryRenamingEvent).newName),
-		entry: ((e as EntryAdditionEvent).entry ?
-			lsEntryToMsg((e as EntryAdditionEvent).entry) : undefined),
-		current: toOptVal((e as SyncUploadEvent).current),
-		uploaded: toOptVal((e as SyncUploadEvent).uploaded),
-		moveLabel: toOptVal((e as EntryAdditionEvent).moveLabel)
-	};
-	return fsEventMsgType.pack(m);
+function packFSEvent(e: FolderEvent|FileEvent|RemoteEvent): Buffer {
+	const { type, path } = e;
+	switch (type) {
+		case 'removed':
+			return fsEventMsgType.pack({
+				type, path,
+				src: toVal(e.src)
+			});
+		case 'remote-removal':
+			return fsEventMsgType.pack({
+				type, path
+			});
+		case 'file-change':
+			return fsEventMsgType.pack({
+				type, path,
+				src: toVal(e.src),
+				newVersion: toOptVal(e.newVersion)
+			});
+		case 'remote-change':
+			return fsEventMsgType.pack({
+				type, path,
+				newVersion: toOptVal(e.newVersion)
+			});
+		case 'entry-addition':
+			return fsEventMsgType.pack({
+				type, path,
+				src: toVal(e.src),
+				newVersion: toOptVal(e.newVersion),
+				entry: lsEntryToMsg(e.entry),
+				moveLabel: toOptVal(e.moveLabel)
+			});
+		case 'entry-removal':
+			return fsEventMsgType.pack({
+				type, path,
+				src: toVal(e.src),
+				newVersion: toOptVal(e.newVersion),
+				name: toVal(e.name),
+				moveLabel: toOptVal(e.moveLabel)
+			});
+		case 'entry-renaming':
+			return fsEventMsgType.pack({
+				type, path,
+				src: toVal(e.src),
+				newVersion: toOptVal(e.newVersion),
+				oldName: toVal(e.oldName),
+				newName: toVal(e.newName)
+			});
+		case 'remote-arch-ver-removal':
+			return fsEventMsgType.pack({
+				type, path,
+				removedArchVer: toVal(e.removedArchVer)
+			});
+		case 'remote-version-archival':
+			return fsEventMsgType.pack({
+				type, path,
+				archivedVersion: toVal(e.archivedVersion)
+			});
+		default:
+			throw new Error(`Unknown event type ${type}`);
+	}
 }
 
-function unpackFSEvent(buf: EnvelopeBody): FSEvent {
+function unpackFSEvent(buf: EnvelopeBody): FolderEvent|FileEvent|RemoteEvent {
 	const m = fsEventMsgType.unpack(buf);
-	const event = {
-		type: m.type,
-		path: m.path,
-		isRemote: valOfOpt(m.isRemote),
-		newVersion: valOfOptInt(m.newVersion),
-		name: valOfOpt(m.name),
-		oldName: valOfOpt(m.oldName),
-		newName: valOfOpt(m.newName),
-		entry: (m.entry ? lsEntryFromMsg(m.entry): undefined),
-		current: valOfOptInt(m.current),
-		uploaded: valOfOptInt(m.uploaded),
-		moveLabel: valOfOptInt(m.moveLabel)
-	} as FSEvent;
-	return event;
+	const { type, path } = m;
+	switch (type) {
+		case 'entry-addition':
+			return {
+				type, path,
+				src: valOf(m.src!),
+				newVersion: valOfOptInt(m.newVersion),
+				entry: lsEntryFromMsg(m.entry!),
+				moveLabel: valOfOptInt(m.moveLabel)
+			};
+		case 'entry-removal':
+			return {
+				type, path,
+				src: valOf(m.src!),
+				newVersion: valOfOptInt(m.newVersion),
+				name: valOf(m.name!),
+				moveLabel: valOfOptInt(m.moveLabel)
+			};
+		case 'entry-renaming':
+			return {
+				type, path,
+				src: valOf(m.src!),
+				newVersion: valOfOptInt(m.newVersion),
+				oldName: valOf(m.oldName!),
+				newName: valOf(m.newName!)
+			};
+		case 'file-change':
+			return {
+				type, path,
+				src: valOf(m.src!),
+				newVersion: valOfOptInt(m.newVersion!)
+			};
+		case 'removed':
+			return {
+				type, path,
+				src: valOf(m.src!)
+			};
+		case 'remote-removal':
+			return {
+				type, path
+			};
+		case 'remote-change':
+			return {
+				type, path, newVersion: intValOf(m.newVersion!)
+			};
+		case 'remote-arch-ver-removal':
+			return {
+				type, path, removedArchVer: intValOf(m.removedArchVer!)
+			};
+		case 'remote-version-archival':
+			return {
+				type, path, archivedVersion: intValOf(m.archivedVersion!)
+			};
+		default:
+			throw new Error(`Unknown event type ${type}`);
+	}
 }
 
 interface ListingEntryMsg {
@@ -550,10 +682,9 @@ function lsEntryFromMsg(m: ListingEntryMsg): ListingEntry {
 
 namespace watch {
 
-	export type watchFn = ReadonlyFS['watchFolder'] | ReadonlyFS['watchFile'] |
-		ReadonlyFS['watchTree'];
+	export type watchFn = ReadonlyFS['watchFolder'] | ReadonlyFS['watchFile'];
 
-	export function wrapService<E extends FSEvent|FileEvent>(
+	export function wrapService<E extends FolderEvent|FileEvent|RemoteEvent>(
 		fn: watchFn, packEvent: (ev: E) => Buffer
 	): ExposedFn {
 		return buf => {
@@ -592,14 +723,6 @@ namespace watch {
 			caller, ipcPath, unpackFSEvent) as ReadonlyFS['watchFolder'];
 	}
 
-	export function makeTreeCaller(
-		caller: Caller, objPath: string[]
-	): ReadonlyFS['watchTree'] {
-		const ipcPath = objPath.concat('watchTree');
-		return makeCaller(
-			caller, ipcPath, unpackFSEvent) as ReadonlyFS['watchTree'];
-	}
-
 	export function makeFileCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchFile'] {
@@ -610,6 +733,50 @@ namespace watch {
 
 }
 Object.freeze(watch);
+
+
+namespace watchTree {
+
+	interface Request {
+		path: string;
+		depth?: Value<number>;
+	}
+
+	const requestType = ProtoType.for<Request>(pb.WatchTreeRequestBody);
+
+	export function wrapService(
+		fn: ReadonlyFS['watchTree']
+	): ExposedFn {
+		return buf => {
+			const { path, depth } = requestType.unpack(buf);
+			const s = new Subject<FolderEvent|FileEvent|RemoteEvent>();
+			const obs = s.asObservable().pipe(
+				map(packFSEvent)
+			);
+			const onCancel = fn(path, valOfOpt(depth), s);
+			return { obs, onCancel };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFS['watchTree'] {
+		const ipcPath = objPath.concat('watchTree');
+		return (path, depth, obs) => {
+			const s = new Subject<EnvelopeBody>();
+			const unsub = caller.startObservableCall(
+				ipcPath, requestType.pack({ path, depth: toOptVal(depth) }), s);
+			s.asObservable()
+			.pipe(
+				map(unpackFSEvent)
+			)
+			.subscribe(toRxObserver(obs));
+			return unsub;
+		};
+	}
+
+}
+Object.freeze(watchTree);
 
 
 namespace close {
@@ -673,9 +840,7 @@ namespace listFolder {
 
 	const requestType = ProtoType.for<Reply>(pb.ListFolderReplyBody);
 
-	export function wrapService(
-		fn: ReadonlyFS['listFolder']
-	): ExposedFn {
+	export function wrapService(fn: ReadonlyFS['listFolder']): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
@@ -700,9 +865,7 @@ Object.freeze(listFolder);
 
 namespace readJSONFile {
 
-	export function wrapService(
-		fn: ReadonlyFS['readJSONFile']
-	): ExposedFn {
+	export function wrapService(fn: ReadonlyFS['readJSONFile']): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
@@ -726,9 +889,7 @@ Object.freeze(readJSONFile);
 
 namespace readTxtFile {
 
-	export function wrapService(
-		fn: ReadonlyFS['readTxtFile']
-	): ExposedFn {
+	export function wrapService(fn: ReadonlyFS['readTxtFile']): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
@@ -760,9 +921,7 @@ namespace readBytes {
 
 	export const requestType = ProtoType.for<Request>(pb.ReadBytesRequestBody);
 
-	export function wrapService(
-		fn: ReadonlyFS['readBytes']
-	): ExposedFn {
+	export function wrapService(fn: ReadonlyFS['readBytes']): ExposedFn {
 		return buf => {
 			const { path, start, end } = requestType.unpack(buf);
 			const promise = fn(
@@ -2388,6 +2547,427 @@ namespace vGetByteSink {
 
 }
 Object.freeze(vGetByteSink);
+
+
+namespace vsStatus {
+
+	export function wrapService(fn: WritableFSSyncAPI['status']): ExposedFn {
+		return buf => {
+			const { path } = reqWithPathType.unpack(buf);
+			const promise = fn(path)
+			.then(file.packSyncStatus);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['status'] {
+		const ipcPath = objPath.concat('status');
+		return (path) => caller
+		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		.then(file.unpackSyncStatus);
+	}
+
+}
+Object.freeze(vsStatus);
+
+
+namespace vsUpdateStatusInfo {
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['updateStatusInfo']
+	): ExposedFn {
+		return buf => {
+			const { path } = reqWithPathType.unpack(buf);
+			const promise = fn(path)
+			.then(file.packSyncStatus);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['updateStatusInfo'] {
+		const ipcPath = objPath.concat('updateStatusInfo');
+		return (path) => caller
+		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		.then(file.unpackSyncStatus);
+	}
+
+}
+Object.freeze(vsUpdateStatusInfo);
+
+
+namespace vsIsRemoteVersionOnDisk {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		version: number;
+	}>(pb.FSSyncIsOnDiskRequestBody);
+
+	const replyType = ProtoType.for<{
+		status: 'partial'|'complete'|'none'
+	}>(pb.FSSyncIsOnDiskReplyBody);
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['isRemoteVersionOnDisk']
+	): ExposedFn {
+		return buf => {
+			const { path, version } = requestType.unpack(buf);
+			const promise = fn(path, fixInt(version))
+			.then(status => replyType.pack({ status }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['isRemoteVersionOnDisk'] {
+		const ipcPath = objPath.concat('isRemoteVersionOnDisk');
+		return (path, version) => caller
+		.startPromiseCall(ipcPath, requestType.pack({ path, version }))
+		.then(buf => replyType.unpack(buf).status);
+	}
+
+}
+Object.freeze(vsIsRemoteVersionOnDisk);
+
+
+namespace vsDownload {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		version: number;
+	}>(pb.FSSyncDownloadRequestBody);
+
+	export function wrapService(fn: WritableFSSyncAPI['download']): ExposedFn {
+		return buf => {
+			const { path, version } = requestType.unpack(buf);
+			const promise = fn(path, fixInt(version));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['download'] {
+		const ipcPath = objPath.concat('download');
+		return (path, version) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, version
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(vsDownload);
+
+
+namespace vsUpload {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		opts?: file.OptionsToUploadLocalMsg;
+	}>(pb.FSSyncUploadRequestBody);
+
+	export function wrapService(fn: WritableFSSyncAPI['upload']): ExposedFn {
+		return buf => {
+			const { path, opts } = requestType.unpack(buf);
+			const promise = fn(path, file.optionsToUploadLocalFromMsg(opts));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['upload'] {
+		const ipcPath = objPath.concat('upload');
+		return (path, opts) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, opts: file.optionsToUploadLocalToMsg(opts)
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(vsUpload);
+
+
+interface OptionsToAdoptRemoteItemMsg {
+	localVersion?: Value<number>;
+	remoteVersion?: Value<number>;
+}
+
+export function optionsToAdoptRemoteItemToMsg(
+	opts: OptionsToAdoptRemoteItem|undefined
+): OptionsToAdoptRemoteItemMsg|undefined {
+	if (!opts) { return; }
+	return {
+		localVersion: toOptVal(opts.localVersion),
+		remoteVersion: toOptVal(opts.remoteVersion)
+	};
+}
+
+export function optionsToAdoptRemoteItemFromMsg(
+	msg: OptionsToAdoptRemoteItemMsg|undefined
+): OptionsToAdoptRemoteItem|undefined {
+	if (!msg) { return; }
+	return {
+		localVersion: valOfOptInt(msg.localVersion),
+		remoteVersion: valOfOptInt(msg.remoteVersion)
+	}
+}
+
+
+namespace vsAdoptRemoteFolderItem {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		itemName: string;
+		opts?: OptionsToAdoptRemoteItemMsg;
+	}>(pb.AdoptRemoteFolderItemRequestBody);
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['adoptRemoteFolderItem']
+	): ExposedFn {
+		return buf => {
+			const { path, itemName, opts } = requestType.unpack(buf);
+			const promise = fn(
+				path, itemName, optionsToAdoptRemoteItemFromMsg(opts)
+			)
+			.then(packInt);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['adoptRemoteFolderItem'] {
+		const ipcPath = objPath.concat('adoptRemoteFolderItem');
+		return (path, itemName, opts) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, itemName, opts: optionsToAdoptRemoteItemToMsg(opts)
+		}))
+		.then(unpackInt);
+	}
+
+}
+Object.freeze(vsAdoptRemoteFolderItem);
+
+
+namespace vsAdoptRemote {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		opts?: file.OptionsToAdopteRemoteMsg;
+	}>(pb.AdoptRemoteRequestBody);
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['adoptRemote']
+	): ExposedFn {
+		return buf => {
+			const { path, opts } = requestType.unpack(buf);
+			const promise = fn(path, file.remoteAdoptionOptsFromMsg(opts));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['adoptRemote'] {
+		const ipcPath = objPath.concat('adoptRemote');
+		return (path, opts) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, opts: file.remoteAdoptionOptsToMsg(opts)
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(vsAdoptRemote);
+
+
+namespace vListVersions {
+
+	export function wrapService(
+		fn: ReadonlyFSVersionedAPI['listVersions']
+	): ExposedFn {
+		return buf => {
+			const { path } = reqWithPathType.unpack(buf);
+			const promise = fn(path)
+			.then(file.vListVersions.packReply);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFSVersionedAPI['listVersions'] {
+		const ipcPath = objPath.concat('listVersions');
+		return path => caller
+		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		.then(file.vListVersions.unpackReply);
+	}
+
+}
+Object.freeze(vListVersions);
+
+
+namespace vArchiveCurrent {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		version?: Value<number>;
+	}>(pb.ArchiveCurrentRequestBody);
+
+	export function wrapService(
+		fn: WritableFSVersionedAPI['archiveCurrent']
+	): ExposedFn {
+		return buf => {
+			const { path, version } = requestType.unpack(buf);
+			const promise = fn(path, valOfOptInt(version))
+			.then(packInt);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSVersionedAPI['archiveCurrent'] {
+		const ipcPath = objPath.concat('archiveCurrent');
+		return (path, version)=> caller
+		.startPromiseCall(
+			ipcPath, requestType.pack({ path, version: toOptVal(version) })
+		)
+		.then(unpackInt);
+	}
+
+}
+Object.freeze(vArchiveCurrent);
+
+
+interface FolderDiffMsg {
+	remoteVersion?: Value<number>;
+	currentVersion: number;
+	isCurrentLocal: boolean;
+	isRemoteArchived: boolean;
+	inCurrent?: ListingEntryMsg[];
+	inRemote?: ListingEntryMsg[];
+	nameOverlaps?: string[];
+	ctime: DiffTimeStampsMsg;
+	mtime: DiffTimeStampsMsg;
+	xattrs?: {
+		inCurrent?: file.XAttrMsg[];
+		inRemote?: file.XAttrMsg[];
+		nameOverlaps?: string[];
+	};
+}
+
+interface DiffTimeStampsMsg {
+	remote?: Value<number>;
+	current: number;
+}
+
+function folderDiffToMsg(
+	diff?: FolderDiff|undefined
+): FolderDiffMsg|undefined {
+	if (!diff) { return; }
+	return {
+		remoteVersion: toOptVal(diff.remoteVersion),
+		currentVersion: diff.currentVersion,
+		isCurrentLocal: diff.isCurrentLocal,
+		isRemoteArchived: diff.isRemoteArchived,
+		inCurrent: diff.inCurrent?.map(lsEntryToMsg),
+		inRemote: diff.inRemote?.map(lsEntryToMsg),
+		nameOverlaps: diff.nameOverlaps,
+		ctime: diffTStoMsg(diff.ctime),
+		mtime: diffTStoMsg(diff.mtime),
+		xattrs: (diff.xattrs ? {
+			inCurrent: diff.xattrs.inCurrent?.map(
+				({ name, value }) => file.xattrToMsg(name, value)),
+			inRemote: diff.xattrs.inRemote?.map(
+				({ name, value }) => file.xattrToMsg(name, value)),
+			nameOverlaps: diff.xattrs.nameOverlaps
+		} : undefined)
+	};
+}
+
+function diffTStoMsg(diffTS: FolderDiff['ctime']): FolderDiffMsg['ctime'] {
+	return {
+		current: diffTS.current.valueOf(),
+		remote: toOptVal(diffTS.remote?.valueOf())
+	};
+}
+
+function folderDiffFromMsg(
+	msg: FolderDiffMsg|undefined
+): FolderDiff|undefined {
+	if (!msg) { return; }
+	return {
+		remoteVersion: valOfOptInt(msg.remoteVersion),
+		currentVersion: fixInt(msg.currentVersion),
+		isCurrentLocal: msg.isCurrentLocal,
+		isRemoteArchived: msg.isRemoteArchived,
+		inCurrent: ((msg.inCurrent!.length > 0) ?
+			msg.inCurrent!.map(lsEntryFromMsg) : undefined),
+		inRemote: ((msg.inRemote!.length > 0) ?
+			msg.inRemote!.map(lsEntryFromMsg) : undefined),
+		nameOverlaps: ((msg.nameOverlaps!.length > 0) ?
+			msg.nameOverlaps : undefined),
+		ctime: diffTSfromMsg(msg.ctime),
+		mtime: diffTSfromMsg(msg.mtime),
+		xattrs: (msg.xattrs ? {
+			inCurrent: ((msg.xattrs.inCurrent!.length > 0) ?
+				msg.xattrs.inCurrent!.map(file.xattrFromMsg) : undefined),
+			inRemote: ((msg.xattrs.inRemote!.length > 0) ?
+				msg.xattrs.inRemote!.map(file.xattrFromMsg) : undefined),
+			nameOverlaps: ((msg.xattrs.nameOverlaps!.length > 0) ?
+				msg.xattrs.nameOverlaps : undefined)
+		} : undefined)
+	};
+}
+
+function diffTSfromMsg(m: FolderDiffMsg['ctime']): FolderDiff['ctime'] {
+	return {
+		current: new Date(fixInt(m.current)),
+		remote: (m.remote ? new Date(intValOf(m.remote)) : undefined)
+	};
+}
+
+
+namespace vsDiffCurrentAndRemoteFolderVersions {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		remoteVersion?: Value<number>;
+	}>(pb.DiffCurrentAndRemoteRequestBody);
+
+	const replyType = ProtoType.for<{
+		diff?: FolderDiffMsg;
+	}>(pb.DiffCurrentAndRemoteReplyBody);
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['diffCurrentAndRemoteFolderVersions']
+	): ExposedFn {
+		return buf => {
+			const { path, remoteVersion } = requestType.unpack(buf);
+			const promise = fn(path, valOfOptInt(remoteVersion))
+			.then(diff => replyType.pack({ diff: folderDiffToMsg(diff) }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['diffCurrentAndRemoteFolderVersions'] {
+		const ipcPath = objPath.concat('diffCurrentAndRemoteFolderVersions');
+		return (path, remoteVersion) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, remoteVersion: toOptVal(remoteVersion)
+		}))
+		.then(buf => folderDiffFromMsg(replyType.unpack(buf).diff));
+	}
+
+}
+Object.freeze(vsDiffCurrentAndRemoteFolderVersions);
 
 
 Object.freeze(exports);

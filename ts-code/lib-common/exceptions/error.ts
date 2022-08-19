@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,12 +29,12 @@ export function errWithCause(cause: any, message: string): ErrorWithCause {
 	return err;
 }
 
-function recursiveJSONify(err: web3n.RuntimeException): any {
+export function recursiveErrJSONify(err: web3n.RuntimeException): any {
 	if (!err || (typeof err !== 'object') || Array.isArray(err)) {
 		return err;
 	} else if (err.runtimeException) {
 		if (err.cause) {
-			err.cause = recursiveJSONify(err.cause);
+			err.cause = recursiveErrJSONify(err.cause);
 		}
 		return err;
 	} else {
@@ -43,7 +43,7 @@ function recursiveJSONify(err: web3n.RuntimeException): any {
 			stack: (err as any).stack
 		};
 		if (err.cause) {
-			jsonErr.cause = recursiveJSONify(err.cause);
+			jsonErr.cause = recursiveErrJSONify(err.cause);
 		}
 		return jsonErr;
 	}
@@ -52,7 +52,7 @@ function recursiveJSONify(err: web3n.RuntimeException): any {
 export function stringifyErr(err: any): string {
 	if (!err) { return ''; }
 
-	let json = recursiveJSONify(err) as web3n.RuntimeException;
+	let json = recursiveErrJSONify(err) as web3n.RuntimeException;
 	let errStr: string;
 	if (!json || (typeof json !== 'object') || err.runtimeException) {
 		try {

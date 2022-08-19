@@ -12,15 +12,14 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This file contains functionality, used inside keyring.
  */
 
-import { JWKeyPair, PID_LENGTH, generateKeyPair, extractKeyBytes, MsgKeyRole,
-	extractSKeyBytes, 
-	ASMailKeyPair} from './common';
+import { JWKeyPair, PID_LENGTH, generateKeyPair, extractKeyBytes, MsgKeyRole, extractSKeyBytes, ASMailKeyPair} from './common';
 import { JsonKey, JsonKeyShort } from '../../../lib-common/jwkeys';
 import { SuggestedNextKeyPair } from '../msg/opener';
 import { KeyRing } from './index';
@@ -28,8 +27,7 @@ import * as random from '../../../lib-common/random-node';
 import { box } from 'ecma-nacl';
 import { base64 } from '../../../lib-common/buffer-utils';
 import { errWithCause } from '../../../lib-common/exceptions/error';
-import { Decryptor, makeDecryptor }
-	from '../../../lib-common/async-cryptor-wrap';
+import { Decryptor, makeDecryptor } from '../../../lib-common/async-cryptor-wrap';
 import { AsyncSBoxCryptor } from 'xsp-files';
 
 export interface ReceptionPair {
@@ -119,8 +117,9 @@ function generatePids(): string[] {
 	return pids;
 }
 
-export function msgMasterDecryptor(cryptor: AsyncSBoxCryptor,
-		skey: JsonKey, pkey: JsonKeyShort): Decryptor {
+export function msgMasterDecryptor(
+	cryptor: AsyncSBoxCryptor, skey: JsonKey, pkey: JsonKeyShort
+): Decryptor {
 	const msgMasterKey = calcMsgMasterKey(skey, pkey);
 	const masterDecr = makeDecryptor(cryptor, msgMasterKey);
 	msgMasterKey.fill(0);
@@ -190,8 +189,9 @@ export class CorrespondentKeys {
 	 * Either serialData, or an address should be defined, not both.
 	 */
 	constructor(
-			private keyring: KeyRing,
-			address: string|undefined, serialData?: string) {
+		private keyring: KeyRing,
+		address: string|undefined, serialData?: string
+	) {
 		if (address) {
 			this.keys = {
 				correspondent: address,
@@ -338,8 +338,9 @@ export class CorrespondentKeys {
 	 * @param pair
 	 * @param usedPublishedIntro
 	 */
-	ratchetUpSendingPair(pair: SuggestedNextKeyPair,
-		usedPublishedIntro?: JWKeyPair): void {
+	ratchetUpSendingPair(
+		pair: SuggestedNextKeyPair, usedPublishedIntro?: JWKeyPair
+	): void {
 		if (this.keys.sendingPair) {
 			const existingPair = this.keys.sendingPair;
 			if (existingPair.type === 'ratcheted') {
@@ -378,8 +379,9 @@ export class CorrespondentKeys {
 	 * @return pair for receiving messages and a role of a given pair.
 	 * Undefined is returned when no pair were found.
 	 */
-	getReceivingPair(pid: string):
-			{ pair: ReceptionPair; role: MsgKeyRole; } | undefined {
+	getReceivingPair(
+		pid: string
+	): { pair: ReceptionPair; role: MsgKeyRole; } | undefined {
 		const pairs = this.keys.receptionPairs;
 		if (pairs.suggested && (pairs.suggested.pids.indexOf(pid) >= 0)) {
 			return {
@@ -400,8 +402,11 @@ export class CorrespondentKeys {
 		return;	// explicit return of undefined
 	}
 
-	async getSendingPair(recipientIntroPKey?: JsonKey):
-			Promise<{ currentPair: ASMailKeyPair; msgMasterKey: Uint8Array; msgCount: number; }> {
+	async getSendingPair(
+		recipientIntroPKey?: JsonKey
+	): Promise<{
+		currentPair: ASMailKeyPair; msgMasterKey: Uint8Array; msgCount: number;
+	}> {
 		if (!this.keys.sendingPair) {
 			if (!recipientIntroPKey) { throw new Error(
 				`Sending pair for ${this.correspondent} is not set.`); }

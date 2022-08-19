@@ -15,27 +15,28 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription, merge } from 'rxjs';
+import { Subscription, merge, Observable } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/service';
 import { ObjFiles } from './obj-files';
-import { Node, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ServerEvents } from '../../../lib-client/server-events';
-import { objChanged, objRemoved } from '../../../lib-common/service-api/3nstorage/owner';
+import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 
-type FileException = web3n.files.FileException;
-
-export type GetFSNode = (objId: ObjId) => Node|undefined;
-
 const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
 
+
+/**
+ * Remote events are absorbed into objects' statuses, broadcasting respective
+ * events. Someone down the stream can react to these changes from remote.
+ */
 export class RemoteEvents {
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
 		private readonly files: ObjFiles,
-		private readonly fsNodes: GetFSNode,
+		private readonly broadcastNodeEvent: Storage['broadcastNodeEvent'],
 		private readonly logError: LogError
 	) {
 		Object.seal(this);
@@ -45,86 +46,116 @@ export class RemoteEvents {
 
 	startAbsorbingRemoteEvents(): void {
 
-		const serverEvents = new ServerEvents(
+		const serverEvents = new ServerEvents<
+			events.EventNameType, events.AllTypes
+		>(
 			() => this.remoteStorage.openEventSource(),
-			SERVER_EVENTS_RESTART_WAIT_SECS);
-
-		const objChange$ = serverEvents.observe<objChanged.Event>(
-			objChanged.EVENT_NAME)
-		.pipe(
-			filter(objChange =>
-				Number.isInteger(objChange.newVer) && (objChange.newVer > 1)),
-			mergeMap(objChange => this.remoteChange(objChange))
+			SERVER_EVENTS_RESTART_WAIT_SECS
 		);
 
-		const objRemoval$ = serverEvents.observe<objRemoved.Event>(
-			objRemoved.EVENT_NAME)
-		.pipe(
-			filter(objRm => !!objRm.objId),
-			mergeMap(objRm => this.remoteRemoval(objRm))
-		);
-
-		this.absorbingRemoteEventsProc = merge(objChange$, objRemoval$)
+		this.absorbingRemoteEventsProc = merge(
+			this.absorbObjChange(serverEvents),
+			this.absorbObjRemoval(serverEvents),
+			this.absorbObjVersionArchival(serverEvents),
+			this.absorbArchVersionRemoval(serverEvents)
+		)
 		.subscribe({
 			next: noop,
-			error: err => this.logError(err),
-			complete: () => { this.absorbingRemoteEventsProc = undefined; }
+			error: async err => {
+				await this.logError(err);
+				this.absorbingRemoteEventsProc = undefined;
+			},
+			complete: () => {
+				this.absorbingRemoteEventsProc = undefined;
+			}
 		});
 	}
 
 	async close(): Promise<void> {
 		if (this.absorbingRemoteEventsProc) {
 			this.absorbingRemoteEventsProc.unsubscribe();
+			this.absorbingRemoteEventsProc = undefined;
 		}
 	}
 
-	/**
-	 * Information about external event is recorded into obj status before
-	 * main processing takes place. This allows to synchronize all obj changes,
-	 * while informing already scheduled processes.
-	 * @param objChange 
-	 */
-	private async remoteChange(objChange: objChanged.Event): Promise<void> {
-		const obj = await this.files.findObj(objChange.objId);
-		if (!obj) { return; }
-
-		if (obj.isRemoteVersionGreaterOrEqualTo(objChange.newVer)) { return; }
-
-		await obj.setRemoteVersion(objChange.newVer);
-
-		const nodeInFS = this.fsNodes(objChange.objId);
-		if (!nodeInFS) { return; }
-		await nodeInFS.processRemoteEvent({
-			type: 'remote-change',
-			newVer: objChange.newVer,
-			objId: objChange.objId
-		}).catch(async (exc: FileException) => {
-			if (!exc.notFound) {
-				await this.logError(exc,
-					`Error in processing remote change event`);
-			}
-		});
+	private absorbObjChange(
+		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
+	): Observable<void> {
+		return serverEvents.observe(events.objChanged.EVENT_NAME)
+		.pipe(
+			mergeMap(async ({ newVer, objId }: events.objChanged.Event) => {
+				if (!Number.isInteger(newVer) || (newVer < 1)) { return; }
+				const obj = await this.files.findObj(objId);
+				if (!obj) { return; }
+				obj.statusObj().recordRemoteChange(newVer);
+				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
+					type: 'remote-change',
+					path: '',
+					newVersion: newVer
+				});
+			}, 1)
+		);
 	}
 
-	private async remoteRemoval(objRm: objRemoved.Event): Promise<void> {
-		const obj = await this.files.findObj(objRm.objId);
-		if (!obj) { return; }
+	private absorbObjRemoval(
+		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
+	): Observable<void> {
+		return serverEvents.observe(events.objRemoved.EVENT_NAME)
+		.pipe(
+			filter((objRm: events.objRemoved.Event) => !!objRm.objId),
+			mergeMap(async ({ objId }: events.objRemoved.Event) => {
+				const obj = await this.files.findObj(objId);
+				if (!obj) { return; }
+				obj.statusObj().recordRemoteRemoval();
+				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
+					type: 'remote-removal',
+					path: ''
+				});
+			}, 1)
+		);
+	}
 
-		if (obj.isArchived() || obj.isDeletedOnRemote()) { return; }
+	private absorbObjVersionArchival(
+		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
+	): Observable<void> {
+		return serverEvents.observe(events.objVersionArchived.EVENT_NAME)
+		.pipe(
+			mergeMap(async ({
+				objId, archivedVer
+			}: events.objVersionArchived.Event) => {
+				const obj = await this.files.findObj(objId);
+				if (!obj) { return; }
+				obj.statusObj().recordVersionArchival(archivedVer);
+				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
+					type: 'remote-version-archival',
+					path: '',
+					archivedVersion: archivedVer
+				});
+			}, 1)
+		);
+	}
 
-		await obj.setDeletedOnRemote();
-
-		const nodeInFS = this.fsNodes(objRm.objId);
-		if (!nodeInFS) { return; }
-		await nodeInFS.processRemoteEvent({
-			type: 'remote-delete',
-			objId: objRm.objId
-		}).catch(async (exc: FileException) => {
-			if (!exc.notFound) {
-				await this.logError(exc,
-					`Error in processing remote removal event`);
-			}
-		});
+	private absorbArchVersionRemoval(
+		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
+	): Observable<void> {
+		return serverEvents.observe(
+			events.objArchivedVersionRemoved.EVENT_NAME
+		)
+		.pipe(
+			mergeMap(async ({
+				objId, archivedVer
+			}: events.objArchivedVersionRemoved.Event
+			) => {
+				const obj = await this.files.findObj(objId);
+				if (!obj) { return; }
+				obj.statusObj().recordArchVersionRemoval(archivedVer);
+				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
+					type: 'remote-arch-ver-removal',
+					path: '',
+					removedArchVer: archivedVer
+				});
+			}, 1)
+		);
 	}
 
 }

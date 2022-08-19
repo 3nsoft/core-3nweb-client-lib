@@ -51,7 +51,7 @@ it.func = async function(s) {
 	await testFS.writeTxtFile(fName, '');
 	const expectedEv: Deferred<FileChangeEvent> = defer();
 
-	const sub = testFS.watchFile(fName, {
+	const unsub = testFS.watchFile(fName, {
 		next: ev => {
 			if (ev.type === 'file-change') {
 				expectedEv.resolve(ev);
@@ -65,8 +65,9 @@ it.func = async function(s) {
 	await testFS.writeTxtFile(fName, 'new value');
 
 	const changeEvent = await expectedEv.promise;
-	expect(!!changeEvent.isRemote).toBeFalse();
+	expect(changeEvent.src).toBe('local');
 	expect(typeof changeEvent.newVersion).toBe('number');
+	unsub();
 };
 specs.its.push(it);
 

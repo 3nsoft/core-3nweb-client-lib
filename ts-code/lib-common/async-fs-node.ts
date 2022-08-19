@@ -35,13 +35,13 @@ function makeFileExceptionFromNodes(
 }
 
 export function readFile(
-	filename: string, options: { encoding: string; flag?: string; }
+	filename: string, options: { encoding: BufferEncoding; flag?: string; }
 ): Promise<string>;
 export function readFile(
 	filename: string, options?: { flag?: string; }
 ): Promise<Buffer>;
 export function readFile(
-	path: string, options?: { flag?: string; encoding?: string; }
+	path: string, options?: { flag?: string; encoding?: BufferEncoding; }
 ): Promise<Buffer|string> {
 	return new Promise<Buffer>((resolve, reject) => {
 		const cb = (err, data) => {
@@ -58,7 +58,7 @@ export function readFile(
 
 export function writeFile(
 	path: string, data: any,
-	options: { encoding?: string; mode?: string; flag?: string; } = {}
+	options: { encoding?: BufferEncoding; mode?: string; flag?: string; } = {}
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		fs.writeFile(path, data, options, err => {
@@ -70,7 +70,7 @@ export function writeFile(
 
 export function appendFile(
 	path: string, data: any,
-	options: { encoding?: string; mode?: string; flag?: string; } = {}
+	options: { encoding?: BufferEncoding; mode?: string; flag?: string; } = {}
 ): Promise<void> {
 	return new Promise<void>((resolve, reject) => {
 		fs.appendFile(path, data, options, err => {

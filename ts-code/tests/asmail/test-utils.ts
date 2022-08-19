@@ -15,7 +15,6 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { CoreRunner } from "../libs-for-tests/core-runner";
 import { SpecIt as GenericSpecIt } from "../libs-for-tests/spec-module";
 import { MultiUserSetup } from "../libs-for-tests/setups";
 import { assert } from "../../lib-common/assert";

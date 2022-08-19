@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This file contains common functions used by parts of a keyring.
@@ -21,7 +22,7 @@
 import { box, secret_box as sbox } from 'ecma-nacl';
 import { base64 } from '../../../lib-common/buffer-utils';
 import { JsonKey, JsonKeyShort } from '../../../lib-common/jwkeys';
-import * as random from '../../../lib-common/random-node';
+import { bytes as randomBytes, stringOfB64Chars as randomB64String } from '../../../lib-common/random-node';
 
 export type MsgKeyRole = 'suggested' | 'in_use' | 'old' |
 	'published_intro' | 'prev_published_intro' | 'introductory';
@@ -62,9 +63,9 @@ Object.freeze(KEY_USE);
  * Key ids are the same in this intimate pair.
  */
 export async function generateKeyPair(): Promise<JWKeyPair> {
-	const skeyBytes = await random.bytes(box.KEY_LENGTH);
+	const skeyBytes = await randomBytes(box.KEY_LENGTH);
 	const pkeyBytes = box.generate_pubkey(skeyBytes);
-	const kid = await random.stringOfB64Chars(KID_LENGTH);
+	const kid = await randomB64String(KID_LENGTH);
 	const skey: JsonKey = {
 		use: KEY_USE.SECRET,
 		alg: box.JWK_ALG_NAME,
@@ -90,19 +91,21 @@ export async function generateKeyPair(): Promise<JWKeyPair> {
 export async function generateSymmetricKey(): Promise<JsonKey> {
 	return {
 		use: KEY_USE.SYMMETRIC,
-		k: base64.pack(await random.bytes(sbox.KEY_LENGTH)),
+		k: base64.pack(await randomBytes(sbox.KEY_LENGTH)),
 		alg: sbox.JWK_ALG_NAME,
-		kid: await random.stringOfB64Chars(KID_LENGTH)
+		kid: await randomB64String(KID_LENGTH)
 	};
 };
 
-function getKeyBytesFrom(key: JsonKey, use: string, alg: string, klen: number):
-		Uint8Array {
+function getKeyBytesFrom(
+	key: JsonKey, use: string, alg: string, klen: number
+): Uint8Array {
 	if (key.use === use) {
 		if (key.alg === alg) {
 			const bytes = base64.open(key.k);
 			if (bytes.length !== klen) { throw new Error(
-				`Key ${key.kid} has a wrong number of bytes`); }
+				`Key ${key.kid} has a wrong number of bytes`
+			); }
 			return bytes;
 		} else {
 			throw new Error(`Key ${key.kid}, should be used with unsupported algorithm '${key.alg}'`);
@@ -117,8 +120,9 @@ function getKeyBytesFrom(key: JsonKey, use: string, alg: string, klen: number):
  * @param key is a JWK form of a key
  */
 export function extractSKeyBytes(key: JsonKey): Uint8Array {
-	return getKeyBytesFrom(key, KEY_USE.SECRET,
-		box.JWK_ALG_NAME, box.KEY_LENGTH);
+	return getKeyBytesFrom(
+		key, KEY_USE.SECRET, box.JWK_ALG_NAME, box.KEY_LENGTH
+	);
 }
 
 /**
@@ -126,8 +130,9 @@ export function extractSKeyBytes(key: JsonKey): Uint8Array {
  * @param key is a JWK form of a key
  */
 export function extractPKeyBytes(key: JsonKey): Uint8Array {
-	return getKeyBytesFrom(key, KEY_USE.PUBLIC,
-		box.JWK_ALG_NAME, box.KEY_LENGTH);
+	return getKeyBytesFrom(
+		key, KEY_USE.PUBLIC, box.JWK_ALG_NAME, box.KEY_LENGTH
+	);
 }
 
 /**
@@ -153,5 +158,6 @@ export function msgKeyPackSizeFor(alg: string): number {
 		throw new Error(`Encryption algorithm ${alg} is not known.`);
 	}
 }
+
 
 Object.freeze(exports);

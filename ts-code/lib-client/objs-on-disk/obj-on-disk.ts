@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2018 - 2020 3NSoft Inc.
+ Copyright (C) 2018 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,13 +24,16 @@ import { FileWritingProc, FileWrite } from './file-writing-proc';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-file';
-import { NotOnDiskFiniteChunk, BaseSegsChunk } from '../../lib-common/objs-on-disk/file-layout';
+import { NotOnDiskFiniteChunk, BaseSegsChunk, FiniteChunk } from '../../lib-common/objs-on-disk/file-layout';
 import { flatTap, allowOnlySingleStart } from '../../lib-common/utils-for-observables';
+import { DiffInfo } from '../../lib-common/service-api/3nstorage/owner';
 
 export type GetBaseSegsOnDisk = (version: number, ofs: number, len: number) =>
 	Promise<(Uint8Array|NotOnDiskFiniteChunk)[]>;
 
 export class ObjOnDisk {
+
+	private proxiedHeader: Uint8Array|undefined = undefined;
 
 	private constructor(
 		public readonly objId: ObjId,
@@ -96,8 +99,24 @@ export class ObjOnDisk {
 		return { obj, write$ };
 	}
 
-	async moveFile(newPath: string): Promise<void> {
-		await this.objFile.moveFile(newPath);
+	async moveFileAndProxyThis(
+		newPath: string, objVersionChange: {
+			version: number; newHeader: Uint8Array; originalHeader: Uint8Array;
+		}|undefined
+	): Promise<ObjOnDisk> {
+		const newObjOnDisk = new ObjOnDisk(
+			this.objId,
+			(objVersionChange? objVersionChange.version : this.version),
+			this.objFile,
+			this.downloader,
+			this.readable,
+			this.getBaseSegsOnDisk
+		);
+		if (objVersionChange) {
+			this.proxiedHeader = objVersionChange.originalHeader;
+		}
+		await this.objFile.moveFile(newPath, objVersionChange?.newHeader);
+		return newObjOnDisk;
 	}
 
 	async removeFile(): Promise<void> {
@@ -105,6 +124,9 @@ export class ObjOnDisk {
 	}
 
 	private async readHeader(): Promise<Uint8Array> {
+		if (this.proxiedHeader) {
+			return this.proxiedHeader;
+		}
 		let h = await this.objFile.readHeader();
 		if (h) { return h; }
 		if (!this.downloader) { throw new Error(
@@ -216,6 +238,14 @@ export class ObjOnDisk {
 
 	getBaseVersion(): number|undefined {
 		return this.objFile.getBaseVersion();
+	}
+
+	absorbImmediateBaseVersion(baseVer: number, path: string): Promise<void> {
+		return this.objFile.absorbImmediateBaseVersion(baseVer, path);
+	}
+
+	diffFromBase(): { diff: DiffInfo; newSegsPackOrder: FiniteChunk[]; } {
+		return this.objFile.diffFromBase();
 	}
 
 }

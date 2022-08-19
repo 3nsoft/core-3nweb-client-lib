@@ -755,6 +755,7 @@ export class DeviceFS implements WritableFS, Linkable {
 					const folderEvent: EntryAdditionEvent = {
 						type: 'entry-addition',
 						path,
+						src: 'local',
 						entry
 					};
 					observer.next!(folderEvent);
@@ -764,6 +765,7 @@ export class DeviceFS implements WritableFS, Linkable {
 						const folderEvent: EntryRemovalEvent = {
 							type: 'entry-removal',
 							path,
+							src: 'local',
 							name
 						};
 						observer.next!(folderEvent);
@@ -808,7 +810,8 @@ export class DeviceFS implements WritableFS, Linkable {
 	}
 
 	watchTree(
-		path: string, observer: Observer<FolderEvent|FileEvent>
+		path: string, depth:number|undefined,
+		observer: Observer<FolderEvent|FileEvent>
 	): () => void {
 		// XXX
 		throw new Error('Not implemented, yet');

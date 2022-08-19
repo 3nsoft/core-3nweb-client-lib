@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,8 @@ import * as fs from '../../../lib-common/async-fs-node';
 import { SingleProc } from '../../../lib-common/processes/synced';
 import { join } from 'path';
 import { LocalObj } from './obj-files';
+import { getAndRemoveOneFrom, noop } from '../common/utils';
+import { NonGarbage } from './obj-status';
 
 
 export class GC {
@@ -59,36 +61,33 @@ export class GC {
 		}
 		const obj = getAndRemoveOneFrom(this.wip);
 		if (!obj) { return; }
+		try {
+			await this.collectIn(obj);
+		} catch (err) {}
+		return this.objCollecting();
+	}
 
-		// calculate versions that should not be removed
-		const { gcMaxVer, nonGarbage } = obj.getNonGarbageVersions();
+	private async collectIn(obj: LocalObj): Promise<void> {
+		const nonGarbage = obj.statusObj().getNonGarbageVersions();
+		if (!(await this.checkAndRemoveWholeObjFolder(obj, nonGarbage))) {
+			await removeGarbageFiles(obj, nonGarbage)
+		}
+	}
 
+	private async checkAndRemoveWholeObjFolder(
+		obj: LocalObj, { nonGarbage }: NonGarbage
+	): Promise<boolean> {
 		// if object is set archived, and there is nothing in it worth keeping,
 		// whole folder can be removed
-		if (obj.isArchived()) {
-			if (nonGarbage.size === 0) {
-				this.rmObjFromCache(obj);
-				if (obj.objId) {
-					await this.rmObjFolder(obj.objId);
-				}
-				return;
-			}
+		if (obj.objId
+		&& obj.statusObj().isArchived()
+		&& (nonGarbage.size === 0)) {
+			this.rmObjFromCache(obj);
+			await this.rmObjFolder(obj.objId);
+			return true;
+		} else {
+			return false;
 		}
-
-		// for all other cases, we remove version files that are not worth
-		// keeping.
-		const lst = await fs.readdir(obj.objFolder);
-		const rmProcs: Promise<void>[] = [];
-		for (const f of lst) {
-			const ver = parseInt(f);
-			if (isNaN(ver) || nonGarbage.has(ver)
-			|| (gcMaxVer && (ver >= gcMaxVer))) { continue; }
-			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
-		}
-		if (rmProcs.length > 0) {
-			await Promise.all(rmProcs);
-		}
-		return this.objCollecting();
 	}
 
 }
@@ -96,15 +95,32 @@ Object.freeze(GC.prototype);
 Object.freeze(GC);
 
 
-function getAndRemoveOneFrom<T>(set: Set<T>): T|undefined {
-	const iter = set.values();
-	const { value, done } = iter.next();
-	if (done) { return; }
-	set.delete(value);
-	return value;
+async function removeGarbageFiles(
+	obj: LocalObj, nonGarbage: NonGarbage
+): Promise<void> {
+	const lst = await fs.readdir(obj.objFolder);
+	const rmProcs: Promise<void>[] = [];
+	for (const f of lst) {
+		if (canGC(f, nonGarbage)) {
+			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
+		}
+	}
+	if (rmProcs.length > 0) {
+		await Promise.all(rmProcs);
+	}
 }
 
-function noop() {}
+function canGC(f: string, { gcMaxVer, nonGarbage }: NonGarbage): boolean {
+	const ver = parseInt(f);
+	if (isNaN(ver)) {
+		return false;
+	} else if (!nonGarbage.has(ver)
+	&& (!gcMaxVer || (ver < gcMaxVer))) {
+		return true;
+	} else {
+		return false;
+	}
+}
 
 
 Object.freeze(exports);

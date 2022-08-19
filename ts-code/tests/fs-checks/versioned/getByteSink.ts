@@ -24,7 +24,7 @@ import { SpecIt } from '../test-utils';
 type FileException = web3n.files.FileException;
 
 export const specs: SpecDescribe = {
-	description: '.getByteSink',
+	description: '.v.getByteSink',
 	its: []
 };
 
@@ -34,7 +34,7 @@ let it: SpecIt = {
 it.func = async function(s) {
 	const { testFS } = s;
 	try {
-		await testFS.getByteSink('non-existing-file', {});
+		await testFS.v!.getByteSink('non-existing-file', {});
 		fail('should fail for missing file');
 	} catch (e) {
 		expect((e as FileException).notFound).toBe(true);

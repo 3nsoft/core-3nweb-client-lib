@@ -22,7 +22,7 @@ import { SpecIt } from '../test-utils';
 type FileException = web3n.files.FileException;
 
 export const specs: SpecDescribe = {
-	description: '.listFolder',
+	description: '.v.listFolder',
 	its: []
 };
 
@@ -70,7 +70,7 @@ it.func = async function(s) {
 	let fName = 'non-existing-folder';
 	expect(await testFS.checkFolderPresence(fName)).toBe(false);
 	try {
-		await testFS.listFolder(fName);
+		await testFS.v!.listFolder(fName);
 		fail('listing should fail for non-existing folder')
 	} catch (exc) {
 		expect((exc as FileException).notFound).toBe(true);

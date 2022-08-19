@@ -54,9 +54,9 @@ export interface VersionsInfo {
 	archived?: number[];
 
 	/**
-	 * This is a map from base version to diff-ed version(s), that use(s) base.
+	 * This is a map from base version to diff-ed version, that uses base.
 	 */
-	baseToDiff: { [baseVersion: number]: number[]; };
+	baseToDiff: { [baseVersion: number]: number; };
 
 	/**
 	 * This is a map from diff version to base version.
@@ -71,20 +71,19 @@ export interface VersionsInfo {
  * @param diffVer
  * @param baseVer
  */
-export function addBaseToDiffLinkInStatus(
+export function addBaseToDiffLinkInVersInfo(
 	versions: VersionsInfo, diffVer: number, baseVer: number
 ): void {
 	if (diffVer <= baseVer) { throw new Error(
 		`Given diff version ${diffVer} is not greater than base version ${baseVer}`); }
 	versions.diffToBase[diffVer] = baseVer;
-	const diffs = versions.baseToDiff[baseVer];
-	if (diffs) {
-		if (diffs.indexOf(diffVer) < 0) {
-			diffs.push(diffVer);
-		}
-	} else {
-		versions.baseToDiff[baseVer] = [ diffVer ];
-	}
+	versions.baseToDiff[baseVer] = diffVer;
+}
+
+export function isVersionIn(version: number, vers: VersionsInfo): boolean {
+	if (vers.current === version) { return true; }
+	if (vers.archived && vers.archived.includes(version)) { return true; }
+	return false;
 }
 
 /**
@@ -96,29 +95,29 @@ export function addBaseToDiffLinkInStatus(
  * @param ver
  */
 export function rmNonArchVersionsIn(versions: VersionsInfo, ver: number): void {
-	if (!versions.archived
-	|| !versions.archived.includes(ver)) { return; }
+	if (versions.archived
+	&& versions.archived.includes(ver)) { return; }
 	if (versions.baseToDiff[ver]) { return; }
 	const base = versions.diffToBase[ver];
-	if (typeof base !== 'number') { return; }
-	delete versions.diffToBase[ver];
-	const diffs = versions.baseToDiff[base];
-	if (!diffs) { return; }
-	const diffInd = diffs.indexOf(ver);
-	if (diffInd < 0) { return; }
-	diffs.splice(diffInd, 1);
-	if (diffs.length === 0) {
+	if (base) {
+		delete versions.diffToBase[ver];
 		delete versions.baseToDiff[base];
 		rmNonArchVersionsIn(versions, base);
 	}
 }
 
-export function rmArchVersionsIn(versions: VersionsInfo, ver: number): void {
-	if (!versions.archived) { return; }
+export function rmArchVersionFrom(
+	versions: VersionsInfo, ver: number
+): boolean {
+	if (!versions.archived) { return false; }
 	const vInd = versions.archived.indexOf(ver);
-	if (vInd < 0) { return; }
+	if (vInd < 0) { return false; }
 	versions.archived.splice(vInd, 1);
+	if (versions.archived.length === 0) {
+		versions.archived = undefined;
+	}
 	rmNonArchVersionsIn(versions, ver);
+	return true;
 }
 
 export function setCurrentVersionIn(
@@ -126,7 +125,7 @@ export function setCurrentVersionIn(
 ): void {
 	if (baseVer !== undefined) {
 		// base->diff links should be added before removals
-		addBaseToDiffLinkInStatus(versions, version, baseVer);
+		addBaseToDiffLinkInVersInfo(versions, version, baseVer);
 	}
 	const initCurrent = versions.current;
 	if (typeof initCurrent === 'number') {
@@ -139,9 +138,19 @@ export function rmCurrentVersionIn(versions: VersionsInfo): number|undefined {
 	const current = versions.current;
 	if (typeof current === 'number') {
 		rmNonArchVersionsIn(versions, current);
-		delete versions.current;
+		versions.current = undefined;
 	}
 	return current;
+}
+
+export function rmVersionIn(version: number, vers: VersionsInfo): void {
+	if (vers.current === version) {
+		vers.current = undefined;
+		rmNonArchVersionsIn(vers, version);
+	}
+	if (isVersionIn(version, vers)) {
+		rmArchVersionFrom(vers, version);
+	}
 }
 
 export function nonGarbageVersionsIn(versions: VersionsInfo): Set<number> {
@@ -155,6 +164,11 @@ export function nonGarbageVersionsIn(versions: VersionsInfo): Set<number> {
 	return nonGarbage;
 }
 
+export interface NonGarbageVersions {
+	gcMaxVer?: number;
+	nonGarbage: Set<number>;
+}
+
 export function addWithBasesTo(
 	nonGarbage: Set<number>, ver: number|undefined, versions: VersionsInfo
 ): void {
@@ -163,6 +177,29 @@ export function addWithBasesTo(
 		nonGarbage.add(ver);
 		if (!versions.diffToBase) { break; }
 		ver = versions.diffToBase[ver];
+	}
+}
+
+export function addArchived(versions: VersionsInfo, version: number): boolean {
+	if (!versions.archived) {
+		versions.archived = [];
+	} else if (versions.archived.includes(version)) {
+		return false;
+	}
+	versions.archived.push(version);
+	versions.archived.sort();
+	return true;
+}
+
+export function isEmptyVersions(versions: VersionsInfo): boolean {
+	if (versions.current) { return false; }
+	if (!versions.archived) {
+		return true;
+	} else if (versions.archived.length > 0) {
+		return false;
+	} else {
+		versions.archived = undefined;
+		return true;
 	}
 }
 

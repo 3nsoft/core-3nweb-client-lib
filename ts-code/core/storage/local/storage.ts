@@ -12,9 +12,10 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent, LocalObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
 import { secret_box as sbox } from 'ecma-nacl';
@@ -27,13 +28,15 @@ import { Observable } from 'rxjs';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
+type FSType = web3n.files.FSType;
 
 
 export class LocalStorage implements Storage {
 
-	public readonly type: web3n.files.FSType = 'local';
+	public readonly type = 'local';
 	public readonly versioned = true;
 	public readonly nodes = new NodesContainer();
+	public readonly connect = undefined;
 	private readonly events = new Broadcast<NodeEvent>();
 
 	private constructor(
@@ -44,7 +47,7 @@ export class LocalStorage implements Storage {
 	) {
 		Object.seal(this);
 	}
-	
+
 	static async makeAndStart(
 		path: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
 		logError: LogError
@@ -59,12 +62,13 @@ export class LocalStorage implements Storage {
 	}
 
 	broadcastNodeEvent(
-		objId: ObjId, parentObjId: ObjId|undefined, event: FolderEvent|FileEvent
+		objId: ObjId, parentObjId: ObjId|undefined, childObjId: ObjId|undefined,
+		event: FolderEvent|FileEvent
 	): void {
-		this.events.next({ objId, parentObjId, event });
+		this.events.next({ objId, parentObjId, childObjId, event });
 	}
 
-	storageForLinking(type: web3n.files.FSType, location?: string): Storage {
+	storageForLinking(type: FSType, location?: string): Storage {
 		if ((type === 'local') || (type === 'synced')) {
 			return this.getStorages(type);
 		} else if (type === 'share') {
@@ -73,7 +77,24 @@ export class LocalStorage implements Storage {
 			throw new Error(`Getting ${type} storage is not implemented in local storage.`);
 		}
 	}
-	
+
+	private async getObjOrThrow(
+		objId: ObjId, allowArchived = false
+	): Promise<LocalObj> {
+		const obj = await this.files.findObj(objId);
+		if (!obj
+		|| (!allowArchived && obj.statusObj().isArchived())) {
+			throw makeObjNotFoundExc(objId);
+		} else {
+			return obj;
+		}
+	}
+
+	async status(objId: ObjId): Promise<LocalObjStatus> {
+		const obj = await this.getObjOrThrow(objId);
+		return obj.localStatus();
+	}
+
 	async generateNewObjId(): Promise<string> {
 		const nonce = await randomBytes(sbox.NONCE_LENGTH);
 		const id = base64urlSafe.pack(nonce);
@@ -84,16 +105,12 @@ export class LocalStorage implements Storage {
 		}
 	}
 
-	private async getObjNonArchOrThrow(objId: ObjId): Promise<LocalObj> {
-		const obj = await this.files.findObj(objId);
-		if (!obj || obj.isArchived()) { throw makeObjNotFoundExc(objId); }
-		return obj;
-	}
-	
-	async getObj(objId: ObjId): Promise<ObjSource> {
-		const obj = await this.getObjNonArchOrThrow(objId);
-		const currentVer = obj.getCurrentVersionOrThrow();
-		return obj.getObjSrc(currentVer);
+	async getObjSrc(objId: ObjId, version?: number): Promise<ObjSource> {
+		const obj = await this.getObjOrThrow(objId);
+		if (!version) {
+			version = obj.statusObj().getCurrentVersionOrThrow();
+		}
+		return obj.getObjSrc(version);
 	}
 
 	async saveObj(
@@ -110,7 +127,7 @@ export class LocalStorage implements Storage {
 	}
 
 	async removeObj(objId: string): Promise<void> {
-		const obj = await this.getObjNonArchOrThrow(objId);
+		const obj = await this.getObjOrThrow(objId);
 		await obj.removeCurrentVersion();
 	}
 

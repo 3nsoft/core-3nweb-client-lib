@@ -63,6 +63,7 @@ export function makeASMailCaller(
 ): ASMailService {
 	const delivPath = objPath.concat('delivery');
 	const inboxPath = objPath.concat('inbox');
+	const connectPath = objPath.concat('connect');
 	return {
 		getUserId: getUserId.makeCaller(caller, objPath),
 		delivery: {
@@ -80,7 +81,7 @@ export function makeASMailCaller(
 			listMsgs: inboxListMsgs.makeCaller(caller, inboxPath),
 			removeMsg: removeMsg.makeCaller(caller, inboxPath),
 			subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
-		}
+		},
 	};
 }
 

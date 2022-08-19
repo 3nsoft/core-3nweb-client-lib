@@ -71,7 +71,7 @@ export abstract class ParamOnFileAndServer<TF, TS> extends JsonFileProc<TF> {
 	}
 
 	protected async onFileEvent(ev: FileEvent): Promise<void> {
-		if (!ev.isRemote) { return; }
+		if (ev.src === 'local') { return; }
 		if (ev.type === 'removed') { throw new Error(
 			`Unexpected removal of file with parameter ${this.paramPath}`); }
 		if (ev.type !== 'file-change') { return; }

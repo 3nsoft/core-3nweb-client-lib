@@ -16,7 +16,7 @@
 */
 
 import { makeIPCException, EnvelopeBody } from './connector';
-import { stringifyErr } from '../lib-common/exceptions/error';
+import { recursiveErrJSONify, stringifyErr } from '../lib-common/exceptions/error';
 import { toBuffer } from '../lib-common/buffer-utils';
 import { common as pb } from '../protos/common.proto';
 import { ProtoType } from '../lib-client/protobuf-type';
@@ -72,7 +72,7 @@ export function fixInt(uint64: number): number {
 }
 export function valOfOptInt(uint64: Value<number>|undefined): number|undefined {
 	if (!uint64) { return; }
-	return fixInt(valOf(uint64));
+	return intValOf(uint64);
 }
 
 const numValType = ProtoType.for<Value<number>>(pb.UInt64Value);
@@ -93,7 +93,7 @@ export function errToMsg(err: any): ErrorValue {
 	if (typeof err !== 'object') {
 		return { err: JSON.stringify(err) };
 	} else if ((err as RuntimeException).runtimeException) {
-		return { runtimeExcJson: JSON.stringify(err) };
+		return { runtimeExcJson: JSON.stringify(recursiveErrJSONify(err)) };
 	} else {
 		return { err: stringifyErr(err) };
 	}
@@ -120,6 +120,10 @@ export function toOptVal<T>(value: T|undefined): Value<T>|undefined {
 
 export function valOf<T>(valObj: Value<T>): T {
 	return valObj.value;
+}
+
+export function intValOf(uint64: Value<number>): number {
+	return fixInt(valOf(uint64));
 }
 
 export function valOfOpt<T>(valObj: Value<T>|undefined): T|undefined {

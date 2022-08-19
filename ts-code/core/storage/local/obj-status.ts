@@ -15,13 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { LocalObjStatus, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { join } from 'path';
 import { makeStorageException } from '../../../lib-client/3nstorage/exceptions';
-import {  } from '../common/obj-info-file';
+import { addArchived } from '../common/obj-info-file';
 import { JSONSavingProc } from '../common/json-saving';
-import { nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionsIn, rmCurrentVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
+import { nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionFrom, rmCurrentVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
 import { LogError } from '../../../lib-client/logging/log-to-file';
+import { assert } from '../../../lib-common/assert';
 
 export interface ObjStatusInfo {
 	objId: ObjId;
@@ -32,7 +33,7 @@ export interface ObjStatusInfo {
 const STATUS_FILE_NAME = 'status';
 
 
-export class ObjStatus {
+export class ObjStatus implements LocalObjStatus {
 
 	private readonly saveProc: JSONSavingProc<ObjStatusInfo>;
 
@@ -84,7 +85,7 @@ export class ObjStatus {
 		return this.status.versions.current;
 	}
 
-	getNonGarbageVersions(): { gcMaxVer?: number; nonGarbage: Set<number> } {
+	getNonGarbageVersions(): NonGarbage {
 		return {
 			nonGarbage: nonGarbageVersionsIn(this.status.versions),
 			gcMaxVer: this.status.versions.current
@@ -113,14 +114,34 @@ export class ObjStatus {
 		version: number, verObjs: ContainerWithDelete<number>
 	): Promise<void> {
 		verObjs.delete(version);
-		rmArchVersionsIn(this.status.versions, version);
+		rmArchVersionFrom(this.status.versions, version);
 		await this.triggerSaveProc();
+	}
+
+	async archiveCurrentVersion(): Promise<void> {
+		const versions = this.status.versions;
+		assert(!!versions.current);
+		addArchived(versions, versions.current!);
+		await this.triggerSaveProc();
+	}
+
+	listVersions(): { current?: number; archived?: number[]; } {
+		const archived = this.status.versions.archived;
+		return {
+			current: this.status.versions.current,
+			archived: (archived ? archived.slice() : [])
+		};
 	}
 
 }
 Object.freeze(ObjStatus.prototype);
 Object.freeze(ObjStatus);
 
+
+export interface NonGarbage {
+	gcMaxVer?: number;
+	nonGarbage: Set<number>;
+}
 
 interface ContainerWithDelete<T> {
 	delete(key: T): void;

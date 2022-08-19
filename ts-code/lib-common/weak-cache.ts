@@ -107,6 +107,7 @@ implements TimedCache<TKey, TVal> {
 		if (v !== undefined) { return v; }
 		v = this.waiting.get(key);
 		if (v !== undefined) {
+			this.waiting.delete(key);
 			this.filling.set(key, v);
 			return v;
 		}
@@ -136,6 +137,17 @@ implements TimedCache<TKey, TVal> {
 		this.filling.delete(key);
 		this.waiting.delete(key);
 		this.wCache.delete(key);
+	}
+
+	keys(): TKey[] {
+		const allKeys: TKey[] = [];
+		for (const key of this.filling.keys()) {
+			allKeys.push(key);
+		}
+		for (const key of this.waiting.keys()) {
+			allKeys.push(key);
+		}
+		return allKeys;
 	}
 
 	clear(): void {

@@ -21,23 +21,29 @@
  */
 
 import { SingleProc } from '../../../lib-common/processes/synced';
-import { Node, NodeType, Storage, RemoteEvent, SyncedStorage } from './common';
+import { FSChangeSrc, isSyncedStorage, Node, NodeType, setPathInExc, Storage, SyncedStorage, UploadHeaderChange } from './common';
 import { makeFileException, Code as excCode, Code } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
-import { StorageException } from '../exceptions';
-import { Observable, Subject } from 'rxjs';
-import { share } from 'rxjs/operators';
+import { makeFSSyncException, StorageException } from '../exceptions';
+import { Observable, Subject, Subscription } from 'rxjs';
+import { filter, map, share } from 'rxjs/operators';
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
-import { UpSyncTaskInfo } from '../../../core/storage/synced/obj-status';
+import { FolderNode } from './folder-node';
+import { ObjSource } from 'xsp-files';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
-type FileChangeEvent = web3n.files.FileChangeEvent;
+type RemoteEvent = web3n.files.RemoteEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
+type FileChangeEvent = web3n.files.FileChangeEvent;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type RuntimeException = web3n.RuntimeException;
-type Stats = web3n.files.Stats;
+type SyncStatus = web3n.files.SyncStatus;
+type FSSyncException = web3n.files.FSSyncException;
+type FileException = web3n.files.FileException;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 
 
 export abstract class NodeInFS<P extends NodePersistance> implements Node {
@@ -58,7 +64,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		this.currentVersion = newVersion;
 	}
 
-	private remoteEvents: RemoteEvent[]|undefined = undefined;
+	readonly isInSyncedStorage: boolean;
 
 	protected constructor(
 		protected readonly storage: Storage,
@@ -67,7 +73,9 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		public readonly objId: string,
 		private currentVersion: number,
 		public parentId: string | undefined
-	) {}
+	) {
+		this.isInSyncedStorage = isSyncedStorage(this.storage);
+	}
 
 	private updatedXAttrs(changes: XAttrsChanges|undefined): XAttrs|undefined {
 		return (this.xattrs ?
@@ -92,14 +100,14 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			newVersion: this.version + 1,
 			attrs: this.attrs.copy(),
 			xattrs: this.updatedXAttrs(changes)
-		}
+		};
 	}
 
 	async updateXAttrs(changes: XAttrsChanges): Promise<number> {
 		if (Object.keys(changes).length === 0) { return this.version; }
 		return this.doChange(true, async () => {
 			const { xattrs, newVersion } = this.getParamsForUpdate(changes);
-			const base = await this.storage.getObj(this.objId);
+			const base = await this.storage.getObjSrc(this.objId);
 			const sub = await this.crypto.writeXAttrs(xattrs!, newVersion, base);
 			await this.storage.saveObj(this.objId, newVersion, sub);
 			this.setUpdatedParams(newVersion, undefined, xattrs);
@@ -119,71 +127,44 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return this.attrs;
 	}
 
-	async	processRemoteEvent(event: RemoteEvent): Promise<void> {
-		this.bufferRemoteEvent(event);
-		return this.doChange(true, async () => {
-			const event = this.getBufferedEvent();
-			if (!event) { return; }
-			if (event.type === 'remote-change') {
+	async listVersions(): Promise<{ current?: number; archived?: number[]; }> {
+		return (await this.storage.status(this.objId)).listVersions();
+	}
 
-// TODO
-// uploader should show if there is process for this obj uploads with version
-// in the event, and if so, wait for completion of that process to either ignore
-// remote event, or to set conflict, or whatever
-
-				// XXX should we use here synced storage methods here?
-				//     This method is called only in synced storage.
-
-				// XXX detect if there is a conflict
-				// need obj status info here
-
-
-				// if (conflict) {
-				// 	await this.doOnConflict();
-				// } else {
-				// 	await this.doOnExternalChange();
-				// }
-			} else if (event.type === 'remote-delete') {
-				await this.delete(true);
-			} else {
-				throw new Error(`Unknown remote bufferred event type ${JSON.stringify(event)}`);
+	async archiveCurrent(version?: number): Promise<number> {
+		if (this.isInSyncedStorage) {
+			const storage = this.syncedStorage();
+			const status = await storage.status(this.objId);
+			const { state, synced } = status.syncStatus();
+			if (state !== 'synced') {
+				throw makeFSSyncException(this.name, { notSynced: true });
 			}
-		});
+			if (version) {
+				if (synced!.latest !== version) {
+					throw makeFSSyncException(this.name, { versionMismatch: true });
+				}	
+			} else {
+				version = synced!.latest!;
+			}
+			await storage.archiveVersionOnServer(this.objId, version);
+			await status.archiveCurrentVersion();
+			return version;
+		} else {
+			if (version) {
+				if (this.currentVersion !== version) {
+					throw makeFileException(Code.versionMismatch, this.name);
+				}
+			} else {
+				version = this.currentVersion;
+			}
+			const status = await this.storage.status(this.objId);
+			await status.archiveCurrentVersion();
+			return version;
+		}
 	}
 
-	private bufferRemoteEvent(event: RemoteEvent): void {
-		if (!this.remoteEvents) {
-			this.remoteEvents = [];
-		}
-		this.remoteEvents.push(event);
-		if (this.remoteEvents.length > 1) {
-			// XXX attempt to compress events
-
-		}
-	}
-
-	private getBufferedEvent(): RemoteEvent|undefined {
-		if (!this.remoteEvents) { return; }
-		const event = this.remoteEvents.shift();
-		if (this.remoteEvents.length === 0) {
-			this.remoteEvents = undefined;
-		}
-		return event;
-	}
-
-	localDelete(): Promise<void> {
-		return this.doChange(true, () => this.delete());
-	}
-
-	broadcastUpSyncEvent(task: UpSyncTaskInfo): void {
-		if (task.type === 'upload') {
-			this.broadcastEvent({
-				type: 'sync-upload',
-				path: this.name,
-				current: this.version,
-				uploaded: task.version
-			});
-		}
+	removeObj(src: FSChangeSrc = 'local'): Promise<void> {
+		return this.doChange(true, () => this.delete(src));
 	}
 
 	/**
@@ -191,21 +172,14 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	 * this node from storage. Make sure to call it inside access synchronization
 	 * construct.
 	 */
-	protected async delete(remoteEvent?: boolean): Promise<void> {
-		if (remoteEvent) {
-
-			// XXX
-			throw Error(`Removal from remote side is not implemented, yet.`);
-
-		} else {
-			await this.storage.removeObj(this.objId);
-		}
+	protected async delete(src: FSChangeSrc): Promise<void> {
+		await this.storage.removeObj(this.objId);
 		this.storage.nodes.delete(this);
 		this.currentVersion = -1;
 		const event: RemovedEvent = {
 			type: 'removed',
 			path: this.name,
-			isRemote: remoteEvent
+			src
 		};
 		this.broadcastEvent(event, true);
 	}
@@ -231,14 +205,16 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		if (!awaitPrevChange && this.writeProc.isProcessing()) {
 			throw makeFileException(excCode.concurrentUpdate, this.name+` type ${this.type}`);
 		}
-		const res = await this.writeProc.startOrChain(() => {
+		const res = await this.writeProc.startOrChain(async () => {
 			if (this.currentVersion < 0) {
 				throw makeFileException(
 					Code.notFound, this.name, `Object is marked removed`);
 			}
-			return change()
-			.catch((exc: RuntimeException) => {
-				if (!exc.runtimeException) {
+			try {
+				const res = await change();
+				return res;
+			} catch (exc) {
+				if (!(exc as RuntimeException).runtimeException) {
 					throw errWithCause(exc, `Cannot save changes to ${this.type} ${this.name}, version ${this.version}`);
 				}
 				if ((exc as StorageException).type === 'storage') {
@@ -247,81 +223,230 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 					} else if ((exc as StorageException).objNotFound) {
 						throw makeFileException(excCode.notFound, this.name, exc);
 					}
+				} else if (((exc as FileException).type === 'file')
+				|| ((exc as FSSyncException).type === 'fs-sync')) {
+					throw exc;
 				}
 				throw makeFileException(Code.ioError, this.name, exc);		
-			});
+			}
 		});
 		return res;
 	}
 
-	/**
-	 * This method is called on conflict with remote version. This method
-	 * is called at ordered point in time requiring no further synchronization.
-	 * @param remoteVersion is an object version on server
-	 */
-	protected async doOnConflict(remoteVersion: number): Promise<void> {
-		// XXX
-
-		throw new Error('Unimplemented, yet');
-
-		// OLD CODE BELOW
-		// if (remoteVersion < this.version) { return; }
-		// await (this.storage as SyncedStorage).setCurrentSyncedVersion(
-		// 	this.objId, remoteVersion);
-		// this.setCurrentVersion(remoteVersion);
-	}
-
-	/**
-	 * This non-synchronized method resolves conflict with remote version.
-	 * @param remoteVersion 
-	 */
-	protected async doOnExternalChange(remoteVersion: number): Promise<void> {
-		if (remoteVersion <= this.version) { return; }
-		const src = await this.storage.getObj(this.objId);
-		const newVersion = src.version;
-		if (newVersion <= this.version) { return; }
-		this.setCurrentVersion(newVersion);
-		const event: FileChangeEvent = {
-			type: 'file-change',
-			path: this.name,
-			isRemote: true
-		};
-		this.broadcastEvent(event);
-	}
-
-	protected broadcastEvent(event: FSEvent, complete?: boolean): void {
-		this.storage.broadcastNodeEvent(this.objId, this.parentId, event);
-		if (!this.events) { return; }
-		this.events.next(event);
-		if (complete) {
-			this.events.complete();
+	protected broadcastEvent(
+		event: FSEvent, complete?: boolean, childObjId?: string
+	): void {
+		if (this.events && complete) {
+			this.events.sink.next(event);
+			this.events.sink.complete();
 			this.events = undefined;
 		}
+		this.storage.broadcastNodeEvent(
+			this.objId, this.parentId, childObjId, event
+		);
 	}
 
 	/**
 	 * This is a lazily initialized field, when there is an external entity
 	 * that wants to see this node's events.
 	 */
-	private events: Subject<FSEvent>|undefined = undefined;
+	private events: {
+		sink: Subject<FSEvent|RemoteEvent>;
+		out: Observable<FSEvent|RemoteEvent>;
+		storeSub: Subscription;
+	}|undefined = undefined;
 
-	get event$(): Observable<FSEvent> {
+	get event$(): Observable<FSEvent|RemoteEvent> {
 		if (!this.events) {
-			this.events = new Subject<FSEvent>();
+			const sink = new Subject<FSEvent|RemoteEvent>();
+			const out = sink.asObservable().pipe(share());
+			const storeSub = this.storage.getNodeEvents()
+			.pipe(
+				filter(({ objId }) => (this.objId === objId)),
+				map(({ event }) => copyWithPathIfRemoteEvent(event, this.name))
+			)
+			.subscribe({
+				next: event => sink.next(event),
+				complete: () => {
+					sink.complete();
+					if (this.events?.sink === sink) {
+						this.events = undefined;
+					}
+				},
+				error: err => {
+					sink.error(err);
+					if (this.events?.sink === sink) {
+						this.events = undefined;
+					}
+				}
+			});
+			this.events = { sink, out, storeSub };
 		}
-		return this.events.asObservable().pipe(share());
+		return this.events.out;
 	}
 
-	async sync(): Promise<Stats['sync']> {
-		if ((this.storage.type === 'synced')
-		|| (this.storage.type === 'share')) {
-			return (this.storage as SyncedStorage).getObjSyncInfo(this.objId);
+	protected syncedStorage(): SyncedStorage {
+		if (!this.isInSyncedStorage) { throw new Error(`Storage is not synced`); }
+		return this.storage as SyncedStorage;
+	}
+
+	async syncStatus(): Promise<SyncStatus> {
+		const storage = this.syncedStorage();
+		const status = (await storage.status(this.objId)).syncStatus();
+		if (this.parentId) {
+			const parent = storage.nodes.get<FolderNode>(this.parentId);
+			if (parent) {
+				status.existsInSyncedParent =
+					await parent.childExistsInSyncedVersion(this.objId);
+			}
 		}
+		return status;
+	}
+
+	async updateStatusInfo(): Promise<SyncStatus> {
+		const storage = this.syncedStorage();
+		const status = await storage.updateStatusInfo(this.objId);
+		return await this.syncStatus();
+	}
+
+	isSyncedVersionOnDisk(
+		version: number
+	): Promise<'partial'|'complete'|'none'> {
+		const storage = this.syncedStorage();
+		return storage.isRemoteVersionOnDisk(this.objId, version);
+	}
+
+	 async download(version: number): Promise<void> {
+		const storage = this.syncedStorage();
+		return storage.download(this.objId, version);
+	}
+
+	protected abstract setCurrentStateFrom(src: ObjSource): Promise<void>;
+
+	adoptRemote(opts: OptionsToAdopteRemote|undefined): Promise<void> {
+		return this.doChange(true, async () => {
+			const storage = this.syncedStorage();
+			try {
+				const adopted = await storage.adoptRemote(this.objId, opts);
+				if (!adopted) { return; }
+				const src = await this.storage.getObjSrc(this.objId, adopted);
+				await this.setCurrentStateFrom(src);
+				const event: FileChangeEvent = {
+					type: 'file-change',
+					src: 'sync',
+					path: this.name,
+					newVersion: this.version
+				};
+				this.broadcastEvent(event);
+			} catch (exc) {
+				throw setPathInExc(exc, this.name);
+			}
+		});
+	}
+
+	protected async needUpload(localVersion: number|undefined): Promise<{
+		localVersion: number; uploadVersion: number; createOnRemote: boolean;
+	}|undefined> {
+		const { local, remote, synced } = await this.syncStatus();
+		if (localVersion) {
+			if (localVersion !== this.currentVersion) {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					localVersion: this.currentVersion,
+					message: `Given local version ${localVersion} is not equal to current version ${this.currentVersion}`
+				});
+			}
+			if (!local || (local.latest !== localVersion)) {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					message: `No local version ${localVersion} to upload`
+				});
+			}
+		} else {
+			if (!local || !this.currentVersion) { return; }
+			localVersion = this.currentVersion;
+		}
+		if (remote) {
+			if (remote.latest) {
+				const uploadVersion = remote.latest+1;
+				return { createOnRemote: false, localVersion, uploadVersion };
+			} else {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					removedOnServer: true
+				});
+			}
+		} else if (synced) {
+			if (synced.latest) {
+				const uploadVersion = synced.latest+1;
+				return { createOnRemote: false, localVersion, uploadVersion };
+			} else {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					removedOnServer: true
+				});
+			}
+		} else {
+			const uploadVersion = 1;
+			return { createOnRemote: true, localVersion, uploadVersion };
+		}
+	}
+
+	async upload(opts: OptionsToUploadLocal|undefined): Promise<void> {
+		try {
+			const toUpload = await this.needUpload(opts?.localVersion);
+			if (!toUpload) { return; }
+			const { localVersion, createOnRemote, uploadVersion } = toUpload;
+			const uploadHeader = ((localVersion === uploadVersion) ? undefined :
+				await this.uploadHeaderChange(localVersion, uploadVersion));
+			const storage = this.syncedStorage();
+			await storage.upload(
+				this.objId, localVersion, uploadVersion, uploadHeader,
+				createOnRemote
+			);
+			await this.doChange(true, async () => {
+				storage.dropCachedLocalObjVersionsLessOrEqual(this.objId, localVersion);
+				if (this.currentVersion === localVersion) {
+					this.currentVersion = uploadVersion;
+				}
+			});
+		} catch (exc) {
+			throw setPathInExc(exc, this.name);
+		}
+	}
+
+	private async uploadHeaderChange(
+		localVersion: number, uploadVersion: number
+	): Promise<UploadHeaderChange> {
+		const currentSrc = await this.storage.getObjSrc(
+			this.objId, localVersion);
+		const localHeader = await currentSrc.readHeader();
+		const uploadHeader = await this.crypto.reencryptHeader(
+			localHeader, uploadVersion);
+		return { localHeader, localVersion, uploadHeader, uploadVersion };
 	}
 
 }
 Object.freeze(NodeInFS.prototype);
 Object.freeze(NodeInFS);
+
+
+function copyWithPathIfRemoteEvent(
+	e: RemoteEvent|FSEvent, path: string
+): RemoteEvent {
+	switch (e.type) {
+		case 'remote-change':
+			return { type: e.type, path, newVersion: e.newVersion };
+		case 'remote-removal':
+			return { type: e.type, path };
+		case 'remote-version-archival':
+			return { type: e.type, path, archivedVersion: e.archivedVersion };
+		case 'remote-arch-ver-removal':
+			return { type: e.type, path, removedArchVer: e.removedArchVer };
+		default:
+			return e as any;
+	}
+}
 
 
 Object.freeze(exports);

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core, makeNetClient } from "../../lib-index";
+import { Core, makeNetClient, MakeNet } from "../../lib-index";
 import { makeInWorkerWasmCryptor } from "../../cryptors";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
@@ -27,6 +27,11 @@ import { assert } from "../../lib-common/assert";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
+import { RequestOpts, NetClient } from "../../lib-client/request-utils";
+import { makeConnectionException } from "../../lib-common/exceptions/http";
+import { Subject } from "rxjs";
+import { share } from "rxjs/operators";
+import { toRxObserver } from "../../lib-common/utils-for-observables";
 
 export const testApp = {
 	appDomain: 'test.3nweb.computer',
@@ -71,8 +76,8 @@ type StartupW3N = web3n.startup.W3N;
 
 export class CoreRunner {
 
+	runningCore: Core|undefined = undefined;
 	user: User = (undefined as any);
-	core: Core;
 	private appCaps: {
 		raw: CommonW3N;
 		ipc: CommonW3N;
@@ -82,7 +87,7 @@ export class CoreRunner {
 	public readonly dataFolder: string;
 
 	constructor(
-		public signUpUrl: string
+		public readonly signUpUrl: string
 	) {
 		numOfRunningCores += 1;
 		this.coreNum = numOfRunningCores;
@@ -91,14 +96,20 @@ export class CoreRunner {
 		Object.seal(this);
 	}
 
+	get core(): Core {
+		assert(!!this.runningCore);
+		return this.runningCore!;
+	}
+
 	private setNewCore(): void {
 		if (this.appCaps) {
 			this.appCaps.close();
+			this.appCaps = undefined;
 		}
-		this.appCaps = undefined;
-		this.core = Core.make(
+		this.runningCore = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			makeNetClient, makeServiceLocator({
+			makeNetClient,
+			makeServiceLocator({
 				resolveTxt: domain => new Promise(
 					(resolve, reject) => resolveDnsTxt(domain, (err, texts) => {
 						if (err) { reject(err); }
@@ -111,13 +122,19 @@ export class CoreRunner {
 	async close(): Promise<void> {
 		if (this.appCaps) {
 			this.appCaps.close();
-			await this.core.close();
 			this.appCaps = undefined;
+
+			// XXX
+			//  - should we do this.setNewCore() ? 
+
+		}
+		if (this.runningCore) {
+			await this.runningCore.close();
+			this.runningCore = undefined;
 		}
 	}
 
 	async cleanup(showLogs: boolean): Promise<void> {
-		numOfRunningCores -= 1;
 		if (showLogs) {
 			await showLogsFrom(this.dataFolder);
 		}
@@ -143,6 +160,9 @@ export class CoreRunner {
 	}
 
 	async loginUser(): Promise<void> {
+		if (!this.runningCore) {
+			this.setNewCore();
+		}
 		const { capsForStartup: caps, coreInit } = this.core.start();
 		const usersOnDisk = await caps.signIn.getUsersOnDisk();
 		let isLogged: boolean;
@@ -190,7 +210,7 @@ export class CoreRunner {
 	}
 
 	setupTestAppCaps(): void {
-		if (this.appCaps) { throw new Error(`App CAPs have already been set.`); }
+		assert(!this.appCaps, `Expect that app CAPs not to be set.`);
 		const { caps, close: closeCAPs } = this.core.makeCAPsForApp(
 			testApp.appDomain, testApp.capsRequested);
 		const { clientW3N, close } = wrapCommonW3N(caps);
@@ -205,13 +225,21 @@ export class CoreRunner {
 	}
 
 	get rawAppCaps(): CommonW3N {
-		if (!this.appCaps) { throw new Error(`App CAPs are not set.`); }
-		return this.appCaps.raw;
+		assert(!!this.appCaps, `Expect that app CAPs is set.`);
+		return this.appCaps!.raw;
 	}
 
 	get appCapsViaIPC(): CommonW3N {
-		if (!this.appCaps) { throw new Error(`App CAPs are not set.`); }
-		return this.appCaps.ipc;
+		assert(!!this.appCaps, `Expect that app CAPs is set.`);
+		return this.appCaps!.ipc;
+	}
+
+	async makeAndLoginNewCore(): Promise<CoreRunner> {
+		const r = new CoreRunner(this.signUpUrl);
+		r.user = this.user;
+		await r.loginUser();
+		r.setupTestAppCaps();
+		return r;
 	}
 
 }

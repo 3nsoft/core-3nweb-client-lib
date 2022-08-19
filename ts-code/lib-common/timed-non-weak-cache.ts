@@ -48,6 +48,7 @@ export class TimeWindowCache<TKey, TVal> implements TimedCache<TKey, TVal> {
 		if (v !== undefined) { return v; }
 		v = this.waiting.get(key);
 		if (v !== undefined) {
+			this.waiting.delete(key);
 			this.filling.set(key, v);
 		}
 		return v
@@ -64,6 +65,17 @@ export class TimeWindowCache<TKey, TVal> implements TimedCache<TKey, TVal> {
 	delete(key: TKey): void {
 		this.filling.delete(key);
 		this.waiting.delete(key);
+	}
+
+	keys(): TKey[] {
+		const allKeys: TKey[] = [];
+		for (const key of this.filling.keys()) {
+			allKeys.push(key);
+		}
+		for (const key of this.waiting.keys()) {
+			allKeys.push(key);
+		}
+		return allKeys;
 	}
 
 	clear(): void {

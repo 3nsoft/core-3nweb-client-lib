@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,8 @@ export * from "./core";
 export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";
 export { makeNetClient } from "./lib-client/request-utils";
 
-export { sysFolders, initSysFolders, FactoryOfFSs, PerAppStorage, sysFilesOnDevice, userFilesOnDevice, reverseDomain } from "./core/storage";
+export { FactoryOfFSs, PerAppStorage, reverseDomain } from "./core/storage";
+export { sysFolders } from "./core/storage/system-folders";
 
 export { DeviceFS } from './lib-client/local-files/device-fs';
 

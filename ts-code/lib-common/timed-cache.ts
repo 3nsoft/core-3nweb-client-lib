@@ -28,6 +28,8 @@ export interface TimedCache<TKey, TVal> {
 
 	delete(key: TKey): void;
 
+	keys(): TKey[];
+
 	clear(): void;
 
 	destroy(): void;

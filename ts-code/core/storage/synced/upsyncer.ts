@@ -15,16 +15,20 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StorageOwner, FirstSaveReqOpts, FollowingSaveReqOpts } from "../../../lib-client/3nstorage/service";
+import { StorageOwner } from "../../../lib-client/3nstorage/service";
 import { SyncedObj } from "./obj-files";
 import { MonoTypeOperatorFunction } from "rxjs";
-import { FileWrite, HeaderWrite, SegsWrite } from "../../../lib-client/objs-on-disk/file-writing-proc";
-import { tap } from "rxjs/operators";
+import { FileWrite } from "../../../lib-client/objs-on-disk/file-writing-proc";
 import { LabelledExecPools, Task } from "../../../lib-common/processes/labelled-exec-pools";
 import { LogError } from "../../../lib-client/logging/log-to-file";
-import { StorageException } from "../../../lib-client/3nstorage/exceptions";
+import { makeFSSyncException } from "../../../lib-client/3nstorage/exceptions";
 import { assert } from "../../../lib-common/assert";
-import { ArchivalInfo, RemovalInfo, UploadInfo, UpSyncTaskInfo } from "./obj-status";
+import { DiffVerOrderedUpload, UploadInfo, WholeVerOrderedUpload } from "./obj-status";
+import { ObjSource } from "xsp-files";
+import { defer } from "../../../lib-common/processes/deferred";
+import { DiffInfo } from "../../../lib-common/service-api/3nstorage/owner";
+import { utf8 } from "../../../lib-common/buffer-utils";
+import { FiniteChunk } from "../../../lib-common/objs-on-disk/file-layout";
 import { ObjId } from "../../../lib-client/3nstorage/xsp-fs/common";
 
 const MAX_CHUNK_SIZE = 512*1024;
@@ -34,67 +38,16 @@ const MAX_FAST_UPLOAD = 2*1024*1024;
 type UploadExecLabel = 'long' | 'fast';
 type UploadNeedInfo = NonNullable<UploadInfo['needUpload']>;
 
-function executorLabelFor(info: UploadNeedInfo): UploadExecLabel {
-	let uploadSize = 0;
-	if (info.header) {
-		uploadSize += info.header;
-	}
-	for (const seg of info.segs) {
-		uploadSize += seg.len;
-	}
-	return ((uploadSize <= MAX_FAST_UPLOAD) ? 'fast' : 'long');
-}
-
-function addEventToInfo(info: UploadNeedInfo, writeEv: FileWrite[]): void {
-	for (const w of writeEv) {
-		if ((w as HeaderWrite).isHeader) {
-			info.header = w.bytes.length;
-		} else {
-			mergeSections(info.segs, w as SegsWrite);
-		}
-	}
-}
-
-function mergeSections(segs: UploadNeedInfo['segs'], w: SegsWrite): void {
-	const wStart = w.ofs;
-	const wLen = w.bytes.length;
-	for (let i=0; i<segs.length; i+=1) {
-		const section = segs[i];
-		const sectionEnd = section.ofs + section.len;
-		if (sectionEnd < wStart) {
-			continue;
-		}
-		if (sectionEnd === wStart) {
-			section.len += wLen;
-		} else if (section.ofs <= wStart) {
-			const maxOverlap = section.len - (wStart - section.ofs);
-			if (maxOverlap < wLen) {
-				section.len += wLen - maxOverlap;
-			}
-		} else if ((wStart + wLen) === section.ofs) {
-			section.ofs = wStart;
-		} else {
-			segs.splice(i, 0, { ofs: wStart, len: wLen });
-		}
-		return;
-	}
-	segs.push({ ofs: wStart, len: wLen });
-}
-
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
-
-export type BroadcastUpSyncEvent = (objId: ObjId, task: UpSyncTaskInfo) => void;
 
 
 export class UpSyncer {
 
 	private readonly execPools: LabelledExecPools<UploadExecLabel>;
-	private readonly uploads = new Map<SyncedObj, ObjUpSync>();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
-		private readonly logError: LogError,
-		private readonly broadcastUpSyncEvent: BroadcastUpSyncEvent
+		private readonly logError: LogError
 	) {
 		this.execPools = new LabelledExecPools([
 			{ label: 'long', maxProcs: 1 },
@@ -103,38 +56,52 @@ export class UpSyncer {
 		Object.seal(this);
 	}
 
-	private getOrMakeUploadsFor(obj: SyncedObj): ObjUpSync {
-		let uploads = this.uploads.get(obj);
-		if (!uploads) {
-			uploads = new ObjUpSync(
-				obj, this.remoteStorage, this.execPools, this.logError,
-				this.broadcastUpSyncEvent);
-			this.uploads.set(obj, uploads);
-		}
-		return uploads;
-	}
-
 	start(): void {
 		this.execPools.start();
 	}
 
 	async stop(): Promise<void> {
 		await this.execPools.stop();	// implicitly cancels all upsync tasks
-		this.uploads.clear();
 	}
 
+	/**
+	 * Creates an rxjs operator to tap saving process, starting upload while
+	 * writing is ongoing.
+	 */
 	tapFileWrite(
 		obj: SyncedObj, isNew: boolean, newVersion: number, baseVersion?: number
 	): FileWriteTapOperator {
-		const objUploads = this.getOrMakeUploadsFor(obj);
-		return objUploads.tapFileWrite(isNew, newVersion, baseVersion);
+
+		throw new Error('UpSyncer.tapFileWrite() not implemented');
+
+		// const objUploads = this.getOrMakeUploadsFor(obj);
+		// return objUploads.tapFileWrite(isNew, newVersion, baseVersion);
 	}
 
 	async removeCurrentVersionOf(obj: SyncedObj): Promise<void> {
-		const objUploads = this.getOrMakeUploadsFor(obj);
-		if (objUploads.neededExecutor()) {
-			this.execPools.add(objUploads);
-		}
+
+		throw new Error('UpSyncer.removeCurrentVersionOf() not implemented');
+
+		// const objUploads = this.getOrMakeUploadsFor(obj);
+
+		// XXX is removal set in this older code? This may need to change anyway
+
+		// if (objUploads.neededExecutor()) {
+		// 	this.execPools.add(objUploads);
+		// }
+	}
+
+	async uploadFromDisk(
+		obj: SyncedObj, localVersion: number, uploadVersion: number,
+		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
+		createOnRemote: boolean
+	): Promise<void> {
+		const task = await UploadTask.for(
+			obj, localVersion, uploadVersion, uploadHeader, syncedBase,
+			createOnRemote,
+			this.remoteStorage, this.execPools);
+		this.execPools.add(task);
+		await task.completion();
 	}
 
 }
@@ -142,291 +109,300 @@ Object.freeze(UpSyncer.prototype);
 Object.freeze(UpSyncer);
 
 
-class ObjUpSync implements Task<UploadExecLabel> {
+export interface UploadStatusRecorder {
+	recordUploadStart(info: UploadInfo): Promise<void>;
+	recordUploadCancellation(info: UploadInfo): Promise<void>;
+	recordUploadInterimState(info: UploadInfo): Promise<void>;
+}
 
-	private taskInProcess: UpSyncTaskInfo|undefined = undefined;
-	private isCancelled = false;
-	private runningProc: Promise<void>|undefined = undefined;
 
-	constructor(
-		private readonly obj: SyncedObj,
+class UploadTask implements Task<UploadExecLabel> {
+
+	private readonly uploadCompletion = defer<void>();
+	private readonly execLabel: UploadExecLabel;
+
+	private constructor(
 		private readonly remoteStorage: StorageOwner,
+		private readonly objId: ObjId,
+		private readonly objStatus: UploadStatusRecorder,
+		private readonly src: ObjSource,
 		private readonly execPools: LabelledExecPools<UploadExecLabel>,
-		private readonly logError: LogError,
-		private readonly broadcastUpSyncEvent: BroadcastUpSyncEvent
+		private readonly info: UploadInfo,
+		private readonly uploadHeader: Uint8Array|undefined
 	) {
+		this.execLabel = executorLabelFor(this.info.needUpload!);
 		Object.seal(this);
 	}
 
-	tapFileWrite(
-		isObjNew: boolean, newVersion: number, baseVersion: number|undefined
-	): FileWriteTapOperator {
-		// XXX for now upload is started when write is complete, but tapped code
-		//     layout can adopt upload as before completion.
-		const uploadInfo: UploadInfo = {
-			type: 'upload',
-			version: newVersion,
-			baseVersion,
-			needUpload: {
-				segs: []
-			}
-		};
-		if (isObjNew) {
-			uploadInfo.createObj = true;
-		}
-		return tap(
-			writeEv => {
-				addEventToInfo(uploadInfo.needUpload!, writeEv);
-			},
-			async err => {
-				// XXX cancel in-tap upload, when it will be added.
-				//     Something should be done in case there is a transaction that
-				//     needs  cancelling.
-				await this.cancelTransactionIfOpen(uploadInfo);
-
-				await this.logError(err);
-			},
-			() => {
-				uploadInfo.needUpload!.allByteOnDisk = true;
-				this.enqueueTask(uploadInfo);
-			}
-		);
-	}
-
-	private enqueueTask(task: UpSyncTaskInfo): void {
-		this.obj.sync().queueTask(task);
-		if (this.neededExecutor()) {
-			this.execPools.add(this);
+	static async for(
+		obj: SyncedObj, localVersion: number, uploadVersion: number,
+		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
+		createObj: boolean,
+		remoteStorage: StorageOwner, execPools: LabelledExecPools<UploadExecLabel>
+	): Promise<UploadTask> {
+		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
+		let needUpload: UploadInfo['needUpload'];
+		if (syncedBase) {
+			const {
+				diff, newSegsPackOrder
+			} = await obj.diffForUploadOf(localVersion);
+			needUpload = await diffVerUpload(
+				src, uploadHeader, diff, newSegsPackOrder);
 		} else {
-			this.obj.scheduleSelfGC();
-		} 
-	}
-
-	private async recordTaskCompletion(task: UpSyncTaskInfo): Promise<void> {
-		this.taskInProcess = undefined;
-		if (task.type === 'upload') {
-			await this.obj.markVersionSynced(task.version);
+			needUpload = await wholeVerUpload(src, uploadHeader, createObj);
 		}
-		await this.obj.sync().recordTaskCompletion(task);
-		this.broadcastUpSyncEvent(this.obj.objId, task);
+		const info: UploadInfo = {
+			localVersion,
+			uploadVersion,
+			baseVersion: syncedBase,
+			needUpload
+		};
+		const objStatus = obj.statusObj();
+		await objStatus.recordUploadStart(info);
+		return new UploadTask(
+			remoteStorage, obj.objId, objStatus, src, execPools, info, uploadHeader
+		);
 	}
 
 	neededExecutor(): UploadExecLabel|undefined {
-		const task = this.obj.sync().glanceOnNextTask();
-		if (!task) { return; }
-		if (task.type !== 'upload') { return 'fast'; }
-		if (!task.needUpload) { return; }
-		return executorLabelFor(task.needUpload!);
+		return (!this.info.needUpload ? undefined : this.execLabel);
 	}
 
-	removeArchivedVersion(version: number): void {
-		this.enqueueTask({
-			type: 'removal',
-			archivedVersions: version
-		});
-	}
-
-	async cancel(): Promise<void> {
-		this.isCancelled = true;
-		await this.runningProc?.catch(noop);
+	completion(): Promise<void> {
+		return this.uploadCompletion.promise;
 	}
 
 	async process(): Promise<void> {
-		if (this.obj.sync().isSyncDone() || this.isCancelled) { return; }
-		let task: UpSyncTaskInfo|undefined = undefined;
+		if (!this.info.needUpload) { return; }
 		try {
-			if (!this.taskInProcess) {
-				this.taskInProcess = (
-					await this.obj.sync().getTaskForProcessing())!;
-				if (this.isCancelled) { return; }
-			}
-			task = this.taskInProcess;
-		} catch (err) {
-			await this.logError(err, `ObjUpSync.process fails to get task`);
-			return;
-		}
-		try {
-			if (task.type === 'upload') {
-				this.runningProc = this.processUpload(task);
-			} else if (task.type === 'removal') {
-				this.runningProc = this.processRemoval(task);
-			} else if (task.type === 'archiving') {
-				this.runningProc = this.processArchival(task);
-			} else {
-				throw new Error(`This shouldn't be reached`);
-			}
-			try {
-				await this.runningProc;
-			} finally {
-				this.runningProc = undefined;
-			}
-		} catch (err) {
-			await this.logError(err, `From ObjUpSync.process task ${task.type}`);
-		}
-	}
-
-	private async processArchival(task: ArchivalInfo): Promise<void> {
-
-		// XXX tell server to archive current version
-
-		await this.logError(
-			`Archival of current version is not implemented, yet.`);
-		await this.recordTaskCompletion(task);
-	}
-
-	private async processRemoval(task: RemovalInfo): Promise<void> {
-		if (task.currentVersion) {
-			if (this.obj.objId) {
-				await this.remoteStorage.deleteObj(this.obj.objId);
-			} else {
-				await this.logError(`Root obj can't be removed`);
-			}
-		}
-		if (task.archivedVersions) {
-
-			// XXX tell server to remove given archived versions
-
-			await this.logError(
-				`Removal of archived version is not implemented, yet.`);
-		}
-		await this.recordTaskCompletion(task);
-		this.obj.scheduleSelfGC();
-	}
-
-	private async processUpload(task: UploadInfo): Promise<void> {
-		if (task.needUpload) {
-			if (task.needUpload.allByteOnDisk) {
-				if (task.transactionId) {
-					await this.continueUploadOfCompletedVersion(task);
+			const upload = this.info.needUpload;
+			if (upload.type === 'ordered-diff') {
+				if (upload.transactionId) {
+					await this.continueOrderedDiffUpload(upload);
 				} else {
-					await this.startUploadOfCompletedVersion(task);
+					await this.startOrderedDiffUpload(upload);
 				}
-			}
-		} else {
-			await this.recordTaskCompletion(task);
-		}
-	}
-
-	private async cancelTransactionIfOpen(
-		uploadInfo: UploadInfo
-	): Promise<void> {
-		const txnId = uploadInfo.transactionId;
-		if (!txnId) { return; }
-		await this.remoteStorage.cancelTransaction(this.obj.objId, txnId)
-		.catch((exc: StorageException) => {
-			if (!exc.unknownTransaction) { throw exc; }
-		});
-	}
-
-	private async startUploadOfCompletedVersion(
-		uploadInfo: UploadInfo
-	): Promise<void> {
-		const src = await this.obj.getObjSrc(uploadInfo.version);
-		const header = await src.readHeader();
-		const maxChunkLen = (this.remoteStorage.maxChunkSize ?
-			this.remoteStorage.maxChunkSize - header.length : MAX_CHUNK_SIZE);
-		assert(maxChunkLen > 0);
-		const srcLen = (await src.segSrc.getSize()).size;
-		if (srcLen <= maxChunkLen) {
-			const segs = await src.segSrc.read(maxChunkLen);
-			await this.uploadWholeVersion(
-				!!uploadInfo.createObj, uploadInfo.version, header, segs
-			);
-			uploadInfo.needUpload = undefined;
-			await this.recordTaskCompletion(uploadInfo);
-		} else {
-			const segs = await src.segSrc.read(maxChunkLen);
-			uploadInfo.transactionId = await this.startUploadTransaction(
-				!!uploadInfo.createObj, uploadInfo.version, header, segs!
-			);
-			uploadInfo.needUpload!.segs = [
-				{ ofs: segs!.length, len: srcLen - segs!.length }
-			];
-			await this.obj.sync().recordInterimStateOfCurrentTask(uploadInfo);
-			this.execPools.add(this);
-		}
-	}
-
-	private async uploadWholeVersion(
-		create: boolean, ver: number,
-		header: Uint8Array, segs: Uint8Array|undefined
-	): Promise<void> {
-		const opts: FirstSaveReqOpts = {
-			header: header.length, ver, last: true
-		};
-		if (create) {
-			opts.create = true;
-		}
-		const bytes = (segs ? [ header, segs ] : [ header ]);
-		await this.remoteStorage.saveNewObjVersion(
-			this.obj.objId, bytes, opts, undefined
-		);
-	}
-
-	private async startUploadTransaction(
-		create: boolean, ver: number, header: Uint8Array, segs: Uint8Array
-	): Promise<string> {
-		const opts: FirstSaveReqOpts = {
-			header: header.length, ver
-		};
-		if (create) {
-			opts.create = true;
-		}
-		const txnId = await this.remoteStorage.saveNewObjVersion(
-			this.obj.objId, [ header, segs ], opts, undefined);
-		if (!txnId) {
-			throw new Error(`Server didn't start obj saving transaction`);
-		}
-		return txnId;
-	}
-
-	private async continueUploadOfCompletedVersion(
-		uploadInfo: UploadInfo
-	): Promise<void> {
-		const section = uploadInfo.needUpload!.segs[0];
-		const lenToRead = Math.min(
-			section.len,
-			(this.remoteStorage.maxChunkSize ?
-				this.remoteStorage.maxChunkSize : MAX_CHUNK_SIZE));
-		const src = await this.obj.getObjSrc(uploadInfo.version);
-		await src.segSrc.seek(section.ofs);
-		const segs = await src.segSrc.read(lenToRead);
-		if (!segs || (segs.length < lenToRead)) { throw new Error(
-			`Unexpected end of obj source`); }
-		const last = ((uploadInfo.needUpload!.segs.length === 1) &&
-			(segs.length === section.len));
-		
-		if (last) {
-			const opts: FollowingSaveReqOpts = {
-				ofs: section.ofs,
-				trans: uploadInfo.transactionId!,
-				last
-			};
-			await this.remoteStorage.saveNewObjVersion(
-				this.obj.objId, segs, undefined, opts);
-			uploadInfo.needUpload = undefined;
-			await this.recordTaskCompletion(uploadInfo);
-		} else {
-			const opts: FollowingSaveReqOpts = {
-				ofs: section.ofs,
-				trans: uploadInfo.transactionId!
-			};
-			await this.remoteStorage.saveNewObjVersion(
-				this.obj.objId, segs, undefined, opts);
-			if (segs.length === section.len) {
-				uploadInfo.needUpload!.segs.splice(0, 1);
+			} else if (upload.type === 'ordered-whole') {
+				if (upload.transactionId) {
+					await this.continueOrderedUpload(upload);
+				} else {
+					await this.startOrderedUpload(upload);
+				}
 			} else {
-				section.ofs += segs.length;
-				section.len -= segs.length;
+				throw new Error(`Unimplemented ${(upload as any).type} upload`);
 			}
-			this.execPools.add(this);
+			await this.objStatus.recordUploadInterimState(this.info);
+			if (this.info.needUpload) {
+				this.execPools.add(this);
+			} else {
+				this.uploadCompletion.resolve();
+			}
+		} catch (exc) {
+			this.info.needUpload = undefined;
+			this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
+				message: `Fail to upload local version ${this.info.uploadVersion}`,
+				localVersion: this.info.uploadVersion,
+				cause: exc
+			}));
+			await this.objStatus.recordUploadCancellation(this.info);
 		}
+	}
+
+	private async startOrderedUpload(
+		upload: WholeVerOrderedUpload
+	): Promise<void> {
+		const maxSegs = this.maxUploadChunk() - upload.header!;
+		assert(maxSegs > 1);
+		const segsToUpload = Math.min(upload.segsLeft, maxSegs);
+		const header = await this.headerToUpload();
+		let segs: Uint8Array|undefined = undefined;
+		if (segsToUpload > 0) {
+			await this.src.segSrc.seek(upload.segsOfs);
+			segs = await this.src.segSrc.read(segsToUpload);
+		}
+		assert(!!segs && (segs.length === segsToUpload));
+		const ver = this.info.uploadVersion;
+		const create = (upload.createObj ? true : undefined);
+		if (segsToUpload === upload.segsLeft) {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId,
+				{ ver, create, last: true }, undefined,
+				{ header, segs }
+			);
+			this.info.needUpload = undefined;
+		} else {
+			upload.transactionId = await this.remoteStorage.saveNewObjVersion(
+				this.objId,
+				{ ver, create }, undefined,
+				{ header, segs }
+			);
+			if (!upload.transactionId) {
+	
+				// XXX should this be runtime exception saying that remote acts badly ?
+	
+				throw new Error(`Server didn't start obj saving transaction`);
+			}
+			upload.header = undefined;
+			upload.segsOfs += segsToUpload;
+			upload.segsLeft -= segsToUpload;
+		}
+	}
+
+	private async headerToUpload(): Promise<Uint8Array> {
+		return (this.uploadHeader ?
+			this.uploadHeader : await this.src.readHeader());
+	}
+
+	private async startOrderedDiffUpload(
+		upload: DiffVerOrderedUpload
+	): Promise<void> {
+		const diff = utf8.pack(JSON.stringify(upload.diff));
+		const maxSegs = this.maxUploadChunk() - upload.header! - diff.length;
+		assert(maxSegs > 1);
+		const header = await this.headerToUpload();
+		const ver = this.info.uploadVersion;
+		if (upload.newSegsLeft.length === 0) {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId,
+				{ ver, last: true }, undefined,
+				{ header, diff }
+			);
+			this.info.needUpload = undefined;
+		} else {
+			upload.transactionId = await this.remoteStorage.saveNewObjVersion(
+				this.objId,
+				{ ver }, undefined,
+				{ header, diff }
+			);
+			if (!upload.transactionId) {
+		
+				// XXX should this be runtime exception saying that remote acts badly ?
+
+				throw new Error(`Server didn't start obj saving transaction`);
+			}
+			upload.header = undefined;
+		}
+	}
+
+	private maxUploadChunk(): number {
+		return (this.remoteStorage.maxChunkSize ?
+			this.remoteStorage.maxChunkSize : MAX_CHUNK_SIZE);
+	}
+
+	private async continueOrderedUpload(
+		upload: WholeVerOrderedUpload
+	): Promise<void> {
+		const segsToUpload = Math.min(upload.segsLeft, this.maxUploadChunk());
+		await this.src.segSrc.seek(upload.segsOfs);
+		const segs = await this.src.segSrc.read(segsToUpload);
+		assert(!!segs && (segs.length === segsToUpload));
+		const ofs = upload.segsOfs;
+		const trans = upload.transactionId!;
+		if (segsToUpload === upload.segsLeft) {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId, undefined, { ofs, trans, last: true }, { segs }
+			);
+			this.info.needUpload = undefined;
+		} else {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId, undefined, { ofs, trans }, { segs }
+			);
+			upload.segsOfs += segsToUpload;
+			upload.segsLeft -= segsToUpload;
+		}
+	}
+
+	private async continueOrderedDiffUpload(
+		upload: DiffVerOrderedUpload
+	): Promise<void> {
+		const maxSegs = this.maxUploadChunk();
+		const segInfo = upload.newSegsLeft[0];
+		assert(!!segInfo);
+		const len = Math.min(maxSegs, segInfo.len);
+		const segs = await this.src.segSrc.read(len);
+		assert(!!segs && (segs.length === len));
+		if (segInfo.len > len) {
+			upload.newSegsLeft.splice(1, 0, {
+				len: segInfo.len - len,
+				thisVerOfs: segInfo.thisVerOfs + len
+			});
+		}
+		const ofs = segInfo.thisVerOfs;
+		const trans = upload.transactionId!;
+		if (upload.newSegsLeft.length === 1) {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId, undefined, { ofs, trans, last: true }, { segs }
+			);
+			this.info.needUpload = undefined;
+		} else {
+			await this.remoteStorage.saveNewObjVersion(
+				this.objId, undefined, { ofs, trans }, { segs }
+			);
+			upload.newSegsLeft.splice(0, 1);
+		}
+	}
+
+	cancel(): Promise<void> {
+		// XXX
+		throw new Error("UploadTask.cancel() not implemented.");
 	}
 
 }
-Object.freeze(ObjUpSync.prototype);
-Object.freeze(ObjUpSync);
+Object.freeze(UploadTask.prototype);
+Object.freeze(UploadTask);
 
+
+async function wholeVerUpload(
+	src: ObjSource, uploadHeader: Uint8Array|undefined, createObj: boolean
+): Promise<WholeVerOrderedUpload> {
+	const header = await expectedHeaderLen(src, uploadHeader);
+	const segsSize = (await src.segSrc.getSize()).size;
+	return {
+		type: 'ordered-whole',
+		createObj,
+		header,
+		segsOfs: 0,
+		segsLeft: segsSize
+	};
+}
+
+async function diffVerUpload(
+	src: ObjSource, uploadHeader: Uint8Array|undefined, diff: DiffInfo,
+	newSegsPackOrder: FiniteChunk[]
+): Promise<DiffVerOrderedUpload> {
+	const header = await expectedHeaderLen(src, uploadHeader);
+	return {
+		type: 'ordered-diff',
+		diff,
+		newSegsLeft: newSegsPackOrder,
+		header
+	};
+}
+
+async function expectedHeaderLen(
+	src: ObjSource, uploadHeader: Uint8Array|undefined
+): Promise<number> {
+	return (uploadHeader ?
+		uploadHeader.length : (await src.readHeader()).length);
+}
+
+function uploadSize(info: UploadNeedInfo): number {
+	if (info.type === 'ordered-whole') {
+		return info.header! + info.segsLeft;
+	} else if (info.type === 'ordered-diff') {
+		let uploadSize = info.header!;
+		for (const { len } of info.newSegsLeft) {
+			uploadSize += len;
+		}
+		return uploadSize;
+	} else {
+		throw new Error(`Unimplemented upload type ${(info as any).type}`);
+	}
+}
+
+function executorLabelFor(info: UploadNeedInfo): UploadExecLabel {
+	return ((uploadSize(info) <= MAX_FAST_UPLOAD) ? 'fast' : 'long');
+}
 
 function noop() {}
 

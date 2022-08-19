@@ -88,8 +88,9 @@ const ACCESS_DIR = 'objs';
 const GENERATIONS_DIR = 'generations';
 const CONFIG_FILE = 'obj-folders-cfg.json';
 
-export type CanMoveObjToDeeperCache =
-	(objId: string, folderPath: string) => Promise<boolean>;
+export type CanMoveObjToDeeperCache = (
+	objId: string, folderPath: string
+) => Promise<boolean>;
 
 export class ObjFolders {
 

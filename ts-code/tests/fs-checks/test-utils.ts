@@ -1,5 +1,5 @@
 /*
- Copyright 2019 - 2020 3NSoft Inc.
+ Copyright 2019 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,6 +17,8 @@
 
 import { SpecIt as GenericSpecIt } from "../libs-for-tests/spec-module";
 
+type WritableFS = web3n.files.WritableFS;
+
 export interface SetupWithTestFS {
 	isUp: boolean;
 	testFS: web3n.files.WritableFS;
@@ -24,7 +26,7 @@ export interface SetupWithTestFS {
 
 export type SpecIt = GenericSpecIt<SetupWithTestFS>;
 
-export async function clearFS(fs: web3n.files.WritableFS): Promise<void> {
+export async function clearFS(fs: WritableFS): Promise<void> {
 	let items = await fs.listFolder('');
 	let delTasks: Promise<void>[] = [];
 	for (let f of items) {
@@ -43,8 +45,21 @@ export async function clearFS(fs: web3n.files.WritableFS): Promise<void> {
 
 export interface SetupWithTwoFSs {
 	isUp: boolean;
-	syncedTestFS: web3n.files.WritableFS;
-	localTestFS: web3n.files.WritableFS;
+	syncedTestFS: WritableFS;
+	localTestFS: WritableFS;
 }
 
 export type SpecItWithTwoFSs = GenericSpecIt<SetupWithTwoFSs>;
+
+export interface SetupWithTwoDevsFSs {
+	isUp: boolean;
+	dev1FS: () => WritableFS;
+	dev2: {
+		stop(): Promise<void>;
+		start(): Promise<void>;
+	};
+	dev2FS: () => WritableFS;
+	resetFS: () => Promise<void>;
+}
+
+export type SpecItWithTwoDevsFSs = GenericSpecIt<SetupWithTwoDevsFSs>;

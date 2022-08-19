@@ -37,6 +37,11 @@ type Observer<T> = web3n.Observer<T>;
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
+type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
+type SyncStatus = web3n.files.SyncStatus;
+type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
+type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 
 
 export class FileObject implements WritableFile, Linkable {
@@ -48,24 +53,27 @@ export class FileObject implements WritableFile, Linkable {
 		public isNew: boolean,
 		node: FileNode|undefined,
 		makeOrGetNode: (() => Promise<FileNode>)|undefined,
-		public writable: boolean
+		public writable: boolean,
+		isInSyncedStorage: boolean
 	) {
-		this.v = new V(name, node, makeOrGetNode, writable);
+		this.v = new V(name, node, makeOrGetNode, writable, isInSyncedStorage);
 		Object.seal(this);
 	}
 
 	static makeExisting(
 		node: FileNode, writable: boolean
 	): WritableFile|ReadonlyFile {
-		const f = new FileObject(node.name, false, node, undefined, writable);
-		return (writable ?
-			wrapWritableFile(f) : wrapReadonlyFile(f));
+		const f = new FileObject(
+			node.name, false, node, undefined, writable, node.isInSyncedStorage);
+		return (writable ? wrapWritableFile(f) : wrapReadonlyFile(f));
 	}
 
 	static makeForNotExisiting(
-		name: string, makeNode: () => Promise<FileNode>
+		name: string, makeNode: () => Promise<FileNode>,
+		isInSyncedStorage: boolean
 	): WritableFile {
-		const f = new FileObject(name, true, undefined, makeNode, true);
+		const f = new FileObject(
+			name, true, undefined, makeNode, true, isInSyncedStorage);
 		return wrapWritableFile(f);
 	}
 
@@ -77,23 +85,20 @@ export class FileObject implements WritableFile, Linkable {
 	}
 
 	async getLinkParams(): Promise<LinkParameters<FileLinkParams>> {
-		if (!this.v.node) { throw new Error(
-			'File does not exist, yet, and cannot be linked.'); }
-		const linkParams = this.v.node.getParamsForLink();
+		const node = await this.v.getNode();
+		const linkParams = node.getParamsForLink();
 		linkParams.params.fileName = this.name;
 		linkParams.readonly = !this.writable;
 		return linkParams;
 	}
 
 	async stat(): Promise<Stats> {
-		if (!this.v.node) { throw makeFileException(excCode.notFound, this.name); }
-		const sync = await this.v.node.sync();
-		const attrs = this.v.node.getAttrs();
+		const node = await this.v.getNode();
+		const attrs = node.getAttrs();
 		const stat: Stats = {
 			writable: this.writable,
-			size: this.v.node.size,
-			version: this.v.node.version,
-			sync,
+			size: node.size,
+			version: node.version,
 			isFile: true,
 			ctime: new Date(attrs.ctime),
 			mtime: new Date(attrs.mtime),
@@ -170,20 +175,29 @@ export class FileObject implements WritableFile, Linkable {
 Object.freeze(FileObject.prototype);
 Object.freeze(FileObject);
 
-type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 
-class V implements WritableFileVersionedAPI {
+interface N {
+	getNode(): Promise<FileNode>;
+	ensureIsWritable(): void;
+}
+
+
+class V implements WritableFileVersionedAPI, N {
+
+	readonly sync: undefined|S;
 
 	constructor(
 		public name: string,
 		public node: FileNode|undefined,
 		private makeOrGetNode: (() => Promise<FileNode>)|undefined,
-		public writable: boolean
+		public readonly writable: boolean,
+		isInSyncedStorage: boolean
 	) {
+		this.sync = (isInSyncedStorage ? new S(this) : undefined);
 		Object.seal(this);
 	}
 
-	private async getNode(): Promise<FileNode> {
+	async getNode(): Promise<FileNode> {
 		if (!this.node) {
 			this.node = await this.makeOrGetNode!();
 			this.makeOrGetNode = undefined;
@@ -191,7 +205,12 @@ class V implements WritableFileVersionedAPI {
 		return this.node;
 	}
 
+	ensureIsWritable(): void {
+		if (!this.writable) { throw new Error(`File is not writable`); }
+	}
+
 	async updateXAttrs(changes: XAttrsChanges): Promise<number> {
+		this.ensureIsWritable();
 		const node = await this.getNode();
 		return node.updateXAttrs(changes);
 	}
@@ -224,6 +243,7 @@ class V implements WritableFileVersionedAPI {
 	async getByteSink(
 		truncate = true, currentVersion?: number
 	): Promise<{ sink: FileByteSink; version: number; }> {
+		this.ensureIsWritable();
 		const node = await this.getNode();
 		return node.writeSink(truncate, currentVersion);
 	}
@@ -234,6 +254,7 @@ class V implements WritableFileVersionedAPI {
 	}
 
 	async writeBytes(bytes: Uint8Array): Promise<number> {
+		this.ensureIsWritable();
 		const node = await this.getNode();
 		return node.save(bytes);
 	}
@@ -274,8 +295,70 @@ class V implements WritableFileVersionedAPI {
 		return { json, version };
 	}
 
+	async archiveCurrent(version?: number): Promise<number> {
+		this.ensureIsWritable();
+		const node = await this.getNode();
+		return node.archiveCurrent(version);
+	}
+
+	async listVersions(): Promise<{ current?: number; archived?: number[]; }> {
+		const node = await this.getNode();
+		return node.listVersions();
+	}
+
 }
 Object.freeze(V.prototype);
 Object.freeze(V);
+
+
+class S implements WritableFileSyncAPI {
+
+	constructor(
+		private readonly n: N
+	) {
+		Object.freeze(this);
+	}
+
+	async upload(opts?: OptionsToUploadLocal): Promise<void> {
+		this.n.ensureIsWritable();
+		const node = await this.n.getNode();
+		const uploadVersion = await node.upload(opts);
+		return uploadVersion;
+	}
+
+	async status(): Promise<SyncStatus> {
+		const node = await this.n.getNode();
+		const status = await node.syncStatus();
+		return status;
+	}
+
+	async updateStatusInfo(): Promise<SyncStatus> {
+		const node = await this.n.getNode();
+		const status = await node.updateStatusInfo();
+		return status;
+	}
+
+	async isRemoteVersionOnDisk(
+		version: number
+	): Promise<'complete' | 'partial' | 'none'> {
+		const node = await this.n.getNode();
+		const isOnDisk = await node.isSyncedVersionOnDisk(version);
+		return isOnDisk;
+	}
+
+	async download(version: number): Promise<void> {
+		const node = await this.n.getNode();
+		await node.download(version);
+	}
+
+	async adoptRemote(opts?: OptionsToAdopteRemote): Promise<void> {
+		const node = await this.n.getNode();
+		await node.adoptRemote(opts);
+	}
+
+}
+Object.freeze(S.prototype);
+Object.freeze(S);
+
 
 Object.freeze(exports);

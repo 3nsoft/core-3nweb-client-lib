@@ -15,10 +15,15 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SynchronizerOnObjId, SyncedObj, } from './obj-files';
+import { SynchronizerOnObjId, SyncedObj, UNSYNCED_FILE_NAME_EXT, REMOTE_FILE_NAME_EXT, } from './obj-files';
 import { SingleProc } from '../../../lib-common/processes/synced';
 import * as fs from '../../../lib-common/async-fs-node';
 import { join } from 'path';
+import { NonGarbageVersions } from '../common/obj-info-file';
+import { NonGarbage } from './obj-status';
+import { getAndRemoveOneFrom, noop } from '../common/utils';
+import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
+import { UPLOAD_HEADER_FILE_NAME_EXT } from './upload-header-file';
 
 
 export class GC {
@@ -45,7 +50,8 @@ export class GC {
 	constructor(
 		private readonly sync: SynchronizerOnObjId,
 		private readonly rmObjFromCache: (obj: SyncedObj) => void,
-		private readonly rmObjFolder: (objId: string) => Promise<void>
+		private readonly rmObjFolder: (objId: string) => Promise<void>,
+		private readonly remote: RemoteStorage
 	) {
 		Object.seal(this);
 	}
@@ -72,36 +78,40 @@ export class GC {
 	}
 
 	private async collectIn(obj: SyncedObj): Promise<void> {
-		// calculate versions that should not be removed
-		const { gcMaxVer, nonGarbage } = obj.getNonGarbageVersions();
+		if (obj.statusObj().isArchived()) {
+			await this.upsyncObjRemovalWhenNeeded(obj);
+		}
+		const nonGarbage = obj.statusObj().getNonGarbageVersions();
+		if (!(await this.checkAndRemoveWholeObjFolder(obj, nonGarbage))) {
+			await removeGarbageFiles(obj, nonGarbage);
+		}
+	}
 
-		// if object is set archived, and there is nothing in it worth keeping,
-		// whole folder can be removed
-		if ((nonGarbage.size === 0)
-		&& obj.isArchived() && obj.sync().isSyncDone()) {
-			if (!obj.isStatusFileSaved()) {
-				return;
-			}
-			this.rmObjFromCache(obj);
-			if (obj.objId) {
-				await this.rmObjFolder(obj.objId);
-			}
+	private async upsyncObjRemovalWhenNeeded(obj: SyncedObj): Promise<void> {
+		if (!needsUpsyncOfRemoval(obj)) { return; }
+		try {
+			await this.remote.deleteObj(obj.objId!);
+		} catch (exc) {
+			// XXX will need to schedule other attempt to delete on remote
+
 			return;
 		}
+		await obj.statusObj().recordSyncOfObjRemoval();
+	}
 
-		// for all other cases, we remove version files that are not worth
-		// keeping.
-		const lst = await fs.readdir(obj.objFolder).catch(noop);
-		if (!lst) { return; }
-		const rmProcs: Promise<void>[] = [];
-		for (const f of lst) {
-			const ver = parseInt(f);
-			if (isNaN(ver) || nonGarbage.has(ver)
-			|| (gcMaxVer && (ver >= gcMaxVer))) { continue; }
-			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
-		}
-		if (rmProcs.length > 0) {
-			await Promise.all(rmProcs);
+	private async checkAndRemoveWholeObjFolder(
+		obj: SyncedObj, { local, remote }: NonGarbage
+	): Promise<boolean> {
+		if (obj.objId
+		&& obj.statusObj().isArchived()
+		&& !needsUpsyncOfRemoval(obj)
+		&& (!local || (local.nonGarbage.size === 0))
+		&& (remote.nonGarbage.size === 0)) {
+			this.rmObjFromCache(obj);
+			await this.rmObjFolder(obj.objId);
+			return true;
+		} else {
+			return false;
 		}
 	}
 
@@ -110,15 +120,65 @@ Object.freeze(GC.prototype);
 Object.freeze(GC);
 
 
-function getAndRemoveOneFrom<T>(set: Set<T>): T|undefined {
-	const iter = set.values();
-	const { value, done } = iter.next();
-	if (done) { return; }
-	set.delete(value);
-	return value;
+function needsUpsyncOfRemoval(obj: SyncedObj): boolean {
+	const s = obj.statusObj();
+	return !(s.neverUploaded() || (s.syncStatus().state === 'synced'));
 }
 
-function noop() {}
+function canRemove(
+	f: string, { local, remote, uploadVersion }: NonGarbage
+): boolean {
+	if (f.endsWith(UNSYNCED_FILE_NAME_EXT)) {
+		const verStr = f.slice(0, f.length-1-UNSYNCED_FILE_NAME_EXT.length);
+		return (local ? canGC(verStr, local) : true);
+	} else if (f.endsWith(REMOTE_FILE_NAME_EXT)) {
+		const verStr = f.slice(0, f.length-1-REMOTE_FILE_NAME_EXT.length);
+		return canGC(verStr, remote);
+	} else if (!!uploadVersion
+	&& f.endsWith(UPLOAD_HEADER_FILE_NAME_EXT)) {
+		const verStr = f.slice(0, f.length-1-UPLOAD_HEADER_FILE_NAME_EXT.length);
+		return canGCUploadHeader(verStr, uploadVersion);
+	} else {
+		return false;
+	}
+}
+
+function canGC(verStr: string, nonGC: NonGarbageVersions): boolean {
+	const ver = parseInt(verStr);
+	if (isNaN(ver)) {
+		return true;
+	} else if (!nonGC.nonGarbage.has(ver)
+	&& (!nonGC.gcMaxVer || (ver < nonGC.gcMaxVer))) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+function canGCUploadHeader(verStr: string, uploadVersion: number): boolean {
+	const ver = parseInt(verStr);
+	if (isNaN(ver)) {
+		return true;
+	} else {
+		return (ver === uploadVersion);
+	}
+}
+
+async function removeGarbageFiles(
+	obj: SyncedObj, nonGarbage: NonGarbage
+): Promise<void> {
+	const lst = await fs.readdir(obj.objFolder).catch(noop);
+	if (!lst) { return; }
+	const rmProcs: Promise<void>[] = [];
+	for (const f of lst) {
+		if (canRemove(f, nonGarbage)) {
+			rmProcs.push(fs.unlink(join(obj.objFolder, f)).catch(noop));
+		}
+	}
+	if (rmProcs.length > 0) {
+		await Promise.all(rmProcs);
+	}
+}
 
 
 Object.freeze(exports);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 3NSoft Inc.
+ Copyright (C) 2019,  2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,7 @@ import { V1_FILE_START, layoutV1 } from "./v1-obj-file-format";
 import { assert } from "../assert";
 import { Layout, LayoutBaseSection, LayoutNewSection } from "xsp-files";
 import { copy as copyJSON } from '../json-utils';
+import { DiffInfo } from "../service-api/3nstorage/owner";
 
 export interface HeaderChunkInfo {
 	len: number;
@@ -66,6 +67,7 @@ export interface NewSegsChunkOnDisk extends FiniteChunk {
 }
 
 export interface NewSegsChunk extends FiniteChunk {}
+
 
 export class ObjVersionBytesLayout {
 
@@ -133,8 +135,12 @@ export class ObjVersionBytesLayout {
 	}
 
 	isFileComplete(): boolean {
-		return !this.segsChunks.find(
-			chunk => ((chunk.type === 'new') || (chunk.type === 'new-endless')));
+		for (const chunk of this.segsChunks) {
+			if ((chunk.type === 'new') || (chunk.type === 'new-endless')) {
+				return true;
+			}
+		}
+		return true;
 	}
 
 	getLayoutOfs(): number {
@@ -260,9 +266,120 @@ export class ObjVersionBytesLayout {
 		return this.baseVersion;
 	}
 
+	calcBaseAbsorptionParams(
+		baseLayout: ObjVersionBytesLayout
+	): BaseAbsorptionParams {
+		assert(this.isFileComplete() && baseLayout.isFileComplete());
+		const chunkReplacements =
+			new Map<number, (NewSegsChunkOnDisk|BaseSegsChunk)[]>();
+		const copyOps: ChunkCopyOp[] = [];
+		let newBytesEnd = this.bytesEnd;
+		for (let i=0; i<this.segsChunks.length; i+=1) {
+			const chunk = this.segsChunks[i];
+			if (chunk.type === 'new-on-disk') { continue; }
+			if (chunk.type !== 'base') { throw new Error(
+				`Absorbing base is not implemented on chunk type ${chunk.type}.`
+			); }
+			const replacements: (NewSegsChunkOnDisk|BaseSegsChunk)[] = [];
+			// start in base version offset
+			let start = chunk.baseVerOfs;
+			const end = start + chunk.len;
+			for (let j=0; j<baseLayout.segsChunks.length; j+=1) {
+				const bChunk = baseLayout.segsChunks[j];
+				if ((bChunk.type !== 'new-on-disk')
+				&& (bChunk.type !== 'base')) {
+					throw new Error(`Absorbing base is not implemented on chunk type ${chunk.type}.`);
+				}
+				const bEnd = bChunk.thisVerOfs + bChunk.len;
+				if (bEnd <= start) { continue; }
+				const cut = Math.min(end, bEnd);
+				const len = cut - start;
+				const thisVerOfs = chunk.thisVerOfs + (start - chunk.baseVerOfs);
+				const ofsIntoBChunk = start - bChunk.thisVerOfs;
+				if (bChunk.type === 'new-on-disk') {
+					const op: ChunkCopyOp = {
+						ofsInSrcFile: bChunk.fileOfs + ofsIntoBChunk,
+						len,
+						ofsInDstFile: newBytesEnd
+					};
+					copyOps.push(op);
+					const replacementChunk: NewSegsChunkOnDisk = {
+						type: 'new-on-disk',
+						fileOfs: newBytesEnd,
+						len,
+						thisVerOfs
+					}
+					replacements.push(replacementChunk);
+					newBytesEnd += len;
+				} else if (bChunk.type === 'base') {
+					const replacementChunk: BaseSegsChunk = {
+						type: 'base',
+						len,
+						thisVerOfs,
+						baseVerOfs: bChunk.baseVerOfs + ofsIntoBChunk
+					}
+					replacements.push(replacementChunk);
+				} else {
+					throw new Error(`This shouldn't be unreachable. Unimplemented chunk type?`);
+				}
+				start = cut;
+				if (start === end) { break; }
+			}
+			assert(start === end);
+			chunkReplacements.set(i, replacements);
+		}
+		return {
+			chunkReplacements, copyOps, newBytesEnd,
+			newBase: baseLayout.baseVersion
+		};
+	}
+
+	applyAbsorptionParams(params: BaseAbsorptionParams): void {
+		this.bytesEnd = params.newBytesEnd;
+		this.baseVersion = params.newBase;
+		const changes: [SegsChunk, SegsChunk[]][] = [];
+		for (const [ segInd, newSegs ] of params.chunkReplacements.entries()) {
+			const initSeg = this.segsChunks[segInd];
+			changes.push([initSeg, newSegs]);
+		}
+		for (const [initSeg, newSegs] of changes) {
+			const ind = this.segsChunks.indexOf(initSeg);
+			this.segsChunks.splice(ind, 1, ...newSegs);
+		}
+	}
+
+	diffFromBase(): { diff: DiffInfo; newSegsPackOrder: FiniteChunk[]; } {
+		assert(!!this.baseVersion && this.isFileComplete());
+		const sections: DiffInfo['sections'] = [];
+		const newSegsPackOrder: FiniteChunk[] = [];
+		let segsSize = 0;
+		let ofsInNewSegsPack = 0;
+		for (let i=0; i<this.segsChunks.length; i+=1) {
+			const seg = this.segsChunks[i] as FiniteSegsChunk;
+			if ((seg.type === 'base') || (seg.type === 'base-on-disk')) {
+				sections.push([ 0, seg.baseVerOfs, seg.len ]);
+			} else {
+				// XXX with simplification second element (bizarre 0) will be gone
+				sections.push([ 1, 0, seg.len ]);
+				newSegsPackOrder.push({
+					thisVerOfs: seg.thisVerOfs, len: seg.len,
+				});
+				ofsInNewSegsPack += seg.len;
+			}
+			segsSize += seg.len;
+		}
+		const diff: DiffInfo = {
+			baseVersion: this.baseVersion!,
+			sections,
+			segsSize
+		};
+		return { diff, newSegsPackOrder };
+	}
+
 }
 Object.freeze(ObjVersionBytesLayout.prototype);
 Object.freeze(ObjVersionBytesLayout);
+
 
 function layoutSectionsToSegsChunks(
 	sections: Layout['sections']
@@ -483,5 +600,19 @@ function ensureNoHolesIn(segsChunks: SegsChunk[]): void {
 		}
 	}
 }
+
+interface ChunkCopyOp {
+	ofsInSrcFile: number;
+	len: number;
+	ofsInDstFile: number;
+}
+
+export interface BaseAbsorptionParams {
+	newBytesEnd: number;
+	newBase: number|undefined;
+	chunkReplacements: Map<number, (NewSegsChunkOnDisk|BaseSegsChunk)[]>;
+	copyOps: ChunkCopyOp[];
+}
+
 
 Object.freeze(exports);

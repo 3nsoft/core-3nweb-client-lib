@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { SubscribingClient } from '../lib-common/ipc/generic-ipc';
 import { Observable, from, throwError } from 'rxjs';
@@ -23,7 +24,7 @@ import { WSException } from '../lib-common/ipc/ws-ipc';
 import { ConnectException, HTTPException } from '../lib-common/exceptions/http';
 import { stringifyErr } from '../lib-common/exceptions/error';
 
-export class ServerEvents {
+export class ServerEvents<N extends string, T> {
 
 	private server: SubscribingClient|undefined = undefined;
 	private openningServer = new SingleProc();
@@ -37,9 +38,9 @@ export class ServerEvents {
 
 	/**
 	 * This method creates an observable of server's events.
-	 * @param serverEvent is an event on server, to which to subscribe.
+	 * @param event is an event on server, to which to subscribe.
 	 */
-	observe<T>(event: string): Observable<T> {
+	observe(event: N): Observable<T> {
 		const event$ = new Observable<T>(observer => {
 			// simple sync creation of detach function
 			if (this.server) {
@@ -80,7 +81,7 @@ export class ServerEvents {
 			catchError(err => {
 				if (this.shouldRestartAfterErr(err)) {
 					console.error(stringifyErr(err));
-					return this.restartObservation<T>(event);
+					return this.restartObservation(event);
 				} else {
 					return throwError(err);
 				}
@@ -113,10 +114,10 @@ export class ServerEvents {
 		}
 	}
 
-	private restartObservation<T>(event: string): Observable<T> {
+	private restartObservation(event: N): Observable<T> {
 		return from(sleep(this.restartWaitSecs * 1000))
 		.pipe(
-			mergeMap(() => this.observe<T>(event))
+			mergeMap(() => this.observe(event))
 		);
 	}
 

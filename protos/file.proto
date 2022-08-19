@@ -13,6 +13,22 @@ message File {
 	// impl is a reference to object with methods of either
 	// ReadonlyFile or WritableFile
 	common.ObjectReference impl = 5;
+	bool is_synced = 6;
+}
+
+
+message SyncStatusMsg {
+	string state = 1;
+	SyncVersionsBranchMsg local = 2;
+	SyncVersionsBranchMsg synced = 3;
+	SyncVersionsBranchMsg remote = 4;
+	common.BooleanValue exists_in_synced_parent = 5;
+}
+
+message SyncVersionsBranchMsg {
+	common.UInt64Value latest = 1;
+	repeated uint64 archived = 2;
+	common.BooleanValue is_archived = 3;
 }
 
 
@@ -22,14 +38,6 @@ message File {
 // Request body is empty
 // Reply body is StatsMsg
 message StatsMsg {
-	message SyncInfo {
-		string state = 1;
-		common.UInt64Value latest = 2;
-		common.UInt64Value remote = 3;
-		repeated uint64 conflicting_remote = 4;
-		common.BooleanValue deleted_on_remote = 5;
-	}
-
 	common.BooleanValue is_file = 1;
 	common.BooleanValue is_folder = 2;
 	common.BooleanValue is_link = 3;
@@ -38,7 +46,7 @@ message StatsMsg {
 	common.UInt64Value mtime = 6;
 	common.UInt64Value ctime = 7;
 	common.UInt64Value version = 8;
-	SyncInfo sync = 9;
+	SyncStatusMsg sync = 9;
 }
 
 // --- ReadonlyFile.getXAttr ---
@@ -85,10 +93,10 @@ message ReadBytesReplyBody {
 message FileEventMsg {
 	string type = 1;
 	string path = 2;
-	common.BooleanValue is_remote = 3;
+	common.StringValue src = 3;
 	common.UInt64Value new_version = 4;
-	common.UInt64Value current = 14;
-	common.UInt64Value uploaded = 15;
+	common.UInt64Value removed_arch_ver = 5;
+	common.UInt64Value archived_version = 6;
 }
 
 
@@ -139,6 +147,13 @@ message VersionedGetByteSourceReplyBody {
 	common.ObjectReference src = 2;
 }
 
+// --- ReadonlyFileVersionedAPI.listVersions ---
+// Request body is empty
+message ListVersionsReplyBody {
+	common.UInt64Value current = 1;
+	repeated uint64 archived = 2;
+}
+
 
 // ==== WritableFile referable as impl object (extends ReadonlyFile) ====
 
@@ -148,14 +163,15 @@ message UpdateXAttrsRequestBody {
 	XAttrsChanges changes = 1;
 }
 
+message NameAndXAttrValue {
+	string xa_name = 1;
+	common.StringValue str = 2;
+	common.StringValue json = 3;
+	common.BytesValue bytes = 4;
+}
+
 message XAttrsChanges {
-	message NameAndAttrValue {
-		string xa_name = 1;
-		common.StringValue str = 2;
-		common.StringValue json = 3;
-		common.BytesValue bytes = 4;
-	}
-	repeated NameAndAttrValue set = 1;
+	repeated NameAndXAttrValue set = 1;
 	repeated string remove = 2;
 }
 
@@ -223,3 +239,59 @@ message VersionedGetByteSinkReplyBody {
 // --- WritableFileVersionedAPI.copy ---
 // Request body is CopyRequestBody
 // Reply body is common.UInt64Value
+
+// --- WritableFileVersionedAPI.archiveCurrent ---
+// Reply body is common.UInt64Value
+message ArchiveCurrentRequestBody {
+	common.UInt64Value version = 1;
+}
+
+
+// ==== ReadonlyFileSyncAPI referable object ====
+
+// --- ReadonlyFileSyncAPI.status ---
+// Request body is empty
+// Reply body is SyncStatusMsg
+
+// --- ReadonlyFileSyncAPI.updateStatusInfo ---
+// Request body is PathOnlyRequestBody
+// Reply body is SyncState
+
+// --- ReadonlyFileSyncAPI.isRemoteVersionOnDisk ---
+message FileSyncIsOnDiskRequestBody {
+	uint64 version = 1;
+}
+message FileSyncIsOnDiskReplyBody {
+	string status = 1;
+}
+
+// --- ReadonlyFileSyncAPI.download ---
+// Reply has only status and body is empty
+message FileSyncDownloadRequestBody {
+	uint64 version = 1;
+}
+
+// --- ReadonlyFileSyncAPI.adoptRemote ---
+// Reply has only status and body is empty
+message AdoptRemoteRequestBody {
+	OptionsToAdopteRemote opts = 1;
+}
+
+message OptionsToAdopteRemote {
+	common.BooleanValue drop_local_ver = 1;
+	common.UInt64Value remote_version = 2;
+}
+
+
+// ==== WritableFileSyncAPI referable object ====
+
+// --- WritableFileSyncAPI.upload ---
+// Reply has only status and body is empty
+message FileSyncUploadRequestBody {
+	OptionsToUploadLocal opts = 1;
+}
+
+message OptionsToUploadLocal {
+	common.UInt64Value local_version = 1;
+	common.UInt64Value upload_version = 2;
+}

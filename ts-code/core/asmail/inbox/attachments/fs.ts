@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Storage, NodesContainer, StorageGetter, FolderInJSON } from '../../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage, NodesContainer, StorageGetter, FolderInJSON, LocalObjStatus, ObjId } from '../../../../lib-client/3nstorage/xsp-fs/common';
 import { XspFS } from '../../../../lib-client/3nstorage/xsp-fs/fs';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { MsgOnDisk } from '../msg-on-disk';
@@ -26,11 +26,12 @@ type ReadonlyFS = web3n.files.ReadonlyFS;
 
 class AttachmentStore implements Storage {
 
-	public readonly type: FSType = 'asmail-msg';
-
+	public readonly type = 'asmail-msg';
 	public readonly versioned = false;
 
 	public readonly nodes = new NodesContainer();
+
+	public readonly connect = undefined;
 
 	constructor(
 		private readonly msg: MsgOnDisk,
@@ -56,11 +57,15 @@ class AttachmentStore implements Storage {
 		}
 	}
 
+	status(): never {
+		throw new Error(`Attachment's storage is not versioned`);
+	}
+
 	generateNewObjId(): never {
 		throw new Error(`Attachment's storage is readonly.`);
 	}
 
-	getObj(objId: string): Promise<ObjSource> {
+	getObjSrc(objId: string): Promise<ObjSource> {
 		if (typeof objId !== 'string') { throw new Error(`Attachment's storage uses only string objId's, while given parameter is: ${objId}`); }
 		return this.msg.getMsgObj(objId);
 	}
