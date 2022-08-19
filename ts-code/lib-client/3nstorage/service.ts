@@ -220,7 +220,7 @@ export class StorageOwner extends ServiceUser {
 	 */
 	async saveNewObjVersion(
 		objId: ObjId,
-		fstReq: { create?: true; ver: number; last?: true; }|undefined,
+		fstReq: { ver: number; last?: true; }|undefined,
 		followReq: { trans: string; ofs: number; last?: boolean; }|undefined,
 		{ header, diff, segs }: {
 			header?: Uint8Array; diff?: Uint8Array;
@@ -230,9 +230,9 @@ export class StorageOwner extends ServiceUser {
 		let appPath: string;
 		if (fstReq) {
 			assert(!!header);
-			const { create, ver, last } = fstReq;
+			const { ver, last } = fstReq;
 			const reqOpts: FirstSaveReqOpts = {
-				create, ver, last,
+				ver, last,
 				header: header!.length,
 				diff: (diff ? diff.length : undefined)
 			};

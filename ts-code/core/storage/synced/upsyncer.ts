@@ -222,18 +222,15 @@ class UploadTask implements Task<UploadExecLabel> {
 		}
 		assert(!!segs && (segs.length === segsToUpload));
 		const ver = this.info.uploadVersion;
-		const create = (upload.createObj ? true : undefined);
 		if (segsToUpload === upload.segsLeft) {
 			await this.remoteStorage.saveNewObjVersion(
-				this.objId,
-				{ ver, create, last: true }, undefined,
+				this.objId, { ver, last: true }, undefined,
 				{ header, segs }
 			);
 			this.info.needUpload = undefined;
 		} else {
 			upload.transactionId = await this.remoteStorage.saveNewObjVersion(
-				this.objId,
-				{ ver, create }, undefined,
+				this.objId, { ver }, undefined,
 				{ header, segs }
 			);
 			if (!upload.transactionId) {

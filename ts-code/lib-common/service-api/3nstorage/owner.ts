@@ -122,11 +122,6 @@ export interface GetObjQueryOpts {
 export interface PutObjFirstQueryOpts {
 
 	/**
-	 * This is a flag to indicate that new object should be created.
-	 */
-	create?: boolean;
-
-	/**
 	 * This parameter is object's new version.
 	 */
 	ver: number;
