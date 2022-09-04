@@ -23,7 +23,7 @@ import { LabelledExecPools, Task } from "../../../lib-common/processes/labelled-
 import { LogError } from "../../../lib-client/logging/log-to-file";
 import { makeFSSyncException } from "../../../lib-client/3nstorage/exceptions";
 import { assert } from "../../../lib-common/assert";
-import { DiffVerOrderedUpload, UploadInfo, WholeVerOrderedUpload } from "./obj-status";
+import { DiffVerOrderedUpload, NewVersionUpload, WholeVerOrderedUpload } from "./obj-status";
 import { ObjSource } from "xsp-files";
 import { defer } from "../../../lib-common/processes/deferred";
 import { DiffInfo } from "../../../lib-common/service-api/3nstorage/owner";
@@ -36,7 +36,7 @@ const MAX_CHUNK_SIZE = 512*1024;
 const MAX_FAST_UPLOAD = 2*1024*1024;
 
 type UploadExecLabel = 'long' | 'fast';
-type UploadNeedInfo = NonNullable<UploadInfo['needUpload']>;
+type UploadNeedInfo = NonNullable<NewVersionUpload['needUpload']>;
 
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 
@@ -79,16 +79,18 @@ export class UpSyncer {
 	}
 
 	async removeCurrentVersionOf(obj: SyncedObj): Promise<void> {
+		try {
+			await this.remoteStorage.deleteObj(obj.objId!);
+		} catch (exc) {
 
-		throw new Error('UpSyncer.removeCurrentVersionOf() not implemented');
+			// XXX
+			//  - we need to distinguish errors and put this work somewhere
+			//    to run when we go online, for example.
 
-		// const objUploads = this.getOrMakeUploadsFor(obj);
-
-		// XXX is removal set in this older code? This may need to change anyway
-
-		// if (objUploads.neededExecutor()) {
-		// 	this.execPools.add(objUploads);
-		// }
+			await this.logError(exc, `Uploading of obj removal failed.`);
+			return;
+		}
+		await obj.recordRemovalUploadAndGC();
 	}
 
 	async uploadFromDisk(
@@ -110,9 +112,9 @@ Object.freeze(UpSyncer);
 
 
 export interface UploadStatusRecorder {
-	recordUploadStart(info: UploadInfo): Promise<void>;
-	recordUploadCancellation(info: UploadInfo): Promise<void>;
-	recordUploadInterimState(info: UploadInfo): Promise<void>;
+	recordUploadStart(info: NewVersionUpload): Promise<void>;
+	recordUploadCancellation(info: NewVersionUpload): Promise<void>;
+	recordUploadInterimState(info: NewVersionUpload): Promise<void>;
 }
 
 
@@ -127,7 +129,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		private readonly objStatus: UploadStatusRecorder,
 		private readonly src: ObjSource,
 		private readonly execPools: LabelledExecPools<UploadExecLabel>,
-		private readonly info: UploadInfo,
+		private readonly info: NewVersionUpload,
 		private readonly uploadHeader: Uint8Array|undefined
 	) {
 		this.execLabel = executorLabelFor(this.info.needUpload!);
@@ -141,7 +143,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		remoteStorage: StorageOwner, execPools: LabelledExecPools<UploadExecLabel>
 	): Promise<UploadTask> {
 		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
-		let needUpload: UploadInfo['needUpload'];
+		let needUpload: UploadNeedInfo;
 		if (syncedBase) {
 			const {
 				diff, newSegsPackOrder
@@ -151,7 +153,8 @@ class UploadTask implements Task<UploadExecLabel> {
 		} else {
 			needUpload = await wholeVerUpload(src, uploadHeader, createObj);
 		}
-		const info: UploadInfo = {
+		const info: NewVersionUpload = {
+			type: 'new-version',
 			localVersion,
 			uploadVersion,
 			baseVersion: syncedBase,

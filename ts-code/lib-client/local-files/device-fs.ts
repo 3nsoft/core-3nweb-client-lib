@@ -18,12 +18,9 @@
 import * as fs from '../../lib-common/async-fs-node';
 import * as pathMod from 'path';
 import { watch } from 'fs';
-import { makeFileException, FileException, Code as excCode, maskPathInExc, makeNoAttrsExc }
-	from '../../lib-common/exceptions/file';
+import { makeFileException, FileException, Code as excCode, makeFileExceptionFromCode, maskPathInExc, makeNoAttrsExc } from '../../lib-common/exceptions/file';
 import { toBuffer } from '../../lib-common/buffer-utils';
-import { wrapWritableFS, wrapReadonlyFS, LinkParameters, Linkable,
-	wrapWritableFile, wrapReadonlyFile }
-	from '../files';
+import { wrapWritableFS, wrapReadonlyFS, LinkParameters, Linkable, wrapWritableFile, wrapReadonlyFile } from '../files';
 import { selectInFS } from '../files-select';
 import { utf8 } from '../../lib-common/buffer-utils';
 import { pipe } from '../../lib-common/byte-streaming/pipe';
@@ -59,10 +56,9 @@ async function makeFolder(
 		});
 		if (!stats) { continue; }
 		if (!stats.isDirectory()) {
-			throw makeFileException(excCode.notDirectory,
-				path.slice(0, i+1).join('/'));
+			throw makeFileException('notDirectory', path.slice(0, i+1).join('/'));
 		} else if ((i === lastIndex) && exclusive) {
-			throw makeFileException(excCode.alreadyExists, path.join('/'));
+			throw makeFileException('alreadyExists', path.join('/'));
 		}
 	}
 }
@@ -265,10 +261,12 @@ export class DeviceFS implements WritableFS, Linkable {
 	): Promise<WritableFS> {
 		await fs.lstat(root)
 		.then(stat => {
-			if (create && exclusive) { throw makeFileException(
-				excCode.alreadyExists, root); }
-			if (!stat.isDirectory()) { throw makeFileException(
-				excCode.notDirectory, root); }
+			if (create && exclusive) {
+				throw makeFileException('alreadyExists', root);
+			}
+			if (!stat.isDirectory()) {
+				throw makeFileException('notDirectory', root);
+			}
 		}, async (e: FileException) => {
 			if (!e.notFound || !create) { throw maskPathInExc(0, e); }
 			await fs.mkdir(root);
@@ -491,7 +489,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			const txt = (bytes ? utf8.open(bytes) : '');
 			return txt;
 		} catch (err) {
-			throw makeFileException(excCode.parsingError, path, err);
+			throw makeFileException('parsingError', path, err);
 		}
 	}
 
@@ -508,7 +506,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			const json = JSON.parse(txt);
 			return json;
 		} catch (err) {
-			throw makeFileException(excCode.parsingError, path, err);
+			throw makeFileException('parsingError', path, err);
 		}
 	}
 
@@ -594,7 +592,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			const dstPath = this.root+'/'+dst.join('/');
 			await fs.lstat(dstPath)
 			.then(() => {
-				throw makeFileException(excCode.alreadyExists, newPath);
+				throw makeFileException('alreadyExists', newPath);
 			}, (exc: FileException) => {
 				if (!exc.notFound) { throw exc; }
 			});
@@ -727,10 +725,12 @@ export class DeviceFS implements WritableFS, Linkable {
 		path: string, flags = WRITE_NONEXCL_FLAGS
 	): Promise<WritableFile> {
 		const exists = await this.checkFilePresence(path);
-		if (exists && flags.create && flags.exclusive) { throw makeFileException(
-			excCode.alreadyExists, path); }
-		if (!exists && !flags.create) { throw makeFileException(
-			excCode.notFound, path); }
+		if (exists && flags.create && flags.exclusive) {
+			throw makeFileException('alreadyExists', path);
+		}
+		if (!exists && !flags.create) {
+			throw makeFileException('notFound', path);
+		}
 		return wrapWritableFile(new FileObject(this, path, exists, true));
 	}
 
@@ -787,7 +787,7 @@ export class DeviceFS implements WritableFS, Linkable {
 			if (!observer) { return; }
 			try {
 				if (observer.error) {
-					observer.error(makeFileException(sig, path, { code, sig }));
+					observer.error(makeFileExceptionFromCode(sig, path, { code, sig }));
 				} else if (observer.complete) {
 					observer.complete();
 				}
@@ -907,7 +907,7 @@ async function checkFolderPresence(path: string): Promise<void> {
 		throw maskPathInExc(0, e);
 	});
 	if (!stat.isDirectory()) {
-		throw makeFileException(excCode.notDirectory, path);
+		throw makeFileException('notDirectory', path);
 	}
 }
 

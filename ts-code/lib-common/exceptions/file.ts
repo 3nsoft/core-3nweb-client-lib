@@ -15,30 +15,30 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+export type FileException = web3n.files.FileException;
+export type FileExceptionFlag = web3n.files.FileExceptionFlag;
+
 export const Code: web3n.files.exceptionCode = {
 	notFound: 'ENOENT',
 	alreadyExists: 'EEXIST',
 	notDirectory: 'ENOTDIR',
 	notFile: 'ENOTFILE',
-	notLink: 'not-link',
 	isDirectory: 'EISDIR',
 	notEmpty: 'ENOTEMPTY',
 	endOfFile: 'EEOF',
 	opNotPermitted: 'EPERM',
 	busy: 'EBUSY',
 	ioError: 'EIO',
-	concurrentUpdate: 'concurrent-update',
-	parsingError: 'parsing-error',
 	notImplemented: 'ENOSYS',
-	isEndless: 'is-endless',
-	storageClosed: 'storage-closed',
-	versionMismatch: 'version-mismatch',
 };
 Object.freeze(Code);
 
-export type FileException = web3n.files.FileException;
+const codeToFlag: { [code: string]: keyof web3n.files.exceptionCode; } = {};
+for (const [flag, code] of Object.entries(Code)) {
+	codeToFlag[code] = flag as keyof web3n.files.exceptionCode;
+}
 
-export function makeFileException(
+export function makeFileExceptionFromCode(
 	code: string|undefined, path: string, cause?: any
 ): FileException {
 	const err: FileException = {
@@ -48,41 +48,27 @@ export function makeFileException(
 		path,
 		cause
 	};
-	if (code === Code.alreadyExists) {
-		err.alreadyExists = true;
-	} else if (code === Code.notFound) {
-		err.notFound = true;
-	} else if (code === Code.isDirectory) {
-		err.isDirectory = true;
-	} else if (code === Code.notDirectory) {
-		err.notDirectory = true;
-	} else if (code === Code.notFile) {
-		err.notFile = true;
-	} else if (code === Code.notLink) {
-		err.notLink = true;
-	} else if (code === Code.endOfFile) {
-		err.endOfFile = true;
-	} else if (code === Code.busy) {
-		err.busy = true;
-	} else if (code === Code.ioError) {
-		err.ioError = true;
-	} else if (code === Code.notEmpty) {
-		err.notEmpty = true;
-	} else if (code === Code.opNotPermitted) {
-		err.opNotPermitted = true;
-	} else if (code === Code.concurrentUpdate) {
-		err.concurrentUpdate = true;
-	} else if (code === Code.parsingError) {
-		err.parsingError = true;
-	} else if (code === Code.notImplemented) {
-		err.notImplemented = true;
-	} else if (code === Code.isEndless) {
-		err.isEndless = true;
-	} else if (code === Code.storageClosed) {
-		err.storageClosed = true;
-	} else if (code === Code.versionMismatch) {
-		err.versionMismatch = true;
+	if (code) {
+		const flag = codeToFlag[code];
+		if (flag) {
+			err[flag] = true;
+		}
 	}
+	return err;
+}
+
+export function makeFileException(
+	flag: keyof FileExceptionFlag, path: string, cause?: any
+): FileException {
+	const code = Code[flag];
+	const err: FileException = {
+		runtimeException: true,
+		type: 'file',
+		code,
+		path,
+		cause
+	};
+	err[flag] = true;
 	return err;
 }
 

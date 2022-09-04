@@ -25,11 +25,23 @@ export interface StorageException extends web3n.RuntimeException {
 	objId?: ObjId;
 	version?: number;
 	objNotFound?: true;
+	objVersionNotFound?: true;
 	objExists?: true;
 	concurrentTransaction?: true;
 	unknownTransaction?: true;
 	versionMismatch?: true;
 	currentVersion?: number;
+	storageIsClosed?: true;
+}
+
+export interface StorageExceptionFlags {
+	remoteStorage?: true;
+	objNotFound?: true;
+	objVersionNotFound?: true;
+	objExists?: true;
+	concurrentTransaction?: true;
+	unknownTransaction?: true;
+	versionMismatch?: true;
 	storageIsClosed?: true;
 }
 
@@ -47,10 +59,18 @@ export function makeStorageException(
 }
 
 export function makeObjNotFoundExc(
-	objId: ObjId, version?: number, remoteStorage?: true
+	objId: ObjId, remoteStorage?: true
 ): StorageException {
 	return makeStorageException({
-		objId, version, objNotFound: true, remoteStorage
+		objId, objNotFound: true, remoteStorage
+	});
+}
+
+export function makeObjVersionNotFoundExc(
+	objId: ObjId, version: number, remoteStorage?: true
+): StorageException {
+	return makeStorageException({
+		objId, version, objVersionNotFound: true, remoteStorage
 	});
 }
 

@@ -18,10 +18,13 @@
 
 declare namespace web3n.files {
 
-	interface FileException extends RuntimeException {
+	interface FileException extends RuntimeException, FileExceptionFlag {
 		type: 'file';
 		code: string|undefined;
 		path: string;
+	}
+
+	interface FileExceptionFlag {
 		notFound?: true;
 		alreadyExists?: true;
 		notDirectory?: true;
@@ -48,19 +51,13 @@ declare namespace web3n.files {
 		alreadyExists: 'EEXIST';
 		notDirectory: 'ENOTDIR';
 		notFile: 'ENOTFILE';
-		notLink: 'not-link';
 		isDirectory: 'EISDIR';
 		notEmpty: 'ENOTEMPTY';
 		endOfFile: 'EEOF';
 		opNotPermitted: 'EPERM';
 		busy: 'EBUSY';
 		ioError: 'EIO';
-		concurrentUpdate: 'concurrent-update';
-		parsingError: 'parsing-error';
 		notImplemented: 'ENOSYS';
-		isEndless: 'is-endless';
-		storageClosed: 'storage-closed';
-		versionMismatch: 'version-mismatch';
 	}
 
 	interface FSSyncException extends RuntimeException {

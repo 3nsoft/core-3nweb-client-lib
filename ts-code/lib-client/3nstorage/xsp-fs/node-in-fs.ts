@@ -22,7 +22,7 @@
 
 import { SingleProc } from '../../../lib-common/processes/synced';
 import { FSChangeSrc, isSyncedStorage, Node, NodeType, setPathInExc, Storage, SyncedStorage, UploadHeaderChange } from './common';
-import { makeFileException, Code as excCode, Code } from '../../../lib-common/exceptions/file';
+import { makeFileException } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { makeFSSyncException, StorageException } from '../exceptions';
 import { Observable, Subject, Subscription } from 'rxjs';
@@ -31,6 +31,7 @@ import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
 import { FolderNode } from './folder-node';
 import { ObjSource } from 'xsp-files';
+import { assert } from '../../../lib-common/assert';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
@@ -152,7 +153,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		} else {
 			if (version) {
 				if (this.currentVersion !== version) {
-					throw makeFileException(Code.versionMismatch, this.name);
+					throw makeFileException('versionMismatch', this.name);
 				}
 			} else {
 				version = this.currentVersion;
@@ -163,16 +164,12 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 	}
 
-	removeObj(src: FSChangeSrc = 'local'): Promise<void> {
-		return this.doChange(true, () => this.delete(src));
+	removeNonFolderObj(src: FSChangeSrc): Promise<void> {
+		assert(this.type !== 'folder');
+		return this.doChange(true, () => this.removeThisNodeAsLeaf(src));
 	}
 
-	/**
-	 * This non-synchronized method deletes object from storage, and detaches
-	 * this node from storage. Make sure to call it inside access synchronization
-	 * construct.
-	 */
-	protected async delete(src: FSChangeSrc): Promise<void> {
+	protected async removeThisNodeAsLeaf(src: FSChangeSrc): Promise<void> {
 		await this.storage.removeObj(this.objId);
 		this.storage.nodes.delete(this);
 		this.currentVersion = -1;
@@ -203,12 +200,13 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			this.writeProc = new SingleProc();
 		}
 		if (!awaitPrevChange && this.writeProc.isProcessing()) {
-			throw makeFileException(excCode.concurrentUpdate, this.name+` type ${this.type}`);
+			throw makeFileException(
+				'concurrentUpdate', this.name+` type ${this.type}`);
 		}
 		const res = await this.writeProc.startOrChain(async () => {
 			if (this.currentVersion < 0) {
 				throw makeFileException(
-					Code.notFound, this.name, `Object is marked removed`);
+					'notFound', this.name, `Object is marked removed`);
 			}
 			try {
 				const res = await change();
@@ -219,15 +217,15 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 				}
 				if ((exc as StorageException).type === 'storage') {
 					if ((exc as StorageException).concurrentTransaction) {
-						throw makeFileException(excCode.concurrentUpdate, this.name, exc);
+						throw makeFileException('concurrentUpdate', this.name, exc);
 					} else if ((exc as StorageException).objNotFound) {
-						throw makeFileException(excCode.notFound, this.name, exc);
+						throw makeFileException('notFound', this.name, exc);
 					}
 				} else if (((exc as FileException).type === 'file')
 				|| ((exc as FSSyncException).type === 'fs-sync')) {
 					throw exc;
 				}
-				throw makeFileException(Code.ioError, this.name, exc);		
+				throw makeFileException('ioError', this.name, exc);		
 			}
 		});
 		return res;
@@ -306,7 +304,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	async updateStatusInfo(): Promise<SyncStatus> {
 		const storage = this.syncedStorage();
 		const status = await storage.updateStatusInfo(this.objId);
-		return await this.syncStatus();
+		return status;
 	}
 
 	isSyncedVersionOnDisk(
@@ -397,8 +395,8 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			const toUpload = await this.needUpload(opts?.localVersion);
 			if (!toUpload) { return; }
 			const { localVersion, createOnRemote, uploadVersion } = toUpload;
-			const uploadHeader = ((localVersion === uploadVersion) ? undefined :
-				await this.uploadHeaderChange(localVersion, uploadVersion));
+			const uploadHeader = await this.uploadHeaderChange(
+				localVersion, uploadVersion);
 			const storage = this.syncedStorage();
 			await storage.upload(
 				this.objId, localVersion, uploadVersion, uploadHeader,
@@ -415,9 +413,10 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 	}
 
-	private async uploadHeaderChange(
+	protected async uploadHeaderChange(
 		localVersion: number, uploadVersion: number
-	): Promise<UploadHeaderChange> {
+	): Promise<UploadHeaderChange|undefined> {
+		if (localVersion === uploadVersion) { return; }
 		const currentSrc = await this.storage.getObjSrc(
 			this.objId, localVersion);
 		const localHeader = await currentSrc.readHeader();

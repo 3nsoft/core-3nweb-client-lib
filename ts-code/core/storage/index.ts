@@ -24,7 +24,7 @@ import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
 import { ServiceLocator } from '../../lib-client/service-locator';
 import { ScryptGenParams } from '../../lib-client/key-derivation';
-import { FileException, makeFileException, Code as excCode } from '../../lib-common/exceptions/file';
+import { FileException, makeFileException } from '../../lib-common/exceptions/file';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-collection';
 import { asyncFind } from '../../lib-common/async-iter';
@@ -116,24 +116,22 @@ async function readRootKeyDerivParamsFromCache(
 
 }
 
-/**
- * This function tries to get key derivation parameters from cache on a disk.
- * If not found, it will ask storage server for it with a provided function.
- * @param folder 
- * @param getFromServer 
- */
-async function getRootKeyDerivParams(
+async function getAndCacheRootKeyDerivParamsFromServer(
 	folder: string, getFromServer: () => Promise<ScryptGenParams>
 ): Promise<ScryptGenParams> {
-	let params = await readRootKeyDerivParamsFromCache(folder);
-	if (!params) {
-		params = await getFromServer();
-		await fs.writeFile(
-			join(folder, KD_PARAMS_FILE_NAME),
-			JSON.stringify(params),
-			{ encoding: 'utf8' });
-	}
+	const params = await getFromServer();
+	await saveRootKeyDerivParamsToDisk(folder, params);
 	return params;
+}
+
+async function saveRootKeyDerivParamsToDisk(
+	folder: string, params: ScryptGenParams
+): Promise<void> {
+	await fs.writeFile(
+		join(folder, KD_PARAMS_FILE_NAME),
+		JSON.stringify(params),
+		{ encoding: 'utf8' }
+	);
 }
 
 
@@ -168,30 +166,16 @@ class StorageAndFS<T extends Storage> {
 		}
 	}
 
-	static async newOrExisting<T extends Storage>(
+	static async makeNew<T extends Storage>(
 		storage: T, key: Uint8Array
 	): Promise<StorageAndFS<T>|undefined> {
 		const s = new StorageAndFS(storage);
-		try {
-			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
-			if (s.rootFS.v?.sync) {
-				s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
-			}
-			return s;
-		} catch (err) {
-			if ((err as BaseStorageExc).objNotFound) {
-				s.rootFS = await xspFS.makeNewRoot(s.storage, key);
-				await initSysFolders(s.rootFS);
-				if (s.rootFS.v?.sync) {
-					s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
-				}
-				return s;
-			} else if ((err as EncryptionException).failedCipherVerification) {
-				return;
-			} else {
-				throw err;
-			}
+		s.rootFS = await xspFS.makeNewRoot(s.storage, key);
+		await initSysFolders(s.rootFS);
+		if (s.rootFS.v?.sync) {
+			s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
 		}
+		return s;
 	}
 
 	/**
@@ -321,7 +305,7 @@ export class Storages implements FactoryOfFSs {
 	async startInitFromCache(
 		user: string, keyGen: GenerateKey,
 		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
-	): Promise<((getSigner: GetSigner) => Promise<boolean>)|undefined> {
+	): Promise<((getSigner: GetSigner) => void)|undefined> {
 		const storageDir = this.storageDirForUser(user);
 		const params = await readRootKeyDerivParamsFromCache(storageDir);
 		if (!params) { return; }
@@ -330,28 +314,31 @@ export class Storages implements FactoryOfFSs {
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, logError),
-			key);
+				this.cryptor, logError
+			),
+			key
+		);
 		if (!this.local) { return; }
-		return async (getSigner) => {
-			if (this.synced) { return true; }
-			const { startObjProcs, syncedStore } = await SyncedStore.makeAndStart(
-				join(storageDir, SYNCED_STORAGE_DIR),
-				user, getSigner,
-				this.storageGetterForSyncedStorage,
-				this.cryptor,
-				() => resolver(user), makeNet(),
-				logError);
-			this.synced = await StorageAndFS.existing(syncedStore, key);
-			key.fill(0);
-			if (!this.synced) { return false; }
-			startObjProcs();
-			return true;
-		};
+
+		const {
+			syncedStore, setupRemoteAndStartObjProcs
+		} = await SyncedStore.makeAndStartWithoutRemote(
+			join(storageDir, SYNCED_STORAGE_DIR),
+			user,
+			this.storageGetterForSyncedStorage,
+			this.cryptor,
+			() => resolver(user), makeNet(),
+			logError
+		);
+		this.synced = await StorageAndFS.existing(syncedStore, key);
+		key.fill(0);
+		if (!this.synced) { return; }
+
+		return setupRemoteAndStartObjProcs;
 	}
 
 	async initFromRemote(
-		user: string, getSigner: GetSigner, keyOrGen: GenerateKey|Uint8Array,
+		user: string, getSigner: GetSigner, generateKey: GenerateKey,
 		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
 	): Promise<boolean> {
 		const storageDir = this.storageDirForUser(user);
@@ -361,22 +348,52 @@ export class Storages implements FactoryOfFSs {
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
 			() => resolver(user), makeNet(),
-			logError);
-		// getting parameters records them locally on a disk
-		const params = await getRootKeyDerivParams(
-			storageDir, syncedStore.getRootKeyDerivParamsFromServer);
-		const key = ((typeof keyOrGen === 'function') ?
-			await keyOrGen(params) : keyOrGen);
-		this.synced = await StorageAndFS.newOrExisting(syncedStore, key);
-		this.local = await StorageAndFS.newOrExisting(
+			logError
+		);
+		const params = await getAndCacheRootKeyDerivParamsFromServer(
+			storageDir, syncedStore.getRootKeyDerivParamsFromServer
+		);
+		const key = await generateKey(params);
+		this.synced = await StorageAndFS.existing(syncedStore, key);
+		this.local = await StorageAndFS.makeNew(
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, logError),
-			key);
+				this.cryptor, logError
+			),
+			key
+		);
 		key.fill(0);
 		startObjProcs();
+		return (!!this.synced && !!this.local);
+	}
 
+	async initFreshForNewUser(
+		user: string, getSigner: GetSigner,
+		params: ScryptGenParams, key: Uint8Array,
+		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
+	): Promise<boolean> {
+		const storageDir = this.storageDirForUser(user);
+		const { startObjProcs, syncedStore } = await SyncedStore.makeAndStart(
+			join(storageDir, SYNCED_STORAGE_DIR),
+			user, getSigner,
+			this.storageGetterForSyncedStorage,
+			this.cryptor,
+			() => resolver(user), makeNet(),
+			logError
+		);
+		this.synced = await StorageAndFS.makeNew(syncedStore, key);
+		this.local = await StorageAndFS.makeNew(
+			await LocalStorage.makeAndStart(
+				join(storageDir, LOCAL_STORAGE_DIR),
+				this.storageGetterForLocalStorage,
+				this.cryptor, logError
+			),
+			key
+		);
+		key.fill(0);
+		await saveRootKeyDerivParamsToDisk(storageDir, params);
+		startObjProcs();
 		return (!!this.synced && !!this.local);
 	}
 
@@ -626,7 +643,7 @@ async function applyPolicyToFSCollection(
 	}
 	const nameAndItem = await asyncFind(await c.entries(),
 		async v => path!.startsWith(v[0]));
-	if (!nameAndItem) { throw makeFileException(excCode.notFound, path); }
+	if (!nameAndItem) { throw makeFileException('notFound', path); }
 	const [ name, item ] = nameAndItem;
 	path = path.substring(name.length);
 

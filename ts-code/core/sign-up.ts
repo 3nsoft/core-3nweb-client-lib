@@ -214,7 +214,8 @@ export class SignUp {
 				default: this.mid.defaultSKey,
 				labeled: this.mid.labeledSKey
 			},
-			storeSKey: this.store.skey
+			storeSKey: this.store.skey,
+			storeParams: this.store.params.kdParams
 		});
 		this.forgetKeys();
 		return true;
@@ -243,6 +244,7 @@ export interface CreatedUser {
 	address: string;
 	midSKey: { default: Uint8Array; labeled: JsonKey; };
 	storeSKey: Uint8Array;
+	storeParams: keyDeriv.ScryptGenParams;
 }
 
 Object.freeze(exports);

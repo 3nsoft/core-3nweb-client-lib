@@ -17,7 +17,7 @@
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
 import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/3nstorage/exceptions';
+import { makeObjNotFoundExc, makeObjExistsExc, StorageException, makeObjVersionNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
@@ -52,7 +52,7 @@ export class SyncedStore implements ISyncedStorage {
 		private readonly remoteStorage: RemoteStorage,
 		private readonly getStorages: StorageGetter,
 		public readonly cryptor: AsyncSBoxCryptor,
-		private readonly logError: LogError
+		public readonly logError: LogError
 	) {
 		this.remoteEvents = new RemoteEvents(
 			this.remoteStorage, this.files,
@@ -68,14 +68,45 @@ export class SyncedStore implements ISyncedStorage {
 		remoteServiceUrl: () => Promise<string>,
 		net: NetClient, logError: LogError
 	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
-		const remote = new RemoteStorage(user, getSigner, remoteServiceUrl, net);
+		const remote = RemoteStorage.make(user, getSigner, remoteServiceUrl, net);
 		const objFiles = await ObjFiles.makeFor(path, remote, logError);
 		const s = new SyncedStore(
-			objFiles, remote, getStorages, cryptor, logError);
+			objFiles, remote, getStorages, cryptor, logError
+		);
 		s.uploader.start();
+		// XXX ??
+		// s.remoteEvents.startAbsorbingRemoteEvents();
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			startObjProcs: () => {
+				s.remoteEvents.startAbsorbingRemoteEvents();
+			}
+		};
+	}
+
+	static async makeAndStartWithoutRemote(
+		path: string, user: string,
+		getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
+		remoteServiceUrl: () => Promise<string>,
+		net: NetClient, logError: LogError
+	): Promise<{
+		syncedStore: ISyncedStorage;
+		setupRemoteAndStartObjProcs: (getSigner: IGetMailerIdSigner) => void;
+	}> {
+		const {
+			remote, setMid
+		} = RemoteStorage.makeBeforeMidSetup(user, remoteServiceUrl, net);
+		const objFiles = await ObjFiles.makeFor(path, remote, logError);
+		const s = new SyncedStore(
+			objFiles, remote, getStorages, cryptor, logError
+		);
+		// XXX ??
+		// s.remoteEvents.startAbsorbingRemoteEvents();
+		return {
+			syncedStore: wrapSyncStorageImplementation(s),
+			setupRemoteAndStartObjProcs: getSigner => {
+				setMid(getSigner);
+				s.uploader.start();
 				s.remoteEvents.startAbsorbingRemoteEvents();
 			}
 		};
@@ -103,7 +134,7 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	async status(objId: ObjId): Promise<SyncedObjStatus> {
-		const obj = await this.getObjOrThrow(objId);
+		const obj = await this.getObjOrThrow(objId, true);
 		return obj.syncStatus();
 	}
 
@@ -119,6 +150,7 @@ export class SyncedStore implements ISyncedStorage {
 
 			// XXX this needs implementation
 
+			throw new Error('SyncedStore.adoptRemote() with download option needs implementation, probably using SyncedStore.download().');
 		}
 		this.files.scheduleGC(obj);
 		return objStatus.syncStatus().synced!.latest!;
@@ -142,20 +174,37 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	isRemoteVersionOnDisk(
+	async isObjOnDisk(objId: ObjId): Promise<boolean> {
+		const obj = await this.files.findObj(objId);
+		return !!obj;
+	}
+
+	async isRemoteVersionOnDisk(
 		objId: ObjId, version: number
 	): Promise<'complete'|'partial'|'none'> {
+		const obj = await this.getObjOrThrow(objId, true);
+		const status = obj.statusObj();
+		const { remote } = status.syncStatus();
+		if ((remote?.latest !== version)
+		|| !remote.archived?.includes(version)) {
+			throw makeObjVersionNotFoundExc(objId, version);
+		}
+
+
 		// XXX
-		//  - check that given version is synced
 		//  - get state of file
-		// But, should this be renamed to isRemoteVersionOnDisk ?
-		// 
 
 		throw new Error('SyncedStore.isRemoteVersionOnDisk() not implemented.');
 	}
 
 	download(objId: ObjId, version: number): Promise<void> {
-		// XXX 
+
+		// XXX
+		//  - check if on disk
+		//  - download header
+		//  - want result of DC-296, calculation of diff to download, relative to
+		//    latest version on the disk, using headers of both versions.
+
 
 		throw new Error('SyncedStore.download() not implemented.');
 	}
@@ -187,7 +236,12 @@ export class SyncedStore implements ISyncedStorage {
 
 	async uploadObjRemoval(objId: ObjId): Promise<void> {
 		if (!objId) { return; }
-		await this.remoteStorage.deleteObj(objId);
+		const obj = await this.getObjOrThrow(objId, true);
+		const status = obj.statusObj();
+		if (status.neverUploaded()) { return; }
+		if (await status.clearPostponeFlagInRemovalOnRemote()) {
+			await this.uploader.removeCurrentVersionOf(obj);
+		}
 	}
 
 	dropCachedLocalObjVersionsLessOrEqual(objId: ObjId, version: number): void {
@@ -217,6 +271,10 @@ export class SyncedStore implements ISyncedStorage {
 	private async objFromDiskOrDownload(objId: ObjId): Promise<SyncedObj> {
 		const obj = await this.files.findObj(objId);
 		if (obj) { return obj; }
+
+		// XXX
+		//  - can we create object by getting obj status
+
 		return await this.files.makeByDownloadingCurrentVersion(objId);
 	}
 
@@ -231,8 +289,10 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	async getObjSrc(objId: ObjId, version?: number): Promise<ObjSource> {
-		const obj = await this.getObjOrThrow(objId);
+	async getObjSrc(
+		objId: ObjId, version?: number, allowArchived = false
+	): Promise<ObjSource> {
+		const obj = await this.getObjOrThrow(objId, allowArchived);
 		if (!version) {
 			version = obj.statusObj().getCurrentLocalOrSynced();
 		}

@@ -17,7 +17,7 @@
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
 import * as WebSocket from 'ws';
 
-export { RequestEnvelope, RequestHandler, EventfulServer, makeEventfulServer, 	SubscribingClient } from './generic-ipc';
+export { RequestEnvelope, RequestHandler, EventfulServer, makeEventfulServer, SubscribingClient } from './generic-ipc';
 
 export interface WSException extends web3n.RuntimeException {
 	type: 'websocket',

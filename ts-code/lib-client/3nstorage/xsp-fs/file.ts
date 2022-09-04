@@ -20,7 +20,7 @@
  * reliance set.
  */
 
-import { makeFileException, Code as excCode } from '../../../lib-common/exceptions/file';
+import { makeFileException } from '../../../lib-common/exceptions/file';
 import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../../files';
 import { FileNode, FileLinkParams } from './file-node';
 import { utf8 } from '../../../lib-common/buffer-utils';
@@ -249,7 +249,7 @@ class V implements WritableFileVersionedAPI, N {
 	}
 	
 	async getByteSource(): Promise<{ src: FileByteSource; version: number; }> {
-		if (!this.node) { throw makeFileException(excCode.notFound, this.name); }
+		if (!this.node) { throw makeFileException('notFound', this.name); }
 		return this.node.readSrc();
 	}
 
@@ -271,7 +271,7 @@ class V implements WritableFileVersionedAPI, N {
 	async readBytes(
 		start?: number, end?: number
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
-		if (!this.node) { throw makeFileException(excCode.notFound, this.name); }
+		if (!this.node) { throw makeFileException('notFound', this.name); }
 		return await this.node.readBytes(start, end);
 	}
 

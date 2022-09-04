@@ -43,7 +43,7 @@ export class LocalStorage implements Storage {
 		private readonly files: ObjFiles,
 		private readonly getStorages: StorageGetter,
 		public readonly cryptor: AsyncSBoxCryptor,
-		private readonly logError: LogError
+		public readonly logError: LogError
 	) {
 		Object.seal(this);
 	}

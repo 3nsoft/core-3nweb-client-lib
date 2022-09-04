@@ -86,13 +86,15 @@ export class Core {
 
 	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
 		const signUp = new SignUp(
-			this.signUpUrl, this.cryptor.cryptor, () => this.makeNet(),
-			this.appDirs.getUsersOnDisk, this.logger.logError);
+			this.signUpUrl, this.cryptor.cryptor, this.makeNet.bind(this),
+			this.appDirs.getUsersOnDisk, this.logger.logError
+		);
 		const signIn = new SignIn(
 			this.cryptor.cryptor,
 			this.initForExistingUserWithoutCache,
 			this.initForExistingUserWithCache,
-			this.appDirs.getUsersOnDisk, this.logger.logError);
+			this.appDirs.getUsersOnDisk, this.logger.logError
+		);
 		
 		const capsForStartup: web3n.startup.W3N = {
 			signUp: signUp.exposedService(),
@@ -119,24 +121,32 @@ export class Core {
 
 	private initForNewUser = async (u: CreatedUser): Promise<IdManager> => {
 		// 1) init of id manager without setting fs
-		const idManager = await IdManager.initInOneStepWithoutStore(
-			u.address, u.midSKey.default,
-			this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning);
-		if (!idManager) { throw new Error(
-			`Failed to provision MailerId identity`); }
+		const stepTwo = await IdManager.initWithoutStore(
+			u.address, this.makeResolver('mailerid'), () => this.makeNet(), this.logger.logError, this.logger.logWarning
+		);
+		if (!stepTwo) {
+			throw new Error(`MailerId server doesn't recognize identity ${u.address}`);
+		}
 
-		// 2) setup storage
-		const storesUp = await this.storages.initFromRemote(
-			u.address, idManager.getSigner, u.storeSKey,
-			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
+		// 2) complete id manager login, without use of fs
+		const idManagerInit = await stepTwo(u.midSKey.default);
+		if (!idManagerInit) {
+			throw new Error(`Failed to provision MailerId identity`);
+		}
+		const { idManager, setupManagerStorage } = idManagerInit;
+
+		// 3) initialize all storages
+		const storesUp = await this.storages.initFreshForNewUser(
+			u.address, idManager.getSigner, u.storeParams, u.storeSKey,
+			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+		);
 		if (!storesUp) { throw new Error(`Stores failed to initialize`); }
 
 		// 3) give id manager fs, in which it will record labeled key(s)
-		await idManager.setStorages(
-			await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
+		await setupManagerStorage(
 			await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
-			[ u.midSKey.labeled ]);
+			[ u.midSKey.labeled ]
+		);
 
 		return idManager;
 	};
@@ -147,23 +157,28 @@ export class Core {
 		// 1) init of id manager without setting fs
 		const stepTwo = await IdManager.initWithoutStore(
 			address, this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning);
+			this.logger.logError, this.logger.logWarning
+		);
 		if (!stepTwo) { return; }
+
 		return async (midLoginKey, storageKey) => {
+
 			// 2) complete id manager login, without use of fs
-			const idManager = await stepTwo(midLoginKey);
-			if (!idManager) { return; }
+			const idManagerInit = await stepTwo(midLoginKey);
+			if (!idManagerInit) { return; }
+			const { idManager, setupManagerStorage } = idManagerInit;
 
 			// 3) initialize all storages
 			const storeDone = await this.storages.initFromRemote(
 				address, idManager.getSigner, storageKey,
-				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
+				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+			);
 			if (!storeDone) { return; }
 
 			// 4) complete initialization of id manager
-			await idManager.setStorages(
-				await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
-				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME));
+			await setupManagerStorage(
+				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME)
+			);
 				
 			return idManager;
 		};
@@ -174,35 +189,20 @@ export class Core {
 	) => {
 		const completeStorageInit = await this.storages.startInitFromCache(
 			address, storageKey,
-			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError);
+			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+		);
 		if (!completeStorageInit) { return; }
 
-		const idManager = await IdManager.initFromLocalStore(address,
-			await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
+		const idManager = await IdManager.initFromCachedStore(
+			address,
+			await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
 			this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning);
+			this.logger.logError, this.logger.logWarning
+		);
+		if (!idManager) { return; }
 
-		if (idManager) {
-			const res = await completeStorageInit(idManager.getSigner);
-			await idManager.setStorages(
-				undefined,
-				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME));
-			return (res ? idManager : undefined);
-		}
-
-		return async (midLoginKey) => {
-			const idManager = await IdManager.initInOneStepWithoutStore(
-				address, midLoginKey, this.makeResolver('mailerid'),
-				() => this.makeNet(),
-				this.logger.logError, this.logger.logWarning);
-			if (!idManager) { return; }
-			const res = await completeStorageInit!(idManager.getSigner);
-			await idManager.setStorages(
-				await this.storages.makeLocalFSForApp(MAILERID_APP_NAME),
-				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME));
-			return (res ? idManager : undefined);
-		};
-
+		completeStorageInit(idManager.getSigner);
+		return idManager;
 	};
 
 	makeCAPsForApp(

@@ -18,6 +18,7 @@
 import { ScryptGenParams } from '../../key-derivation';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { Observable } from 'rxjs';
+import { LogError } from '../../logging/log-to-file';
 
 export { AsyncSBoxCryptor } from 'xsp-files';
 export { FolderInJSON } from './folder-node'; 
@@ -37,7 +38,6 @@ export interface Node {
 	objId: string;
 	name: string;
 	type: NodeType;
-	removeObj(src?: FSChangeSrc): Promise<void>;
 }
 
 export type NodeType = 'file' | 'link' | 'folder';
@@ -136,6 +136,8 @@ export interface Storage {
 
 	readonly nodes: NodesContainer;
 
+	readonly logError: LogError;
+
 	getNodeEvents(): Observable<NodeEvent>;
 
 	broadcastNodeEvent(
@@ -158,10 +160,10 @@ export interface Storage {
 
 	/**
 	 * This returns a promise, resolvable to source for a requested object.
-	 * @param objId
-	 * @param version
 	 */
-	getObjSrc(objId: ObjId, version?: number): Promise<ObjSource>;
+	getObjSrc(
+		objId: ObjId, version?: number, allowArchived?: boolean
+	): Promise<ObjSource>;
 	
 	/**
 	 * This saves given object, asynchronously.
@@ -200,6 +202,7 @@ export function wrapStorageImplementation(impl: Storage): Storage {
 		type: impl.type,
 		versioned: impl.versioned,
 		nodes: impl.nodes,
+		logError: impl.logError,
 		getNodeEvents: impl.getNodeEvents.bind(impl),
 		broadcastNodeEvent: impl.broadcastNodeEvent.bind(impl),
 		storageForLinking: impl.storageForLinking.bind(impl),
@@ -233,6 +236,8 @@ export interface SyncedStorage extends Storage {
 
 	updateStatusInfo(objId: ObjId): Promise<SyncStatus>;
 
+	isObjOnDisk(objId: ObjId): Promise<boolean>;
+
 	isRemoteVersionOnDisk(
 		objId: ObjId, version: number
 	): Promise<'partial'|'complete'|'none'>;
@@ -259,6 +264,8 @@ export interface SyncedObjStatus extends LocalObjStatus {
 	syncStatus(): SyncStatus;
 
 	neverUploaded(): boolean;
+
+	versionBeforeUnsyncedRemoval(): number|undefined;
 
 }
 

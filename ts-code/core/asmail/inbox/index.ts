@@ -409,7 +409,8 @@ export class InboxOnServer {
 		const attachments = msg.attachmentsJSON;
 		if (attachments) {
 			m.attachments = fsForAttachments(
-				msgOnDisk, attachments, this.storages, this.cryptor);
+				msgOnDisk, attachments, this.storages, this.cryptor, this.logError
+			);
 		}
 		return m;
 	}

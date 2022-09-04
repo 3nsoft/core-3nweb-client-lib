@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -68,7 +68,7 @@ export abstract class ServiceUser {
 	protected constructor(
 		public readonly userId: string,
 		opts: { login: string; logout: string; canBeRedirected?: boolean; },
-		private readonly getSigner: IGetMailerIdSigner|undefined,
+		private getSigner: IGetMailerIdSigner|undefined,
 		private getInitServiceURI: () => Promise<string>,
 		protected readonly net: NetClient
 	) {
@@ -88,6 +88,11 @@ export abstract class ServiceUser {
 	private throwOnBadServiceURI(): void {
 		if (!this.isUriSet) { throw new Error(
 			`Service uri is not a string: ${this.serviceURI}`); }
+	}
+
+	protected setGetterOfSigner(getSigner: IGetMailerIdSigner): void {
+		if (this.getSigner) { throw new Error(`getSigner is already set`); }
+		this.getSigner = getSigner;
 	}
 
 	/**

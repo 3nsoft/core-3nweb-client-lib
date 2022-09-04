@@ -19,6 +19,7 @@ import { Storage, NodesContainer, StorageGetter, FolderInJSON, LocalObjStatus, O
 import { XspFS } from '../../../../lib-client/3nstorage/xsp-fs/fs';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { MsgOnDisk } from '../msg-on-disk';
+import { LogError } from '../../../../lib-client/logging/log-to-file';
 
 type FSType = web3n.files.FSType;
 type ReadonlyFS = web3n.files.ReadonlyFS;
@@ -36,7 +37,8 @@ class AttachmentStore implements Storage {
 	constructor(
 		private readonly msg: MsgOnDisk,
 		private readonly getStorages: StorageGetter,
-		public readonly cryptor: AsyncSBoxCryptor
+		public readonly cryptor: AsyncSBoxCryptor,
+		public readonly logError: LogError
 	) {
 		Object.seal(this);
 	}
@@ -87,9 +89,9 @@ Object.freeze(AttachmentStore);
 
 export function fsForAttachments(
 	msg: MsgOnDisk, rootJson: FolderInJSON, storages: StorageGetter,
-	cryptor: AsyncSBoxCryptor
+	cryptor: AsyncSBoxCryptor, logError: LogError
 ): ReadonlyFS {
-	const storage = new AttachmentStore(msg, storages, cryptor);
+	const storage = new AttachmentStore(msg, storages, cryptor, logError);
 	const fs = XspFS.fromASMailMsgRootFromJSON(storage, rootJson, 'attachments');
 	return fs;
 }

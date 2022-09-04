@@ -26,10 +26,11 @@ for (let i=2; i<process.argv.length; i+=1) {
 
 const ALL_SPECS = [
 	'units/*.js',
-	'startup/*.js',
-	'mailerid.js',
-	'storage.js',
-	'asmail.js'
+	'apis/startup/*.js',
+	'apis/mailerid.js',
+	'apis/storage.js',
+	'apis/asmail.js',
+	'computer.3nweb.core/*.js'
 ];
 
 jas.loadConfig({
@@ -41,15 +42,5 @@ jas.loadConfig({
 jas.configureDefaultReporter({
 	showColors: true
 });
-
-// XXX jasmine completely removes all listeners of unhandled things,
-//     hence, the following code is commented out.
-//
-// process.on('unhandledRejection', (err, p) => {
-// 	console.error(' -- Unhandled rejection of promise at:', p, 'with:', err);
-// });
-// process.on('uncaughtException', err => {
-// 	console.error(' -- Unhandled exception:', err);
-// });
 
 jas.execute();

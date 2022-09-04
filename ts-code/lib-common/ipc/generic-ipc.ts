@@ -474,11 +474,12 @@ export function makeRequestServer(channel: string|undefined,
 	return (new ReplyingSide(channel, comm)).wrap();
 }
 
-function makeUnknownEventException(): EventException {
+function makeUnknownEventException(message?: string): EventException {
 	return {
 		runtimeException: true,
 		type: 'events',
-		unknownEvent: true
+		unknownEvent: true,
+		message
 	};
 }
 
@@ -514,7 +515,8 @@ class EventsSendingSide extends ReplyingSide {
 	private async handleSubscribe(env: RequestEnvelope<string>): Promise<void> {
 		const event = env.req;
 		const gr = this.findGroup(event);
-		if (!gr) { throw makeUnknownEventException(); }
+		if (!gr) { throw makeUnknownEventException(
+			`Events' channel ${event} is not found in handling subscribe`); }
 		this.subscribedEvents.add(event);
 		await gr.subscribe(event);
 	}
@@ -522,7 +524,8 @@ class EventsSendingSide extends ReplyingSide {
 	private handleUnsubscribe(env: RequestEnvelope<string>): void {
 		const event = env.req;
 		const gr = this.findGroup(event);
-		if (!gr) { throw makeUnknownEventException(); }
+		if (!gr) { throw makeUnknownEventException(
+			`Events' channel ${event} is not found in handling unsubscribe`); }
 		this.subscribedEvents.delete(event);
 		if (gr.unsubscribe) {
 			gr.unsubscribe(event);
@@ -794,8 +797,9 @@ class IpcEventChannels {
 Object.freeze(IpcEventChannels.prototype);
 Object.freeze(IpcEventChannels);
 
-export function makeSubscribingClient(channel: string|undefined,
-		comm: RawDuplex<Envelope>): SubscribingClient {
+export function makeSubscribingClient(
+	channel: string|undefined, comm: RawDuplex<Envelope>
+): SubscribingClient {
 	return (new EventsReceivingSide(channel, comm)).wrap();
 }
 

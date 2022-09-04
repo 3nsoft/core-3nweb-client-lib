@@ -25,6 +25,7 @@ import { assert } from '../../../lib-common/assert';
 import { DiffInfo, ObjStatus as RemoteObjStatus } from '../../../lib-common/service-api/3nstorage/owner';
 import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
 import { UploadStatusRecorder } from './upsyncer';
+import { makeFileException } from '../../../lib-common/exceptions/file';
 
 type FileException = web3n.files.FileException;
 type SyncStatus = web3n.files.SyncStatus;
@@ -45,12 +46,12 @@ export interface ObjStatusInfo {
 	local?: LocalVersions;
 	synced?: SyncMarker;
 	remote: VersionsOnServer;
+	upload?: UploadInfo;
 }
 
 export interface LocalVersions extends VersionsInfo {
 	isArchived?: boolean;
 	archived?: undefined;
-	upload?: UploadInfo;
 }
 
 export interface SyncMarker {
@@ -63,11 +64,20 @@ export interface VersionsOnServer extends VersionsInfo {
 	isArchived?: boolean;
 }
 
-export interface UploadInfo {
+export type UploadInfo = NewVersionUpload | RemovalUpload;
+
+export interface NewVersionUpload {
+	type: 'new-version',
 	localVersion: number;
 	uploadVersion: number;
 	baseVersion?: number;
 	needUpload?: WholeVerOrderedUpload|DiffVerOrderedUpload;
+}
+
+export interface RemovalUpload {
+	type: 'removal',
+	isPostponed: boolean;
+	localVersion?: number;
 }
 
 export interface WholeVerOrderedUpload {
@@ -162,12 +172,14 @@ function identifyNonGarbage(status: ObjStatusInfo): NonGarbage {
 	let uploadVersion: number|undefined = undefined;
 	if (status.local) {
 		local = nonGarbageWithMaxVer(status.local);
-		if (status.local.upload) {
-			const { localVersion } = status.local.upload;
-			if (status.local.current !== localVersion) {
-				addWithBasesTo(local.nonGarbage, localVersion, status.local);
-			}
-			uploadVersion = status.local.upload.uploadVersion;
+	}
+	if (status.upload) {
+		const { localVersion } = status.upload;
+		if (status.local!.current !== localVersion) {
+			addWithBasesTo(local!.nonGarbage, localVersion, status.local!);
+		}
+		if (status.upload.type === 'new-version') {
+			uploadVersion = status.upload.uploadVersion;
 		}
 	}
 	const remote = nonGarbageWithMaxVer(status.remote);
@@ -240,6 +252,30 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		return (syncStateOf(status) !== 'synced');
 	}
 
+	static async fileShowsObjNeedsRemovalOnRemote(
+		objFolder: string, objId: ObjId
+	): Promise<boolean> {
+		const status = await readAndCheckStatus(objFolder, objId);
+		const upload = status.upload;
+		return ((upload?.type === 'removal') && !upload.isPostponed);
+	}
+
+	needsRemovalOnRemote(): boolean {
+		const upload = this.status.upload;
+		return ((upload?.type === 'removal') && !upload.isPostponed);
+	}
+
+	async clearPostponeFlagInRemovalOnRemote(): Promise<boolean> {
+		const { upload } = this.status;
+		if (!upload) { return false; }
+		if (upload.type !== 'removal') {
+			throw new Error(`No upload removal in obj status`);
+		}
+		upload.isPostponed = false;
+		await this.triggerSaveProc();
+		return true;
+	}
+
 	private updateStateIndicator(): void {
 		this.stateIndicator = syncStateOf(this.status);
 	}
@@ -267,22 +303,33 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	}
 
 	async removeCurrentVersion(): Promise<void> {
-		let { local, synced } = this.status;
+		let { local, synced, remote, upload } = this.status;
 		if (synced?.isArchived || local?.isArchived) { return; }
-		if (local) {
-			rmCurrentVersionIn(local);
-		} else {
-			local = makeVersions() as LocalVersions;
-		}
-		local.isArchived = true;
-		this.updateStateIndicator();;
-		await this.triggerSaveProc().catch((exc: FileException) => {
-			if (exc.notFound && this.status.local?.isArchived) {
+		if (upload) {
+			if (upload.type === 'removal') {
 				return;
 			} else {
-				throw exc;
+				throw makeFileException(
+					'concurrentUpdate', 'obj-status', `Upload is in progress`);
 			}
-		});
+		}
+		if (!remote.isArchived && remote.current) {
+			this.status.upload = {
+				type: 'removal',
+				localVersion: (local?.current || synced?.version),
+				isPostponed: true
+			};
+			upload = this.status.upload;
+		}
+		if (local) {
+			local.isArchived = true;
+			local.current = undefined;	
+		} else {
+			this.status.local = makeVersions() as LocalVersions;
+			this.status.local.isArchived = true;
+		}
+		this.updateStateIndicator();
+		await this.triggerSaveProc().catch(skipNotFoundExc);
 	}
 
 	private async triggerSaveProc(
@@ -301,41 +348,75 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		}
 	}
 
-	recordUploadStart(info: UploadInfo): Promise<void> {
-		assert(!!this.status.local);
-		const local = this.status.local!;
-		if (local.upload) {
+	recordUploadStart(info: NewVersionUpload): Promise<void> {
+		if (this.status.upload) {
+			const upload = this.status.upload as NewVersionUpload;
 			throw makeFSSyncException('obj-status', {
 				alreadyUploading: true,
-				message: `Status already has upload of version ${local.upload.uploadVersion} and can't start another upload with version ${info.uploadVersion}`
+				message: `Status already has upload of version ${upload.uploadVersion} and can't start another upload with version ${info.uploadVersion}`
 			});
 		}
-		if (info.localVersion === local.current) {
-			local.upload = info;
+		if (info.localVersion === this.status.local?.current) {
+			this.status.upload = info;
+			return this.triggerSaveProc();
 		} else {
 			throw makeFSSyncException('obj-status', {
 				localVersion: info.localVersion,
 				versionNotFound: true
 			});
 		}
-		return this.triggerSaveProc();
 	}
 
-	recordUploadInterimState(info: UploadInfo): Promise<void> {
-		assert(!!this.status.local);
-		const local = this.status.local!;
-		assert(!!local.upload &&
-			(local.upload.uploadVersion === info.uploadVersion));
-		local.upload = info;
-		return this.triggerSaveProc();
+	recordUploadInterimState(info: NewVersionUpload): Promise<void> {
+		if (this.status.upload?.type !== 'new-version') {
+			throw new Error(`No new version upload in object status`);
+		}
+		if (this.status.upload.uploadVersion === info.uploadVersion) {
+			this.status.upload = info;
+			return this.triggerSaveProc();
+		} else {
+			throw new Error(`Upload versions don't match`);
+		}
 	}
 
-	recordUploadCancellation(info: UploadInfo): Promise<void> {
-		assert(!!this.status.local);
-		const local = this.status.local!;
-		assert(!!local.upload &&
-			(local.upload.uploadVersion === info.uploadVersion));
-		local.upload = undefined;
+	recordUploadCancellation(info: NewVersionUpload): Promise<void> {
+		if (this.status.upload?.type !== 'new-version') {
+			throw new Error(`No upload in object status`);
+		}
+		if (this.status.upload.uploadVersion === info.uploadVersion) {
+			this.status.upload = undefined;
+			return this.triggerSaveProc();
+		} else {
+			throw new Error(`Upload versions don't match`);
+		}
+	}
+
+	recordUploadCompletion(
+		localVersion: number, uploadVersion: number
+	): Promise<void> {
+		const { local, synced, remote, upload } = this.status;
+		if ((upload?.type !== 'new-version')
+		|| (upload.uploadVersion !== uploadVersion)) {
+			throw new Error(`Upload versions don't match`);
+		}
+		const syncedBase = upload.baseVersion;
+		if (!remote.current || (remote.current <= uploadVersion)) {
+			setCurrentVersionIn(remote, uploadVersion, syncedBase);
+		}
+		if (synced) {
+			synced.version = uploadVersion;
+			if (synced.base && (synced.base !== syncedBase)) {
+				rmNonArchVersionsIn(remote, synced.base);
+			}
+			synced.base = syncedBase;
+		} else {
+			this.status.synced = { version: uploadVersion, base: syncedBase };
+		}
+		if (local!.current === localVersion) {
+			this.status.local = undefined;
+		}
+		this.status.upload = undefined;
+		this.updateStateIndicator();
 		return this.triggerSaveProc();
 	}
 
@@ -360,29 +441,33 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		return this.triggerSaveProc();
 	}
 
-	async recordRemoteChange(version: number): Promise<void> {
-		const { local, synced, remote } = this.status;
-		if ((local?.upload && (local.upload.uploadVersion === version))
-		|| (synced?.version && (synced.version >= version))) { return; }
-		remote.current = version;
+	async recordRemoteRemovalCompletion(): Promise<void> {
+		const { remote, upload, synced } = this.status;
+		if (this.status.synced?.isArchived) { return; }
+		if (upload?.type !== 'removal') {
+			throw new Error(`Upload of removal is not in status`);
+		}
+		rmCurrentVersionIn(remote);
+		remote.isArchived = true;
+		if (synced) {
+			synced.isArchived = true;
+			synced.version = undefined;
+			synced.base = undefined;
+		} else {
+			this.status.synced = { isArchived: true };
+		}
+		this.status.local = undefined;
+		this.status.upload = undefined;
 		this.updateStateIndicator();
 		return this.triggerSaveProc();
 	}
 
-	recordSyncOfObjRemoval(): Promise<void> {
-		this.status.local = undefined;
-		rmCurrentVersionIn(this.status.remote);
-		this.status.remote.isArchived = true;
-		if (this.status.synced) {
-			this.status.synced.isArchived = true;
-			this.status.synced.version = undefined;
-			if (this.status.synced.base) {
-				rmNonArchVersionsIn(this.status.remote, this.status.synced.base);
-				this.status.synced.base = undefined;
-			}
-		} else {
-			this.status.synced = { isArchived: true };
-		}
+	async recordRemoteChange(version: number): Promise<void> {
+		const { synced, remote, upload } = this.status;
+		if ((upload?.type === 'new-version')
+		&& (upload.uploadVersion === version)) { return; }
+		if (synced?.version && (synced.version >= version)) { return; }
+		remote.current = version;
 		this.updateStateIndicator();
 		return this.triggerSaveProc();
 	}
@@ -448,34 +533,6 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		 } else {
 			return { localBases };
 		 }
-	}
-
-	markLocalVersionSynced(
-		localVersion: number, uploadVersion: number
-	): Promise<void> {
-		const { local, synced, remote } = this.status;
-		assert(!!local?.upload &&
-			(local?.upload.uploadVersion === uploadVersion));
-		const syncedBase = local!.upload!.baseVersion;
-		if (!remote.current || (remote.current <= uploadVersion)) {
-			setCurrentVersionIn(remote, uploadVersion, syncedBase);
-		}
-		if (synced) {
-			synced.version = uploadVersion;
-			if (synced.base && (synced.base !== syncedBase)) {
-				rmNonArchVersionsIn(remote, synced.base);
-			}
-			synced.base = syncedBase;
-		} else {
-			this.status.synced = { version: uploadVersion, base: syncedBase };
-		}
-		if (local!.current === localVersion) {
-			this.status.local = undefined;
-		} else {
-			local!.upload = undefined;
-		}
-		this.updateStateIndicator();
-		return this.triggerSaveProc();
 	}
 
 	async setLocalCurrentVersion(
@@ -556,6 +613,15 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	neverUploaded(): boolean {
 		const synced = this.status.synced;
 		return (!synced?.version && !synced?.isArchived);
+	}
+
+	versionBeforeUnsyncedRemoval(): number|undefined {
+		if ((this.stateIndicator !== 'synced')
+		&& this.status.local?.isArchived
+		&& this.status.upload
+		&& (this.status.upload.type === 'removal')) {
+			return this.status.upload.localVersion;
+		}
 	}
 
 	async adoptRemoteVersion(
@@ -719,6 +785,12 @@ function addArchVersionsFromList(
 		}
 	}
 	return isAnythingChanged;
+}
+
+function skipNotFoundExc(exc: FileException): void {
+	if (!exc.notFound) {
+		throw exc;
+	}
 }
 
 

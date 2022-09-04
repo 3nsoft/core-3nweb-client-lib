@@ -216,12 +216,14 @@ export namespace currentObj {
 	};
 	Object.freeze(SC);
 
-	export interface MismatchedObjVerReply extends ErrorReply {
-		current_version: number;
-	}
+	export type MismatchedObjVerReply = MismatchedObjVerErrReply;
 
 }
 Object.freeze(currentObj);
+
+export interface MismatchedObjVerErrReply extends ErrorReply {
+	current_version: number;
+}
 
 export namespace currentRootObj {
 
@@ -417,13 +419,14 @@ export namespace archiveObj {
 		return `obj/${objId}/archive?ver=${version}`;
 	}
 
-	export type VersionsList = number[];
+	export type MismatchedObjVerReply = MismatchedObjVerErrReply;
 
 	export const SC = {
 		okPost: 200,
 		okDelete: 200,
 		unknownObj: 474,
-		unknownObjVer: 494
+		unknownObjVer: 494,
+		mismatchedObjVer: 495
 	};
 
 }
@@ -437,7 +440,7 @@ export namespace archiveRoot {
 		return `root/archive?ver=${version}`;
 	}
 
-	export type VersionsList = archiveObj.VersionsList;
+	export type MismatchedObjVerReply = archiveObj.MismatchedObjVerReply;
 
 	export const SC = archiveObj.SC;
 

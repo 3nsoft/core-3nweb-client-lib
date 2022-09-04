@@ -20,7 +20,7 @@ import { DeviceFS } from '../../lib-client/local-files/device-fs';
 import { rmDirWithContent, mkdir, rmdir } from '../../lib-common/async-fs-node';
 import { resolve } from 'path';
 import { loadSpecs } from '../libs-for-tests/spec-module';
-import { SetupWithTestFS, clearFS } from '../fs-checks/test-utils';
+import { SetupWithTestFS, clearFS } from '../apis/fs-checks/test-utils';
 import { platform } from 'os';
 
 type FileException = web3n.files.FileException;
@@ -78,14 +78,14 @@ describe('DeviceFS', () => {
 
 		loadSpecs(
 			s,
-			resolve(__dirname, '../fs-checks/not-versioned'),
+			resolve(__dirname, '../apis/fs-checks/not-versioned'),
 			((platform() === 'win32') ?
 				[ 'win-local-fs', 'device-fs' ] :
 				[ 'device-fs' ]));
 
 		loadSpecs(
 			s,
-			resolve(__dirname, '../file-sink-checks'),
+			resolve(__dirname, '../apis/file-sink-checks'),
 			[ 'device-fs' ]);
 
 	});

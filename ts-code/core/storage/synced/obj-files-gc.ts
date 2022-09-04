@@ -22,7 +22,6 @@ import { join } from 'path';
 import { NonGarbageVersions } from '../common/obj-info-file';
 import { NonGarbage } from './obj-status';
 import { getAndRemoveOneFrom, noop } from '../common/utils';
-import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
 import { UPLOAD_HEADER_FILE_NAME_EXT } from './upload-header-file';
 
 
@@ -51,7 +50,6 @@ export class GC {
 		private readonly sync: SynchronizerOnObjId,
 		private readonly rmObjFromCache: (obj: SyncedObj) => void,
 		private readonly rmObjFolder: (objId: string) => Promise<void>,
-		private readonly remote: RemoteStorage
 	) {
 		Object.seal(this);
 	}
@@ -78,25 +76,10 @@ export class GC {
 	}
 
 	private async collectIn(obj: SyncedObj): Promise<void> {
-		if (obj.statusObj().isArchived()) {
-			await this.upsyncObjRemovalWhenNeeded(obj);
-		}
 		const nonGarbage = obj.statusObj().getNonGarbageVersions();
 		if (!(await this.checkAndRemoveWholeObjFolder(obj, nonGarbage))) {
 			await removeGarbageFiles(obj, nonGarbage);
 		}
-	}
-
-	private async upsyncObjRemovalWhenNeeded(obj: SyncedObj): Promise<void> {
-		if (!needsUpsyncOfRemoval(obj)) { return; }
-		try {
-			await this.remote.deleteObj(obj.objId!);
-		} catch (exc) {
-			// XXX will need to schedule other attempt to delete on remote
-
-			return;
-		}
-		await obj.statusObj().recordSyncOfObjRemoval();
 	}
 
 	private async checkAndRemoveWholeObjFolder(

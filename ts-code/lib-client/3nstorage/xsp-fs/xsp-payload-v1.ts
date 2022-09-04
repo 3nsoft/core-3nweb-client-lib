@@ -17,7 +17,7 @@
 
 import { ByteSource } from "xsp-files";
 import { assert } from "../../../lib-common/assert";
-import { makeFileException, Code as excCode, FileException } from "../../../lib-common/exceptions/file";
+import { makeFileException, FileException } from "../../../lib-common/exceptions/file";
 import { SingleProc } from "../../../lib-common/processes/synced";
 import { XAttrs } from "./attrs";
 import { Attrs, ReadonlyPayload } from "./node-persistence";
@@ -100,7 +100,7 @@ Object.freeze(ReadonlyPayloadV1);
 
 
 function makeEndlessException(): FileException {
-	return makeFileException(excCode.isEndless, '');
+	return makeFileException('isEndless', '');
 }
 
 

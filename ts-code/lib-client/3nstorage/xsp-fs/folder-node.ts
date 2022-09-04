@@ -21,15 +21,15 @@
  */
 
 import { base64 } from '../../../lib-common/buffer-utils';
-import { makeFileException, Code as excCode, FileException } from '../../../lib-common/exceptions/file';
+import { makeFileException, FileException } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
-import { Storage, Node, NodeType, setPathInExc, FSChangeSrc } from './common';
+import { Storage, Node, NodeType, setPathInExc, FSChangeSrc, ObjId } from './common';
 import { FSEvent, NodeInFS } from './node-in-fs';
 import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
 import { LinkParameters } from '../../files';
 import { makeFSSyncException, StorageException } from '../exceptions';
-import { defer, Deferred } from '../../../lib-common/processes/deferred';
+import { defer } from '../../../lib-common/processes/deferred';
 import { copy, deepEqual } from '../../../lib-common/json-utils';
 import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import * as random from '../../../lib-common/random-node';
@@ -37,11 +37,11 @@ import { parseFolderInfo, serializeFolderInfo } from './folder-node-serializatio
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
 import { assert } from '../../../lib-common/assert';
+import { appendArray } from '../util/for-arrays';
 
 type ListingEntry = web3n.files.ListingEntry;
 type EntryAdditionEvent = web3n.files.EntryAdditionEvent;
 type EntryRemovalEvent = web3n.files.EntryRemovalEvent;
-type RemovedEvent = web3n.files.RemovedEvent;
 type EntryRenamingEvent = web3n.files.EntryRenamingEvent;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type FolderDiff = web3n.files.FolderDiff;
@@ -104,6 +104,7 @@ function jsonToInfoAndAttrs(
 	return { attrs, folderInfo };
 }
 
+
 class FolderPersistance extends NodePersistance {
 
 	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
@@ -127,9 +128,24 @@ class FolderPersistance extends NodePersistance {
 		return { folderInfo, xattrs, attrs: CommonAttrs.fromAttrs(attrs) };
 	}
 
+	static async readFolderContent(
+		objId: string|null, key: Uint8Array, src: ObjSource,
+		cryptor: AsyncSBoxCryptor
+	): Promise<FolderInfo> {
+		if (objId === null) {
+			throw new Error("Missing objId for non-root folder");
+		}
+		const zNonce = idToHeaderNonce(objId);
+		const { folderInfo } = await (
+			new FolderPersistance(zNonce, key, cryptor)
+		).read(src);
+		return folderInfo;
+	}
+
 }
 Object.freeze(FolderPersistance.prototype);
 Object.freeze(FolderPersistance);
+
 
 let nextMoveLabel = Math.floor(Math.random()/2*Number.MAX_SAFE_INTEGER);
 function getMoveLabel(): number {
@@ -163,7 +179,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			assert(!objId && !parentId,
 				`Root folder must have both objId and parent as nulls.`);
 		} else if (objId === null) {
-			new Error("Missing objId for non-root folder");
+			throw new Error("Missing objId for non-root folder");
 		}
 		this.crypto = new FolderPersistance(zNonce, key, storage.cryptor);
 		if (setNewAttrs) {
@@ -302,7 +318,16 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		});
 		if (!objsToRm) { return; }
 		for (const objToRm of objsToRm) {
-			(await this.getOrMakeChildNodeForInfo(objToRm)).removeObj('sync');
+			const nodeToRm = await this.getOrMakeChildNodeForInfo(objToRm);
+			this.callRemoveObjOn('sync', nodeToRm);
+		}
+	}
+
+	private callRemoveObjOn(src: FSChangeSrc, node: NodeInFS<any>): void {
+		if (node.type === 'folder') {
+			(node as FolderNode).removeFolderObj(src);
+		} else {
+			node.removeNonFolderObj(src);
 		}
 	}
 
@@ -313,18 +338,20 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async childExistsInSyncedVersion(childObjId: string): Promise<boolean> {
-		const status = await this.syncStatus();
-		if (status.state === 'synced') { return true; }
-		if (!status.synced) { return false; }
-
-		// XXX FolderNode.childExistsInSyncedVersion() should implement check in synced version
-
-		return false;
-	}
-
-	listFolders(): string[] {
-		return Object.keys(this.currentState.nodes).filter(
-			name => !!this.currentState.nodes[name].isFolder);
+		const { state, synced } = await this.syncStatus();
+		if (state === 'synced') { return true; }
+		if (!synced?.latest) { return false; }
+		const storage = this.syncedStorage();
+		try {
+			const syncedContent = await storage.getObjSrc(this.objId, synced.latest);
+			const { folderInfo } = await this.crypto.read(syncedContent);
+			const childIsInSynced = !!Object.values(folderInfo.nodes)
+			.find(({ objId }) => (objId === childObjId));
+			return childIsInSynced;
+		} catch (exc) {
+			storage.logError(exc, `Exception thrown in checking whether child node's obj is present in synced version.`);
+			return false;
+		}
 	}
 
 	getNodeInfo(name: string, undefOnMissing = false): NodeInfo|undefined {
@@ -334,7 +361,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		} else if (undefOnMissing) {
 			return;
 		} else {
-			throw makeFileException(excCode.notFound, name);
+			throw makeFileException('notFound', name);
 		}
 	}
 
@@ -342,24 +369,24 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return !!this.getNodeInfo(childName, !throwIfMissing);
 	}
 
-	async getNode<T extends Node>(
+	async getNode<T extends NodeInFS<any>>(
 		type: NodeType|undefined, name: string, undefOnMissing = false
 	): Promise<T|undefined> {
 		const childInfo = this.getNodeInfo(name, undefOnMissing);
 		if (!childInfo) { return; }
 		if (type) {
 			if ((type === 'file') && !childInfo.isFile) {
-				throw makeFileException(excCode.notFile, childInfo.name);
+				throw makeFileException('notFile', childInfo.name);
 			} else if ((type === 'folder') && !childInfo.isFolder) {
-				throw makeFileException(excCode.notDirectory, childInfo.name);
+				throw makeFileException('notDirectory', childInfo.name);
 			} else if ((type === 'link') && !childInfo.isLink) {
-				throw makeFileException(excCode.notLink, childInfo.name);
+				throw makeFileException('notLink', childInfo.name);
 			}
 		}
 		return this.getOrMakeChildNodeForInfo<T>(childInfo);
 	}
 
-	private async getOrMakeChildNodeForInfo<T extends Node>(
+	private async getOrMakeChildNodeForInfo<T extends NodeInFS<any>>(
 		info: NodeInfo
 	): Promise<T> {
 		const { node, nodePromise } =
@@ -431,7 +458,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			};
 			return { event, childObjId: childInfo.objId };
 		}).catch(noop);
-		const fileExc = makeFileException(excCode.notFound, childInfo.name, exc);
+		const fileExc = makeFileException('notFound', childInfo.name, exc);
 		fileExc.inconsistentStateOfFS = true;
 		throw fileExc;
 	}
@@ -551,7 +578,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return { node, key };
 	}
 
-	private create<T extends Node>(
+	private create<T extends NodeInFS<any>>(
 		type: NodeType, name: string, exclusive: boolean,
 		changes?: XAttrsChanges, linkParams?: LinkParameters<any>
 	): Promise<T> {
@@ -560,7 +587,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			// do check for concurrent creation of a node
 			if (this.getNodeInfo(name, true)) {
 				if (exclusive) {
-					throw makeFileException(excCode.alreadyExists, name);
+					throw makeFileException('alreadyExists', name);
 				} else if (type === 'folder') {
 					return (await this.getNode<T>('folder', name))!;
 				} else if (type === 'file') {
@@ -638,8 +665,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		// explicitly do not wait on a result of child's delete, cause if it fails
 		// we just get traceable garbage, yet, the rest of a live/non-deleted tree
 		// stays consistent
-		f.removeObj();
-	}
+		this.callRemoveObjOn('local', f);
+}
 
 	private changeChildName(initName: string, newName: string): Promise<void> {
 		return this.doTransition(async (state, version) => {
@@ -667,7 +694,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		childName: string, dst: FolderNode, nameInDst: string
 	): Promise<void> {
 		if (dst.hasChild(nameInDst)) {
-			throw makeFileException(excCode.alreadyExists, nameInDst); }
+			throw makeFileException('alreadyExists', nameInDst); }
 		if (dst === this) {
 			// In this case we only need to change child's name
 			await this.changeChildName(childName, nameInDst);
@@ -727,7 +754,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			// existing folder at this point
 			if (path.length === 1) {
 				if (exclusiveCreate) {
-					throw makeFileException(excCode.alreadyExists, path[0]);
+					throw makeFileException('alreadyExists', path[0]);
 				} else {
 					return f;
 				}
@@ -778,21 +805,93 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return content;
 	}
 
-	protected async delete(src: FSChangeSrc): Promise<void> {
-		const childrenNodes = await this.getAllNodes();
-		await this.storage.removeObj(this.objId);
-		this.storage.nodes.delete(this);
-		this.setCurrentVersion(-1);
-		this.currentState = { nodes: {} };
-		const event: RemovedEvent = {
-			type: 'removed',
-			path: this.name,
-			src
-		};
-		this.broadcastEvent(event, true);
-		for (const node of childrenNodes) {
-			node.removeObj(src);
+	private async removeFolderObj(
+		src: FSChangeSrc, passIdsForRmUpload = false
+	): Promise<ObjId[]|undefined> {
+		const childrenNodes = await this.doChange(true, async () => {
+			const childrenNodes = await this.getAllNodes();
+			await this.removeThisNodeAsLeaf(src);
+			return childrenNodes;
+		});
+		if (childrenNodes.length === 0) { return; }
+		if (this.isInSyncedStorage) {
+			if (passIdsForRmUpload) {
+				return this.removeChildrenObjsInSyncedStorage(
+					childrenNodes, src, true
+				);
+			} else {
+				this.removeChildrenObjsInSyncedStorage(childrenNodes, src, false);
+			}
+		} else {
+			this.callRemoveObjOnAll(src, childrenNodes);
 		}
+	}
+
+	private callRemoveObjOnAll(src: FSChangeSrc, nodes: NodeInFS<any>[]): void {
+		for (const f of nodes) {
+			this.callRemoveObjOn(src, f);
+		}
+	}
+
+	private async removeChildrenObjsInSyncedStorage(
+		childrenNodes: NodeInFS<NodePersistance>[], src: FSChangeSrc,
+		passIdsForRmUpload: boolean
+	): Promise<ObjId[]|undefined> {
+		let uploadRmsHere: boolean;
+		let collectedIds: ObjId[]|undefined;
+		if (passIdsForRmUpload) {
+			collectedIds = [];
+			uploadRmsHere = false;
+		} else {
+			try {
+				const status = await this.syncedStorage().status(this.objId);
+				if (status.neverUploaded()) {
+					collectedIds = [];
+					uploadRmsHere = true;
+				} else {
+					collectedIds = undefined;
+					uploadRmsHere = false;
+				}
+			} catch (exc) {
+				if ((exc as StorageException).objNotFound) {
+					collectedIds = [];
+					uploadRmsHere = true;
+				} else {
+					throw exc;
+				}
+			}
+		}
+		if (!collectedIds) {
+			this.callRemoveObjOnAll(src, childrenNodes);
+			return;
+		}
+		await Promise.allSettled(childrenNodes.map(async child => {
+			const status = await this.syncedStorage().status(child.objId);
+			if (!status.neverUploaded()) {
+				collectedIds!.push(child.objId);
+			}
+			if (child.type === 'folder') {
+				const ids = await (child as FolderNode).removeFolderObj(
+					src, passIdsForRmUpload);
+				if (ids) {
+					collectedIds!.push(...ids);
+				}				
+			} else {
+				await child.removeNonFolderObj(src);
+			}
+		}));
+		if (uploadRmsHere) {
+			await this.uploadRemovalOfObjs(collectedIds);
+		} else {
+			return collectedIds;
+		}
+	}
+
+	private async uploadRemovalOfObjs(objsToRm: ObjId[]): Promise<void> {
+		objsToRm.sort();	// shuffle order
+		await Promise.allSettled(
+			objsToRm.map(objToRm => this.syncedStorage().uploadObjRemoval(objToRm))
+		);
 	}
 
 	getParamsForLink(): LinkParameters<FolderLinkParams> {
@@ -812,32 +911,77 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async upload(opts: OptionsToUploadLocal|undefined): Promise<void> {
-
-		// XXX temporary use of super's method
-		return super.upload(opts);
-
-		// const storage = this.syncedStorage();
-
-		// XXX
-		//  - use identifyChanges() to find changes, minding particular version,
-		//    ensuring that concurrent change won't mess things up.
-		//  - items not present in uploaded version, relative to latest sync,
-		//    i.e. removed, removal should be uploaded with
-		//    storage.uploadObjRemoval(objId);
-
+		try {
+			const toUpload = await this.needUpload(opts?.localVersion);
+			if (!toUpload) { return; }
+			if (toUpload.createOnRemote) {
+				await super.upload(opts);
+				return;
+			}
+			const storage = this.syncedStorage();
+			const { localVersion, uploadVersion } = toUpload;
+			const removedNodes = await this.getNodesRemovedBetweenVersions(
+				localVersion, uploadVersion - 1);
+			const uploadHeader = await this.uploadHeaderChange(
+				localVersion, uploadVersion);
+			await storage.upload(
+				this.objId, localVersion, uploadVersion, uploadHeader, false
+			);
+			if (removedNodes.length > 0) {
+				// start upload of children's removal after folder's upload;
+				// we also don't await for chidren removal
+				this.uploadRemovalOf(removedNodes);
+			}
+		} catch (exc) {
+			throw setPathInExc(exc, this.name);
+		}
 	}
 
+	private async uploadRemovalOf(removedNodes: NodeInfo[]): Promise<void> {
+		const storage = this.syncedStorage();
+		const rmObjs: ObjId[] = [];
+		for (const node of removedNodes) {
+			appendArray(rmObjs, await this.listRemovedInTreeToUploadRm(node));
+		}
+		await this.uploadRemovalOfObjs(rmObjs);
+	}
+
+	private async listRemovedInTreeToUploadRm(
+		node: NodeInfo
+	): Promise<ObjId[]|ObjId|undefined> {
+		const storage = this.syncedStorage();
+		let versionBeforeRm: number|undefined;
+		try {
+			const status = await storage.status(node.objId);
+			versionBeforeRm = status.versionBeforeUnsyncedRemoval();
+			if (!versionBeforeRm) { return; }
+		} catch (exc) {
+			if ((exc as StorageException).objNotFound
+			|| (exc as FileException).notFound) {
+				return;
+			}
+			throw exc;
+		}
+		if (node.isFolder) {
+			const objs = [ node.objId ];
+			const src = await storage.getObjSrc(node.objId, versionBeforeRm, true);
+			const folderContent = await FolderPersistance.readFolderContent(
+				node.objId, node.key, src, storage.cryptor
+			);
+			for (const child of Object.values(folderContent.nodes)) {
+				appendArray(objs, await this.listRemovedInTreeToUploadRm(child));
+			}
+			return objs;
+		} else {
+			return node.objId;
+		}
+	}
 
 	protected async needUpload(localVersion: number|undefined): Promise<{
 		localVersion: number; uploadVersion: number; createOnRemote: boolean;
 	}|undefined> {
 		const toUpload = await super.needUpload(localVersion);
 		if (!toUpload) { return; }
-
-		// XXX can put the following into private ensureAllChildrenUploaded(),
-		//     but it also need to get a consistent state, while current one can
-		//     be broken by simultaneous change in folder.
-
 		const storage = this.syncedStorage();
 		if (toUpload.localVersion === this.version) {
 			for (const { objId, name } of Object.values(this.currentState.nodes)) {
@@ -848,9 +992,35 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				}
 			}
 		} else {
-			throw new Error(`Reading particular version is not implemented, yet`);
+			throw makeFSSyncException(this.name, {
+				versionMismatch: true,
+				localVersion: toUpload.localVersion,
+				message: `Local version has concurrently changed from ${toUpload.localVersion} to current ${this.version}`
+			});
 		}
 		return toUpload;
+	}
+
+	private async getNodesRemovedBetweenVersions(
+		newVer: number, syncedVer: number
+	): Promise<NodeInfo[]> {
+		const storage = this.syncedStorage();
+		let stateToUpload: FolderInfo;
+		if (this.version === newVer) {
+			stateToUpload = this.currentState;
+		} else {
+			const localVerSrc = await storage.getObjSrcOfRemoteVersion(
+				this.objId, newVer
+			);
+			({ folderInfo: stateToUpload } = await this.crypto.read(localVerSrc));
+		}
+		const syncedVerSrc = await storage.getObjSrcOfRemoteVersion(
+			this.objId, syncedVer
+		);
+		const { folderInfo: syncedState } = await this.crypto.read(syncedVerSrc);
+		const { removedNodes } = identifyChanges(
+			syncedState.nodes, stateToUpload.nodes);
+		return removedNodes;
 	}
 
 	async adoptRemoteFolderItem(
@@ -900,10 +1070,11 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		if (!localNodeToRm) {
 			return await this.addRemoteChild(remoteChildNode);
 		} else if (localNodeToRm.objId === remoteChildNode.objId) {
-			return await this.setRemoteNodeInfo(remoteChildNode);
+			assert(typeOfNode(localNodeToRm) === typeOfNode(remoteChildNode));
+			// XXX
+			throw new Error(`Adaptation of changing keys needs implementation`);
 		} else {
-			return await this.replaceLocalChildWithRemote(
-				localNodeToRm, remoteChildNode);
+			return await this.replaceLocalChildWithRemote(remoteChildNode);
 		}
 	}
 
@@ -921,33 +1092,17 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			};
 			return { event, childObjId: remoteChildNode.objId };
 		});
-
-		// XXX child should update sync info, and adopt change.
-
-		return newVersion!;
-	}
-
-	private async setRemoteNodeInfo(remoteChildNode: NodeInfo): Promise<number> {
-		let newVersion: number;
-		await this.doTransition(async (state, version) => {
-			newVersion = version;
-			state.nodes[remoteChildNode.name] = remoteChildNode;
-			return [];
-		});
-
-		// XXX child should update sync info, and adopt change, cause changed key
-		//     requires changed cypher.
-
 		return newVersion!;
 	}
 
 	private async replaceLocalChildWithRemote(
-		origChildNode: NodeInfo, remoteChildNode: NodeInfo
+		remoteChildNode: NodeInfo
 	): Promise<number> {
+		let origChildNode: NodeInfo;
 		let newVersion: number;
 		await this.doTransition(async (state, version) => {
 			newVersion = version;
-			const presentNode = state.nodes[remoteChildNode.name];
+			origChildNode = state.nodes[remoteChildNode.name];
 			state.nodes[remoteChildNode.name] = remoteChildNode;
 			const additionEvent: EntryAdditionEvent = {
 				type: 'entry-addition',
@@ -967,14 +1122,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				{ event: additionEvent, childObjId: remoteChildNode.objId }
 			];
 		});
-
-		// XXX
-		//  remote child should update sync info, and adopt change. 
-		//  original child:
-		//  - if only local, should be removed,
-		//  - else should update sync info, and adopt both removal and change.
-
-		(await this.getOrMakeChildNodeForInfo(origChildNode)).removeObj('sync');
+		const origChild = await this.getOrMakeChildNodeForInfo(origChildNode!);
+		const removalsToUpload = (await this.removeChildrenObjsInSyncedStorage(
+			[ origChild ], 'sync', true))!;		
+		this.uploadRemovalOfObjs(removalsToUpload);
 		return newVersion!;
 	}
 
@@ -1091,6 +1242,13 @@ function nodeToListingEntry({ name, type }: Node): ListingEntry {
 		default:
 			return { name };
 	}
+}
+
+function typeOfNode(nodeInfo: NodeInfo): NodeType {
+	if (nodeInfo.isFolder) { return 'folder'; }
+	else if (nodeInfo.isFile) { return 'file'; }
+	else if (nodeInfo.isLink) { return 'link'; }
+	else { throw new Error(`Unknown type of node info`); }
 }
 
 function addToTransitionState(

@@ -16,9 +16,8 @@
 */
 
 import { FileException } from '../../../lib-common/exceptions/file';
-import { Observable, from, MonoTypeOperatorFunction } from 'rxjs';
+import { Observable, from } from 'rxjs';
 import { NamedProcs } from '../../../lib-common/processes/synced';
-import { sleep } from '../../../lib-common/processes/sleep';
 import { ObjId, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { ObjFolders, CanMoveObjToDeeperCache } from '../../../lib-client/objs-on-disk/obj-folders';
 import * as fs from '../../../lib-common/async-fs-node';
@@ -45,6 +44,12 @@ export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
 export const REMOTE_FILE_NAME_EXT = 'v';
 
 
+/**
+ * File system has nodes. Each node may have data in one or many objects of
+ * storage. SyncedObj allows to work with files of storage object, even when
+ * file system node no longer exists. ObjFiles is a holder and factory of
+ * SyncedObj's.
+ */
 export class ObjFiles {
 
 	private readonly objs = makeTimedCache<ObjId, SyncedObj>(60*1000);
@@ -65,8 +70,7 @@ export class ObjFiles {
 					this.objs.delete(obj.objId);
 				}
 			},
-			objId => this.folders.removeFolderOf(objId),
-			remote
+			objId => this.folders.removeFolderOf(objId)
 		);
 		Object.freeze(this);
 	}
@@ -74,25 +78,31 @@ export class ObjFiles {
 	static async makeFor(
 		path: string, remote: RemoteStorage, logError: LogError
 	): Promise<ObjFiles> {
-		const canMove: CanMoveObjToDeeperCache = async (objId, objFolderPath) => {
-			if (objFiles.objs.has(objId)) { return false; }
-			const lst = await fs.readdir(objFolderPath);
-			for (const fName of lst) {
-				if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)) { return false; }
-			}
-			try {
-				return (await ObjStatus.fileShowsObjNotInSyncedState(
-					objFolderPath, objId
-				));
-			} catch (exc) {
-				return false;
-			}
-		};
+		const canMove: CanMoveObjToDeeperCache = (
+			objId, objFolderPath
+		) => objFiles.canMoveObjToDeeperCache(objId, objFolderPath);
 		const folders = await ObjFolders.makeWithGenerations(
 			path, canMove, logError
 		);
 		const objFiles = new ObjFiles(folders, remote, logError);
 		return objFiles;
+	}
+
+	private async canMoveObjToDeeperCache(
+		objId: string, objFolderPath: string
+	): Promise<boolean> {
+		if (this.objs.has(objId)) { return false; }
+		const lst = await fs.readdir(objFolderPath);
+		for (const fName of lst) {
+			if (fName.endsWith(UNSYNCED_FILE_NAME_EXT)) { return false; }
+		}
+		try {
+			return (await ObjStatus.fileShowsObjNotInSyncedState(
+				objFolderPath, objId
+			));
+		} catch (exc) {
+			return false;
+		}
 	}
 
 	async findObj(objId: ObjId): Promise<SyncedObj|undefined> {
@@ -167,27 +177,25 @@ export class ObjFiles {
 		return { fileWrite$, newObj };
 	}
 
-	findUnsyncedObjs(): Observable<ObjId> {
+	findObjsToRemoveOnRemote(): Observable<ObjId> {
 		return from([undefined])
 		.pipe(
 			// listing recent folders, exactly once
 			mergeMap(() => this.folders.listRecent()),
 			// flatten array and space it in time, to process folders one by one
 			mergeMap(objsAndPaths => objsAndPaths),
-			filter(({ objId }) => !this.objs.has(objId)),
-			mergeMap(async objsAndPaths => {
-				await sleep(20);
-				return objsAndPaths;
+			mergeMap(async ({ objId, path }) => {
+				const obj = this.objs.get(objId);
+				if (obj) {
+					return (obj.statusObj().needsRemovalOnRemote() ?
+						objId : undefined);
+				} else {
+					const needsRm = await ObjStatus.fileShowsObjNeedsRemovalOnRemote(
+						path, objId);
+					return (needsRm ? objId : undefined);
+				}
 			}, 1),
-			// check, emiting objId, if not synced, and undefined, if synced
-			mergeMap(({ path, objId }) => this.sync(objId, async () => {
-				if (this.objs.has(objId)) { return; }
-				const notSynced =
-					await ObjStatus.fileShowsObjNotInSyncedState(path, objId)
-					.catch(notFoundOrReThrow).catch(this.logError);
-				return (notSynced ? objId : undefined);
-			})),
-			filter(objId => (objId !== undefined)) as MonoTypeOperatorFunction<ObjId>
+			filter<ObjId>(objId => (objId !== undefined))
 		);
 	}
 
@@ -198,6 +206,7 @@ export class ObjFiles {
 }
 Object.freeze(ObjFiles.prototype);
 Object.freeze(ObjFiles);
+
 
 export type SynchronizerOnObjId = <T> (
 	objId: ObjId, action: () => Promise<T>
@@ -444,7 +453,7 @@ export class SyncedObj {
 			await fs.rename(
 				this.localVerPath(localVersion), remotePath);
 		}
-		await this.status.markLocalVersionSynced(localVersion, uploadVersion);
+		await this.status.recordUploadCompletion(localVersion, uploadVersion);
 		this.scheduleSelfGC();
 	}
 
@@ -495,6 +504,11 @@ export class SyncedObj {
 
 	statusObj(): ObjStatus {
 		return this.status;
+	}
+
+	async recordRemovalUploadAndGC(): Promise<void> {
+		await this.status.recordRemoteRemovalCompletion();
+		this.scheduleSelfGC();
 	}
 
 }

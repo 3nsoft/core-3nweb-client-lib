@@ -20,7 +20,7 @@
  * reliance set, exposing to outside only file system's wrap.
  */
 
-import { makeFileException, Code as excCode, FileException, Code } from '../../../lib-common/exceptions/file';
+import { makeFileException, FileException } from '../../../lib-common/exceptions/file';
 import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject } from './file';
@@ -113,8 +113,7 @@ export class XspFS implements WritableFS {
 	}
 
 	private storage(): Storage {
-		if (!this.store) { throw makeFileException(
-			excCode.storageClosed, this.name); }
+		if (!this.store) { throw makeFileException('storageClosed', this.name); }
 		return this.store;
 	}
 	
@@ -211,8 +210,10 @@ export class XspFS implements WritableFS {
 		const folder = (await parentFolder.getFolder(folderName)
 		.catch(setExcPath(path)))!;
 		if (!removeContent && !folder.isEmpty()) {
-			throw makeFileException(excCode.notEmpty, path);
+			throw makeFileException('notEmpty', path);
 		}
+		// note that internal folder.delete() removes all children as a matter
+		// of not leaving inaccessible nodes, i.e. content is removed implicitly
 		await parentFolder.removeChild(folder);
 	}
 
@@ -316,11 +317,11 @@ export class XspFS implements WritableFS {
 		} else if (node.type === type) {
 			return true;
 		} else if (throwIfMissing) {
-			let code = '';
-			if (type === 'file') { code = excCode.notFile; }
-			else if (type === 'folder') { code = excCode.notDirectory; }
-			else if (type === 'link') { code = excCode.notLink; }
-			throw makeFileException(code, path);
+			switch (type) {
+				case 'file': throw makeFileException('notFile', path);
+				case 'folder': throw makeFileException('notDirectory', path);
+				case 'link': throw makeFileException('notLink', path);
+			}
 		} else {
 			return false;
 		}
@@ -510,14 +511,15 @@ export class XspFS implements WritableFS {
 	): Promise<WritableFile> {
 		const exists = await this.checkFilePresence(path);
 		if (exists) {
-			if (flags.create && flags.exclusive) { throw makeFileException(
-				excCode.alreadyExists, path); }
+			if (flags.create && flags.exclusive) {
+				throw makeFileException('alreadyExists', path);
+			}
 			const fNode = await this.v.getOrCreateFile(path, flags);
 			return wrapWritableFile(FileObject.makeExisting(
 				fNode, true
 			) as WritableFile);
 		} else {
-			if (!flags.create) { throw makeFileException(excCode.notFound, path); }
+			if (!flags.create) { throw makeFileException('notFound', path); }
 			return wrapWritableFile(FileObject.makeForNotExisiting(
 				posix.basename(path),
 				() => this.v.getOrCreateFile(path, flags),
@@ -648,8 +650,7 @@ class V implements WritableFSVersionedAPI, N {
 	}
 
 	getRootIfNotClosed(excPath: string): FolderNode {
-		if (!this.rootNode) { throw makeFileException(
-			excCode.storageClosed, excPath); }
+		if (!this.rootNode) { throw makeFileException('storageClosed', excPath); }
 		return this.rootNode;
 	}
 
@@ -663,7 +664,7 @@ class V implements WritableFSVersionedAPI, N {
 		.catch(setExcPath(path));
 		if (file) {
 			if (exclusive) {
-				throw makeFileException(excCode.alreadyExists, path);
+				throw makeFileException('alreadyExists', path);
 			}
 		} else {
 			file = await folder.createFile(fileName, !!exclusive);
@@ -747,7 +748,7 @@ class V implements WritableFSVersionedAPI, N {
 			const txt = (bytes ? utf8.open(bytes) : '');
 			return { txt, version };
 		} catch (err) {
-			throw makeFileException(excCode.parsingError, path, err);
+			throw makeFileException('parsingError', path, err);
 		}
 	}
 
@@ -764,7 +765,7 @@ class V implements WritableFSVersionedAPI, N {
 			const json = JSON.parse(txt);
 			return { json, version };
 		} catch (err) {
-			throw makeFileException(excCode.parsingError, path, err);
+			throw makeFileException('parsingError', path, err);
 		}
 	}
 
@@ -966,7 +967,7 @@ class S implements WritableFSSyncAPI {
 	private async getFolderNode(path: string): Promise<FolderNode> {
 		const node = await this.n.get(path);
 		if (node.type !== 'folder') {
-			throw makeFileException(Code.notDirectory, path);
+			throw makeFileException('notDirectory', path);
 		}
 		return node as FolderNode;
 	}

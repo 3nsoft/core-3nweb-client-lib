@@ -24,8 +24,6 @@ import { SingleProc } from "../../../lib-common/processes/synced";
 type WritableFS = web3n.files.WritableFS;
 type FileException = web3n.files.FileException;
 type RemoteEvent = web3n.files.RemoteEvent;
-type RemoteChangeEvent = web3n.files.RemoteChangeEvent;
-type RemoteRemovalEvent = web3n.files.RemoteRemovalEvent;
 type Observer<T> = web3n.Observer<T>;
 
 

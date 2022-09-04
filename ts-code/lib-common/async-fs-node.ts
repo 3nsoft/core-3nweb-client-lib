@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2019, 2021 3NSoft Inc.
+ Copyright (C) 2015 - 2019, 2021 - 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import { createReadStream, createWriteStream, statSync } from 'fs';
 import { Readable, Writable } from 'stream';
-import { FileException, Code as excCode, makeFileException } from './exceptions/file';
+import { FileException, Code as excCode, makeFileExceptionFromCode, makeFileException } from './exceptions/file';
 import { SingleProc } from './processes/synced';
 import { defer, Deferred } from './processes/deferred';
 import { BytesFIFOBuffer } from './byte-streaming/bytes-fifo-buffer';
@@ -31,7 +31,7 @@ export { FileException } from './exceptions/file';
 function makeFileExceptionFromNodes(
 	nodeExc: NodeJS.ErrnoException
 ): FileException {
-	return makeFileException(nodeExc.code!, nodeExc.path!);
+	return makeFileExceptionFromCode(nodeExc.code, nodeExc.path!);
 }
 
 export function readFile(
@@ -253,12 +253,15 @@ export function ftruncate(fd: number, size: number): Promise<void> {
 export async function readToBuf(
 	fd: number, pos: number, buf: Buffer
 ): Promise<void> {
-	if ((typeof pos !== 'number') || (pos < 0)) { throw new Error(
-		'Illegal file position given: '+pos); }
+	if ((typeof pos !== 'number') || (pos < 0)) {
+		throw new Error('Illegal file position given: '+pos);
+	}
 	let bytesRead = 0
 	while (bytesRead < buf.length) {
 		const bNum = await readOrig(fd, buf, bytesRead, buf.length-bytesRead, pos);
-		if (bNum === 0) { throw makeFileException(excCode.endOfFile, '<file descriptor>'); }
+		if (bNum === 0) {
+			throw makeFileException('endOfFile', '<file descriptor>');
+		}
 		bytesRead += bNum;
 		pos += bNum;
 	}
@@ -329,7 +332,7 @@ export async function createEmptyFile(
 		if (stats.isDirectory()) {
 			return true;
 		} else {
-			throw makeFileException(excCode.notDirectory, path);
+			throw makeFileException('notDirectory', path);
 		}
 	} catch (e) {
 		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
@@ -348,7 +351,7 @@ export function existsFolderSync(path: string): boolean {
 		if (statSync(path).isDirectory()) {
 			return true;
 		} else {
-			throw makeFileException(excCode.notDirectory, path);
+			throw makeFileException('notDirectory', path);
 		}
 	} catch (e) {
 		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
@@ -367,7 +370,7 @@ export function existsFileSync(path: string): boolean {
 		if (statSync(path).isFile()) {
 			return true;
 		} else {
-			throw makeFileException(excCode.notFile, path);
+			throw makeFileException('notFile', path);
 		}
 	} catch (e) {
 		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
@@ -527,7 +530,7 @@ export async function streamToExistingFile(
 	
 	src.on('end', () => {
 		if (doneReading) { return; }
-		complete(makeFileException(excCode.endOfFile, '<input stream>'));
+		complete(makeFileException('endOfFile', '<input stream>'));
 	});
 	
 	src.on('error', (err) => {
@@ -558,7 +561,9 @@ export async function read(
 	let bytesRead = 0
 	while (bytesRead < buf.length) {
 		const bNum = await readOrig(fd, buf, bytesRead, buf.length-bytesRead, pos);
-		if (bNum === 0) { throw makeFileException(excCode.endOfFile, '<file descriptor>'); }
+		if (bNum === 0) {
+			throw makeFileException('endOfFile', '<file descriptor>');
+		}
 		bytesRead += bNum;
 		pos += bNum;
 	}

@@ -24,7 +24,7 @@ import * as api from '../../lib-common/service-api/3nstorage/owner';
 import { ServiceUser, IGetMailerIdSigner } from '../user-with-mid-session';
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
-import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc } from './exceptions';
+import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from './exceptions';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from './xsp-fs/common';
 import { assert } from '../../lib-common/assert';
@@ -32,14 +32,25 @@ import { assert } from '../../lib-common/assert';
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
 
+function toInitServiceUriGetter(
+	net: NetClient, mainUrlGetter: () => Promise<string>
+): () => Promise<string> {
+	return async () => {
+		const serviceUrl = await mainUrlGetter();
+		const info = await storageInfoAt(net, serviceUrl);
+		if (!info.owner) { throw new Error(`Missing owner service url in 3NStorage information at ${serviceUrl}`); }
+		return info.owner;
+	};
+}
+
+
 export class StorageOwner extends ServiceUser {
 	
 	maxChunkSize: number|undefined = undefined;
 	
-	constructor(
-		user: string, getSigner: IGetMailerIdSigner,
-		mainUrlGetter: () => Promise<string>,
-		net: NetClient
+	private constructor(
+		user: string, getSigner: IGetMailerIdSigner|undefined,
+		getInitServiceURI: () => Promise<string>, net: NetClient
 	) {
 		super(user,
 			{
@@ -48,14 +59,33 @@ export class StorageOwner extends ServiceUser {
 				canBeRedirected: true
 			},
 			getSigner,
-			async (): Promise<string> => {
-				const serviceUrl = await mainUrlGetter();
-				const info = await storageInfoAt(this.net, serviceUrl);
-				if (!info.owner) { throw new Error(`Missing owner service url in 3NStorage information at ${serviceUrl}`); }
-				return info.owner;
-			},
-			net);
+			getInitServiceURI,
+			net
+		);
 		Object.seal(this);
+	}
+
+	static make(
+		user: string, getSigner: IGetMailerIdSigner,
+		mainUrlGetter: () => Promise<string>, net: NetClient
+	): StorageOwner {
+		const srvUriGetter = toInitServiceUriGetter(net, mainUrlGetter);
+		const remote = new StorageOwner(user, getSigner, srvUriGetter, net);
+		return remote;
+	}
+
+	static makeBeforeMidSetup(
+		user: string,
+		mainUrlGetter: () => Promise<string>, net: NetClient
+	): {
+		remote: StorageOwner; setMid: (getSigner: IGetMailerIdSigner) => void;
+	} {
+		const srvUriGetter = toInitServiceUriGetter(net, mainUrlGetter);
+		const remote = new StorageOwner(user, undefined, srvUriGetter, net);
+		return {
+			remote,
+			setMid: getSigner => remote.setGetterOfSigner(getSigner)
+		};
 	}
 
 	async getKeyDerivParams(): Promise<keyGen.ScryptGenParams> {
@@ -167,7 +197,7 @@ export class StorageOwner extends ServiceUser {
 				segsChunk: rep.data.subarray(headerLen)
 			};
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!, undefined, true);
+			throw makeObjNotFoundExc(objId!, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
@@ -202,7 +232,7 @@ export class StorageOwner extends ServiceUser {
 				`Malformed response: body is not binary`); }
 			return rep.data;
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!, undefined, true);
+			throw makeObjNotFoundExc(objId!, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
@@ -275,7 +305,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.currentObj.SC.objAlreadyExists) {
 			throw makeObjExistsExc(objId!, undefined, true);
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!, undefined, true);
+			throw makeObjNotFoundExc(objId!, true);
 		} else if (rep.status === api.currentObj.SC.concurrentTransaction) {
 			throw makeConcurrentTransExc(objId!);
 		} else if (rep.status === api.currentObj.SC.unknownTransaction) {
@@ -300,9 +330,9 @@ export class StorageOwner extends ServiceUser {
 		if (rep.status === api.archiveObj.SC.okPost) {
 			return;
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!, undefined, true);
+			throw makeObjNotFoundExc(objId!, true);
 		} else if (rep.status === api.currentObj.SC.unknownObjVer) {
-			throw makeObjNotFoundExc(objId!, currentVer, true);
+			throw makeObjVersionNotFoundExc(objId!, currentVer, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}
@@ -320,7 +350,7 @@ export class StorageOwner extends ServiceUser {
 			// XXX we may want to add sanity check(s)
 			return rep.data;
 		} else if (rep.status === api.objStatus.SC.unknownObj) {
-			throw makeObjNotFoundExc(objId!, undefined, true);
+			throw makeObjNotFoundExc(objId!, true);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

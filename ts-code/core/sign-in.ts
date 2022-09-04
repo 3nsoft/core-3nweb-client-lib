@@ -26,17 +26,16 @@ import { ErrorWithCause, errWithCause } from '../lib-common/exceptions/error';
 export type GenerateKey  =
 	(derivParams: ScryptGenParams) => Promise<Uint8Array>;
 
-export type StartInitWithoutCache =
-	(address: string) => Promise<CompleteInitWithoutCache|undefined>;
-export type CompleteInitWithoutCache =
-	(midLoginKey: GenerateKey, storageKey: GenerateKey) =>
-	Promise<IdManager|undefined>;
+export type StartInitWithoutCache = (
+	address: string
+) => Promise<CompleteInitWithoutCache|undefined>;
+export type CompleteInitWithoutCache = (
+	midLoginKey: GenerateKey, storageKey: GenerateKey
+) => Promise<IdManager|undefined>;
 
-export type InitWithCache =
-	(address: string, storageKey: GenerateKey) =>
-	Promise<IdManager|undefined|InitTwoWithCache>;
-export type InitTwoWithCache =
-	(midLoginKey: GenerateKey) => Promise<IdManager|undefined>;
+export type InitWithCache = (
+	address: string, storageKey: GenerateKey
+) => Promise<IdManager|undefined>;
 
 type SignInService = web3n.startup.SignInService;
 
@@ -113,27 +112,15 @@ export class SignIn {
 		try {
 			const storeKeyProgressCB = makeKeyGenProgressCB(0, 99, progressCB);
 			const storeKeyGen = params => deriveStorageSKey(
-				this.cryptor, pass, params, storeKeyProgressCB);
-			const res = await this.initWithCache(user, storeKeyGen);
-
-			if (!res) { return false; }
-
-			if (typeof res === 'object') {
-				this.doneBroadcast.next(res);
+				this.cryptor, pass, params, storeKeyProgressCB
+			);
+			const idManager = await this.initWithCache(user, storeKeyGen);
+			if (idManager) {
+				this.doneBroadcast.next(idManager);
 				return true;
+			} else {
+				return false;
 			}
-
-			progressCB(49);
-			const midKeyProgressCB = makeKeyGenProgressCB(50, 99, progressCB);
-			const midKeyGen = async (params: ScryptGenParams) => (
-				await deriveMidKeyPair(this.cryptor, pass, params, midKeyProgressCB)
-			).skey;
-			const idManager = await res(midKeyGen);
-
-			if (!idManager) { return false; }
-
-			this.doneBroadcast.next(idManager);
-			return true;
 		} catch(err) {
 			throw await this.logAndWrap(err,
 				'Failing to start in a state with cache');

@@ -20,7 +20,7 @@ import { defer, Deferred } from '../processes/deferred';
 import { DiffInfo } from '../service-api/3nstorage/owner';
 import { ObjVersionFile } from './obj-file';
 import { Readable } from 'stream';
-import { makeFileException, Code as excCode } from '../exceptions/file';
+import { makeFileException } from '../exceptions/file';
 import { assert } from '../assert';
 import { BytesFIFOBuffer } from '../byte-streaming/bytes-fifo-buffer';
 
@@ -124,7 +124,7 @@ export async function streamToObjFile(
 	
 	src.on('end', () => {
 		if (chunk) {
-			complete(makeFileException(excCode.endOfFile, '<input stream>'));
+			complete(makeFileException('endOfFile', '<input stream>'));
 		} else {
 			complete();
 		}
