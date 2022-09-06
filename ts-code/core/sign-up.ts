@@ -132,7 +132,8 @@ export class SignUp {
 		'getAvailableAddresses'
 	] = async (name, signupToken) => {
 		const addresses = await checkAvailableAddressesForName(
-			this.net, this.serviceURL, name, signupToken);
+			this.net, this.serviceURL, name, signupToken
+		);
 		return addresses;
 	};
 
@@ -154,9 +155,11 @@ export class SignUp {
 			salt: base64.pack(await random.bytes(SALT_LEN))
 		};
 		const progressCB = makeKeyGenProgressCB(
-			progressStart, progressEnd, originalProgressCB);
+			progressStart, progressEnd, originalProgressCB
+		);
 		const skey = await keyDeriv.deriveStorageSKey(this.cryptor,
-			pass, derivParams, progressCB);
+			pass, derivParams, progressCB
+		);
 		this.store = {
 			skey: skey,
 			params: {
@@ -176,9 +179,11 @@ export class SignUp {
 			salt: base64.pack(await random.bytes(SALT_LEN))
 		}
 		const progressCB = makeKeyGenProgressCB(
-			progressStart, progressEnd, originalProgressCB);
-		const defaultPair = await keyDeriv.deriveMidKeyPair(this.cryptor,
-			pass, derivParams, progressCB, keyUse.MID_PKLOGIN, '_');
+			progressStart, progressEnd, originalProgressCB
+		);
+		const defaultPair = await keyDeriv.deriveMidKeyPair(
+			this.cryptor, pass, derivParams, progressCB, keyUse.MID_PKLOGIN, '_'
+		);
 		const labeledKey = await makeLabeledMidLoginKey(this.cryptor);
 		this.mid = {
 			defaultSKey: defaultPair.skey,
@@ -195,8 +200,9 @@ export class SignUp {
 
 	private addUser: SignUpService['addUser'] = async (address, signupToken) => {
 		for (const user of await this.getUsersOnDisk()) {
-			if (areAddressesEqual(address, user)) { throw new Error(
-				`Account ${user} already exists on a disk.`); }
+			if (areAddressesEqual(address, user)) {
+				throw new Error(`Account ${user} already exists on a disk.`);
+			}
 		}
 		const accountCreated = await addUser(this.net, this.serviceURL, {
 			userId: address,
@@ -204,8 +210,9 @@ export class SignUp {
 			storage: this.store.params,
 			signupToken
 		}).catch (async err => {
-			throw await this.logAndWrap(err,
-				`Failed to create user account ${address}.`);
+			throw await this.logAndWrap(
+				err, `Failed to create user account ${address}.`
+			);
 		});
 		if (!accountCreated) { return false; }
 		this.doneBroadcast.next({

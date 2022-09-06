@@ -102,8 +102,20 @@ message FileEventMsg {
 
 // ==== ReadonlyFileVersionedAPI referable object ====
 
+message VersionedReadFlags {
+	common.UInt64Value archived_version = 1;
+	common.UInt64Value remote_version = 2;
+}
+
+message RequestWithVersionedReadFlags {
+	VersionedReadFlags flags = 1;
+}
+
 // --- ReadonlyFileVersionedAPI.getXAttr ---
-// Request body is GetXAttrRequestBody
+message VersionedGetXAttrRequestBody {
+	string xa_name = 1;
+	VersionedReadFlags flags = 2;
+}
 message VersionedGetXAttrReplyBody {
 	uint64 version = 1;
 	common.StringValue str = 2;
@@ -112,35 +124,39 @@ message VersionedGetXAttrReplyBody {
 }
 
 // --- ReadonlyFileVersionedAPI.listXAttrs ---
-// Request body is empty
+// Request body is RequestWithVersionedReadFlags
 message VersionedListXAttrsReplyBody {
 	uint64 version = 1;
 	repeated string xa_names = 2;
 }
 
 // --- ReadonlyFileVersionedAPI.readBytes ---
-// Request body is ReadBytesRequestBody
+message VersionedReadBytesRequestBody {
+	common.UInt64Value start = 1;
+	common.UInt64Value end = 2;
+	VersionedReadFlags flags = 10;
+}
 message VersionedReadBytesReplyBody {
 	uint64 version = 1;
 	common.BytesValue bytes = 2;
 }
 
 // --- ReadonlyFileVersionedAPI.readTxt ---
-// Request body is empty
+// Request body is RequestWithVersionedReadFlags
 message VersionedReadTxtReplyBody {
 	uint64 version = 1;
 	string txt = 2;
 }
 
 // --- ReadonlyFileVersionedAPI.readJSON ---
-// Request body is empty
+// Request body is RequestWithVersionedReadFlags
 message VersionedReadJsonReplyBody {
 	uint64 version = 1;
 	string json = 2;
 }
 
 // --- ReadonlyFileVersionedAPI.getByteSource ---
-// Request body is empty
+// Request body is RequestWithVersionedReadFlags
 message VersionedGetByteSourceReplyBody {
 	uint64 version = 1;
 	// src is a reference to FileByteSource
@@ -148,7 +164,7 @@ message VersionedGetByteSourceReplyBody {
 }
 
 // --- ReadonlyFileVersionedAPI.listVersions ---
-// Request body is empty
+// Request body is RequestWithVersionedReadFlags
 message ListVersionsReplyBody {
 	common.UInt64Value current = 1;
 	repeated uint64 archived = 2;

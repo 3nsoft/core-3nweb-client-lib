@@ -39,6 +39,7 @@ import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/ser
 import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { saveUploadHeaderFile } from './upload-header-file';
 import { noop } from '../common/utils';
+import { makeObjVersionNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
 
 export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
 export const REMOTE_FILE_NAME_EXT = 'v';
@@ -332,11 +333,14 @@ export class SyncedObj {
 		objVer = ((await isOnDisk(fPath)) ?
 			await ObjOnDisk.forExistingFile(
 				this.objId, version, fPath,
-				this.downloader, this.remoteObjSegsGetterFromDisk) :
+				this.downloader, this.remoteObjSegsGetterFromDisk
+			) :
 			await ObjOnDisk.createFileForExistingVersion(
 				this.objId, version, fPath,
-				this.downloader, this.remoteObjSegsGetterFromDisk));
-			this.remoteVers.set(version, objVer);
+				this.downloader, this.remoteObjSegsGetterFromDisk
+			)
+		);
+		this.remoteVers.set(version, objVer);
 		return objVer;
 	}
 
@@ -363,7 +367,8 @@ export class SyncedObj {
 			try {
 				objVer = await ObjOnDisk.forExistingFile(
 					this.objId, v, this.remoteVerPath(v), this.downloader,
-					this.remoteObjSegsGetterFromDisk);
+					this.remoteObjSegsGetterFromDisk
+				);
 				this.remoteVers.set(v, objVer);
 			} catch (exc) {
 				// when file doesn't exist on a disk, we just pass a chunk
@@ -393,7 +398,8 @@ export class SyncedObj {
 				}
 			}),
 			flatTap(undefined, undefined,
-				() => this.setUnsyncedCurrentVersion(version, obj.getBaseVersion()))
+				() => this.setUnsyncedCurrentVersion(version, obj.getBaseVersion())
+			)
 		);
 		return { fileWrite$, baseVer: obj.getBaseVersion() };
 	}
@@ -406,7 +412,8 @@ export class SyncedObj {
 			const objVer = await this.instanceOfLocalObjVer(version);
 			for (const localBase of localBases) {
 				await objVer.absorbImmediateBaseVersion(
-					localBase, this.localVerPath(localBase));
+					localBase, this.localVerPath(localBase)
+				);
 				this.status.absorbLocalVersionBase(version, localBase);
 			}
 		}
@@ -450,8 +457,8 @@ export class SyncedObj {
 			);
 			this.remoteVers.set(uploadVersion, syncedVerObj);
 		} else {
-			await fs.rename(
-				this.localVerPath(localVersion), remotePath);
+			const localPath = this.localVerPath(localVersion);
+			await fs.rename(localPath, remotePath);
 		}
 		await this.status.recordUploadCompletion(localVersion, uploadVersion);
 		this.scheduleSelfGC();
@@ -509,6 +516,23 @@ export class SyncedObj {
 	async recordRemovalUploadAndGC(): Promise<void> {
 		await this.status.recordRemoteRemovalCompletion();
 		this.scheduleSelfGC();
+	}
+
+	async isRemoteVersionOnDisk(
+		version: number
+	): Promise<'complete'|'partial'|'none'> {
+		if (!this.status.isAmongRemote(version)) {
+			throw makeObjVersionNotFoundExc(this.objId, version);
+		}
+		const verPath = this.remoteVerPath(version);
+		if (!(await isOnDisk(verPath))) { return 'none'; }
+		const objVer = await this.instanceOfRemoteObjVer(version);
+		return (objVer.doesFileNeedDownload() ? 'complete' : 'partial');
+	}
+
+	async downloadRemoteVersion(version: number): Promise<void> {
+		const objVer = await this.instanceOfRemoteObjVer(version);
+		await objVer.downloadMissingSections();
 	}
 
 }

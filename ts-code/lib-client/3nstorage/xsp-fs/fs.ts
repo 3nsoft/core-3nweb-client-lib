@@ -32,7 +32,7 @@ import { pipe } from '../../../lib-common/byte-streaming/pipe';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { from, Observable } from 'rxjs';
 import { filter, map, mergeMap, takeUntil } from 'rxjs/operators';
-import { NodeInFS } from './node-in-fs';
+import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
 import { Broadcast, toRxObserver } from '../../../lib-common/utils-for-observables';
 
 function splitPathIntoParts(path: string): string[] {
@@ -74,7 +74,8 @@ type FSCollection = web3n.files.FSCollection;
 type FileFlags = web3n.files.FileFlags;
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
-type VersionedFileFlags = web3n.files.VersionedFileFlags;
+type VersionedFileFlags = web3n.files.VersionedFileWriteFlags;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type WritableFSSyncAPI = web3n.files.WritableFSSyncAPI;
 type SyncStatus = web3n.files.SyncStatus;
@@ -676,7 +677,8 @@ class V implements WritableFSVersionedAPI, N {
 		const { fileName, folderPath } = split(path);
 		const root = this.getRootIfNotClosed(path);
 		const folder = await root.getFolderInThisSubTree(
-			folderPath, false).catch(setExcPath(path));
+			folderPath, false
+		).catch(setExcPath(path));
 		if (fileName === undefined) { return root; }
 		const node = await folder.getNode(undefined, fileName)
 		.catch(setExcPath(path));
@@ -694,30 +696,29 @@ class V implements WritableFSVersionedAPI, N {
 	}
 
 	async getXAttr(
-		path: string, xaName: string
+		path: string, xaName: string, flags?: VersionedReadFlags
 	): Promise<{ attr: any; version: number; }> {
 		const node = await this.get(path);
-		const attr = node.getXAttr(xaName);
-		return { attr, version: node.version };
+		return await node.getXAttr(xaName, flags);
 	}
 
 	async listXAttrs(
-		path: string
+		path: string, flags?: VersionedReadFlags
 	): Promise<{ lst: string[]; version: number; }> {
 		const node = await this.get(path);
-		return {
-			lst: node.listXAttrs(),
-			version: node.version
-		};
+		return node.listXAttrs(flags);
 	}
 
 	async listFolder(
-		path: string
+		path: string, flags?: VersionedReadFlags
 	): Promise<{ lst: ListingEntry[]; version: number; }> {
 		const root = this.getRootIfNotClosed(path);
 		const folder = await root.getFolderInThisSubTree(
-			splitPathIntoParts(path), false).catch(setExcPath(path));
-		return folder.list();
+			splitPathIntoParts(path), false
+		).catch(setExcPath(path));
+		return (shouldReadCurrentVersion(flags) ?
+			folder.list() :
+			folder.listNonCurrent(flags!));
 	}
 
 	async writeBytes(
@@ -729,10 +730,11 @@ class V implements WritableFSVersionedAPI, N {
 	}
 
 	async readBytes(
-		path: string, start?: number, end?: number
+		path: string, start?: number, end?: number,
+		flags?: VersionedReadFlags
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
 		const file = await this.getOrCreateFile(path, {});
-		return await file.readBytes(start, end);
+		return await file.readBytes(start, end, flags);
 	}
 
 	writeTxtFile(
@@ -742,8 +744,12 @@ class V implements WritableFSVersionedAPI, N {
 		return this.writeBytes(path, bytes, flags);
 	}
 
-	async readTxtFile(path: string): Promise<{ txt: string; version: number; }> {
-		const { bytes, version } = await this.readBytes(path);
+	async readTxtFile(
+		path: string, flags?: VersionedReadFlags
+	): Promise<{ txt: string; version: number; }> {
+		const {
+			bytes, version
+		} = await this.readBytes(path, undefined, undefined, flags);
 		try {
 			const txt = (bytes ? utf8.open(bytes) : '');
 			return { txt, version };
@@ -759,8 +765,10 @@ class V implements WritableFSVersionedAPI, N {
 		return this.writeTxtFile(path, txt, flags);
 	}
 
-	async readJSONFile<T>(path: string): Promise<{ json: T; version: number; }> {
-		const { txt, version } = await this.readTxtFile(path);
+	async readJSONFile<T>(
+		path: string, flags?: VersionedReadFlags
+	): Promise<{ json: T; version: number; }> {
+		const { txt, version } = await this.readTxtFile(path, flags);
 		try {
 			const json = JSON.parse(txt);
 			return { json, version };
@@ -778,10 +786,10 @@ class V implements WritableFSVersionedAPI, N {
 	}
 
 	async getByteSource(
-		path: string
+		path: string, flags?: VersionedReadFlags
 	): Promise<{ src: FileByteSource; version: number; }> {
 		const f = await this.getOrCreateFile(path, {});
-		return f.readSrc();
+		return f.readSrc(flags);
 	}
 
 }

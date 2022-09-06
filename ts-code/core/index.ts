@@ -122,7 +122,8 @@ export class Core {
 	private initForNewUser = async (u: CreatedUser): Promise<IdManager> => {
 		// 1) init of id manager without setting fs
 		const stepTwo = await IdManager.initWithoutStore(
-			u.address, this.makeResolver('mailerid'), () => this.makeNet(), this.logger.logError, this.logger.logWarning
+			u.address, this.makeResolver('mailerid'), () => this.makeNet(),
+			this.logger.logError, this.logger.logWarning
 		);
 		if (!stepTwo) {
 			throw new Error(`MailerId server doesn't recognize identity ${u.address}`);
@@ -229,7 +230,8 @@ export class Core {
 			const {
 				cap: storage, close
 			} = this.storages.makeStorageCAP(
-				appDomain, makeStoragePolicy(appDomain, requestedCAPs));
+				appDomain, makeStoragePolicy(appDomain, requestedCAPs)
+			);
 			return { storage, close };
 		} else {
 			return { close: () => {} };
@@ -251,7 +253,8 @@ export class Core {
 	): W3N['log'] {
 		if (requestedCAPs.log === 'all') {
 			return (type, msg, e) => this.logger.appLog(
-				type, appDomain, msg, e);
+				type, appDomain, msg, e
+			);
 		} else {
 			return undefined;
 		}
@@ -290,9 +293,11 @@ export class Core {
 		try {
 			this.idManager = idManager;
 			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
-				ASMAIL_APP_NAME);
+				ASMAIL_APP_NAME
+			);
 			const inboxLocalFS = await this.storages.makeLocalFSForApp(
-				ASMAIL_APP_NAME);
+				ASMAIL_APP_NAME
+			);
 			await this.asmail.init(
 				this.idManager.getId(), this.idManager.getSigner,
 				inboxSyncedFS, inboxLocalFS,
@@ -332,8 +337,8 @@ function makeStoragePolicy(
 	} else if (Array.isArray(capReq.appFS)) {
 		const okDomains = capReq.appFS
 		.filter(fsInfo =>
-			(fsInfo.domain === appDomain) ||
-			fsInfo.domain.endsWith('.'+appDomain))
+			(fsInfo.domain === appDomain) || fsInfo.domain.endsWith('.'+appDomain)
+		)
 		.map(fsInfo => jsonCopy(fsInfo));
 		policy = {
 			canOpenAppFS: severalDomainsAppFSChecker(okDomains)

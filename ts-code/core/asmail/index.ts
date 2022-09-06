@@ -17,7 +17,7 @@
 
 import { InboxOnServer } from './inbox';
 import { errWithCause } from '../../lib-common/exceptions/error';
-import { KeyRing } from './keyring';
+import { KeyRing, makeAndKeyRing } from './keyring';
 import { ConfigOfASMailServer } from './config';
 import { InboxPathForUser } from '../app-files';
 import { Delivery } from './delivery';
@@ -25,7 +25,6 @@ import { StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
 import { GetSigner } from '../id-manager';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { SendingParamsHolder } from './sending-params';
-import { NetClient } from '../../lib-client/request-utils';
 import { Logger } from '../../lib-client/logging/log-to-file';
 import { ServiceLocator, ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
@@ -44,25 +43,23 @@ export type MailCAPMaker = () => Service;
 
 
 export class ASMail {
-	
+
 	private keyring: KeyRing = (undefined as any);
 	private address: string = (undefined as any);
 	private inbox: InboxOnServer = (undefined as any);
 	private delivery: Delivery = (undefined as any);
 	private config: ConfigOfASMailServer = (undefined as any);
 	private sendingParams: SendingParamsHolder = (undefined as any);
-	private readonly makeNet: () => NetClient;
-	
+
 	constructor(
 		private readonly cryptor: AsyncSBoxCryptor,
-		makeNet: MakeNet,
+		private readonly makeNet: MakeNet,
 		private readonly inboxPathForUser: InboxPathForUser,
 		private readonly logger: Logger
 	) {
-		this.makeNet = () => makeNet();
 		Object.seal(this);
 	}
-	
+
 	async init(
 		address: string, getSigner: GetSigner,
 		syncedFS: WritableFS, localFS: WritableFS,
@@ -98,21 +95,26 @@ export class ASMail {
 	): Promise<void> {
 		const fs = await getOrMakeAndUploadFolderIn(syncedFS, CONFIG_DATA_FOLDER);
 		this.config = await ConfigOfASMailServer.makeAndStart(
-			this.address, getSigner, resolver, this.makeNet(), fs);
+			this.address, getSigner, resolver, this.makeNet(), fs
+		);
 	}
 
 	private async setupKeyring(syncedFS: WritableFS): Promise<void> {
 		const fs = await getOrMakeAndUploadFolderIn(
-			syncedFS, KEYRING_DATA_FOLDER);
-		this.keyring = await KeyRing.makeAndStart(
-			this.cryptor, fs, this.config.publishedKeys);
+			syncedFS, KEYRING_DATA_FOLDER
+		);
+		this.keyring = await makeAndKeyRing(
+			this.cryptor, fs, this.config.publishedKeys
+		);
 	}
 
 	private async setupSendingParams(syncedFS: WritableFS): Promise<void> {
 		const fs = await getOrMakeAndUploadFolderIn(
-			syncedFS, SEND_PARAMS_DATA_FOLDER);
+			syncedFS, SEND_PARAMS_DATA_FOLDER
+		);
 		this.sendingParams = await SendingParamsHolder.makeAndStart(
-			fs, this.config.anonSenderInvites);
+			fs, this.config.anonSenderInvites
+		);
 	}
 
 	private async setupDelivery(
@@ -172,11 +174,11 @@ export class ASMail {
 		};
 		return Object.freeze(w);
 	};
-	
+
 	async close(): Promise<void> {
 		await this.keyring.close();
 	}
-	
+
 }
 Object.freeze(ASMail.prototype);
 Object.freeze(ASMail);

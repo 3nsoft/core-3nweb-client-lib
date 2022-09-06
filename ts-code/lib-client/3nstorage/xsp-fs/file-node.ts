@@ -34,6 +34,7 @@ import { NodePersistance, ReadonlyPayload } from './node-persistence';
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 
 interface FileAttrs {
 	attrs: CommonAttrs;
@@ -60,20 +61,14 @@ class FilePersistance extends NodePersistance {
 		return await fileAttrsFrom(payload);
 	}
 
-	async getFileSource(objSrc: ObjSource, getAttrs = false): Promise<{
-		src: FileByteSource; fileAttrs?: FileAttrs;
-	}> {
+	async getFileSource(objSrc: ObjSource): Promise<FileByteSource> {
 		const payload = await this.readonlyPayload(objSrc);
-		const src = payload.makeFileByteSource();
-		return (getAttrs ?
-			{ src, fileAttrs: await fileAttrsFrom(payload) } :
-			{ src });
+		return payload.makeFileByteSource();
 	}
 
 	async readBytes(
-		objSrc: ObjSource, start: number|undefined, end: number|undefined,
-		getAttrs = false
-	): Promise<{ bytes?: Uint8Array; fileAttrs?: FileAttrs; }> {
+		objSrc: ObjSource, start: number|undefined, end: number|undefined
+	): Promise<Uint8Array|undefined> {
 		if ((typeof start === 'number') && (start < 0)) { throw new Error(
 			`Parameter start has bad value: ${start}`); }
 		if ((typeof end === 'number') && (end < 0)) { throw new Error(
@@ -84,21 +79,17 @@ class FilePersistance extends NodePersistance {
 			start = 0;
 			end = size;
 		} else if (start >= size) {
-			return (getAttrs ? { fileAttrs: await fileAttrsFrom(payload) } : {});
+			return;
 		}
 		if (typeof end === 'number') {
 			end = Math.min(size, end);
 			if (end <= start) {
-				return (getAttrs ?
-					{ fileAttrs: await fileAttrsFrom(payload) } : {});
+				return;
 			}
 		} else {
 			end = size;
 		}
-		const bytes = await payload.readSomeContentBytes(start, end);
-		return (getAttrs ?
-			{ bytes, fileAttrs: await fileAttrsFrom(payload) } :
-			{ bytes });
+		return await payload.readSomeContentBytes(start, end);
 	}
 
 	async saveBytes(
@@ -199,48 +190,55 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		return this.fileSize;
 	}
 
-	async readSrc(): Promise<{ src: FileByteSource; version: number; }> {
-		const objSrc = await this.storage.getObjSrc(this.objId);
-		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
-			const version = objSrc.version;
-			if (this.version < version) {
-				const {
-					src, fileAttrs
-				} = await this.crypto.getFileSource(objSrc, true);
-				this.setUpdatedState(version, fileAttrs!);
-				return { src, version };
-			} else {
-				const { src } = await this.crypto.getFileSource(objSrc);
-				return { src, version };
-			}
+	async readSrc(
+		flags: VersionedReadFlags|undefined
+	): Promise<{ src: FileByteSource; version: number; }> {
+		const objSrc = await this.getObjSrcOfVersion(flags);
+		let version: number;
+		if ((this.storage.type === 'synced')
+		|| (this.storage.type === 'local')
+		|| (this.storage.type === 'share')) {
+			version = objSrc.version;
 		} else {
-			const { src } = await this.crypto.getFileSource(objSrc);
-			// unversioned storage passes undefined version
-			return { src, version: (undefined as any) };
+			version = (undefined as any);
 		}
+		const src = await this.crypto.getFileSource(objSrc);
+		return { src, version };
 	}
 
 	async readBytes(
-		start: number|undefined, end: number|undefined
+		start: number|undefined, end: number|undefined,
+		flags: VersionedReadFlags|undefined
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
-		const objSrc = await this.storage.getObjSrc(this.objId);
-		if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
-			const version = objSrc.version;
-			if (this.version < version) {
-				const {
-					bytes, fileAttrs
-				} = await this.crypto.readBytes(objSrc, start, end, true);
-				this.setUpdatedState(version, fileAttrs!);
-				return { bytes, version };
-			} else {
-				const { bytes } = await this.crypto.readBytes(objSrc, start, end);
-				return { bytes, version };
-			}
+		const objSrc = await this.getObjSrcOfVersion(flags);
+		let version: number;
+		if ((this.storage.type === 'synced')
+		|| (this.storage.type === 'local')
+		|| (this.storage.type === 'share')) {
+			version = objSrc.version;
 		} else {
-			const { bytes } = await this.crypto.readBytes(objSrc, start, end);
-			// unversioned storage passes undefined version
-			return { bytes, version: (undefined as any) };
+			version = (undefined as any);
 		}
+		const bytes = await this.crypto.readBytes(objSrc, start, end);
+		return { bytes, version };
+
+		// if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
+		// 	const version = objSrc.version;
+		// 	if (this.version < version) {
+		// 		const {
+		// 			bytes, fileAttrs
+		// 		} = await this.crypto.readBytes(objSrc, start, end, true);
+		// 		// this.setUpdatedState(version, fileAttrs!);
+		// 		return { bytes, version };
+		// 	} else {
+		// 		const { bytes } = await this.crypto.readBytes(objSrc, start, end);
+		// 		return { bytes, version };
+		// 	}
+		// } else {
+		// 	const { bytes } = await this.crypto.readBytes(objSrc, start, end);
+		// 	// unversioned storage passes undefined version
+		// 	return { bytes, version: (undefined as any) };
+		// }
 	}
 
 	async writeSink(

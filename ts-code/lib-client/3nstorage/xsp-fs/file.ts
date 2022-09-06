@@ -42,6 +42,7 @@ type SyncStatus = web3n.files.SyncStatus;
 type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 
 
 export class FileObject implements WritableFile, Linkable {
@@ -215,20 +216,18 @@ class V implements WritableFileVersionedAPI, N {
 		return node.updateXAttrs(changes);
 	}
 
-	async getXAttr(xaName: string): Promise<{ attr: any; version: number; }> {
+	async getXAttr(
+		xaName: string, flags?: VersionedReadFlags
+	): Promise<{ attr: any; version: number; }> {
 		const node = await this.getNode();
-		return {
-			attr: node.getXAttr(xaName),
-			version: node.version
-		};
+		return await node.getXAttr(xaName, flags);
 	}
 
-	async listXAttrs(): Promise<{ lst: string[]; version: number; }> {
+	async listXAttrs(
+		flags?: VersionedReadFlags
+	): Promise<{ lst: string[]; version: number; }> {
 		const node = await this.getNode();
-		return {
-			lst: node.listXAttrs(),
-			version: node.version
-		};
+		return await node.listXAttrs(flags);
 	}
 
 	async getLinkParams(): Promise<LinkParameters<FileLinkParams>> {
@@ -248,9 +247,11 @@ class V implements WritableFileVersionedAPI, N {
 		return node.writeSink(truncate, currentVersion);
 	}
 	
-	async getByteSource(): Promise<{ src: FileByteSource; version: number; }> {
+	async getByteSource(
+		flags?: VersionedReadFlags
+	): Promise<{ src: FileByteSource; version: number; }> {
 		if (!this.node) { throw makeFileException('notFound', this.name); }
-		return this.node.readSrc();
+		return this.node.readSrc(flags);
 	}
 
 	async writeBytes(bytes: Uint8Array): Promise<number> {
@@ -269,14 +270,18 @@ class V implements WritableFileVersionedAPI, N {
 	}
 
 	async readBytes(
-		start?: number, end?: number
+		start?: number, end?: number, flags?: VersionedReadFlags
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
 		if (!this.node) { throw makeFileException('notFound', this.name); }
-		return await this.node.readBytes(start, end);
+		return await this.node.readBytes(start, end, flags);
 	}
 
-	async readTxt(): Promise<{ txt: string; version: number; }> {
-		const { bytes, version } = await this.readBytes();
+	async readTxt(
+		flags?: VersionedReadFlags
+	): Promise<{ txt: string; version: number; }> {
+		const {
+			bytes, version
+		} = await this.readBytes(undefined, undefined, flags);
 		const txt = (bytes ? utf8.open(bytes) : '');
 		return { txt, version };
 	}
@@ -289,8 +294,10 @@ class V implements WritableFileVersionedAPI, N {
 		return version;
 	}
 
-	async readJSON<T>(): Promise<{ json: T; version: number; }> {
-		const { txt, version } = await this.readTxt();
+	async readJSON<T>(
+		flags?: VersionedReadFlags
+	): Promise<{ json: T; version: number; }> {
+		const { txt, version } = await this.readTxt(flags);
 		const json = JSON.parse(txt);
 		return { json, version };
 	}

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -31,6 +31,10 @@ import { ConfigOfASMailServer } from '../config/index';
 import { ResourcesForSending, addToNumberLineSegments } from '../delivery/common';
 import { ResourcesForReceiving } from '../inbox';
 import { makeKeyringStorage, KeyringStorage } from './keyring-storage';
+import { assert } from '../../../lib-common/assert';
+import * as confApi from '../../../lib-common/service-api/asmail/config';
+import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
+import { JsonKey } from '../../../lib-common/jwkeys';
 
 export { KEY_USE, MsgKeyRole } from './common';
 
@@ -67,7 +71,28 @@ type WritableFS = web3n.files.WritableFS;
 type SendingResources = ResourcesForSending['correspondents'];
 type ReceptionResources = ResourcesForReceiving['correspondents'];
 
-export class KeyRing {
+export interface KeyRing {
+	needIntroKeyFor: SendingResources['needIntroKeyFor'];
+	generateKeysToSend: SendingResources['generateKeysToSend'];
+	nextCrypto: SendingResources['nextCrypto'];
+	decrypt: ReceptionResources['msgDecryptor'];
+	close(): Promise<void>;
+}
+
+export function makeAndKeyRing(
+	cryptor: AsyncSBoxCryptor, fs: WritableFS,
+	publishedKeys: ConfigOfASMailServer['publishedKeys']
+): Promise<KeyRing> {
+	return KRing.makeAndStart(cryptor, fs, publishedKeys);
+}
+
+export interface KeyPairsStorage {
+	pairIdToEmailMap: IdToEmailMap;
+	saveChanges: () => void;
+}
+
+
+class KRing implements KeyRing, KeyPairsStorage {
 	
 	/**
 	 * This is a map from correspondents' canonical addresses to key objects.
@@ -84,26 +109,31 @@ export class KeyRing {
 	) {
 		Object.seal(this);
 	}
-	
+
+	private readonly asKeyPairsStorage: KeyPairsStorage = {
+		pairIdToEmailMap: this.pairIdToEmailMap,
+		saveChanges: this.saveChanges.bind(this)
+	};
+
 	private addCorrespondent(
 		address: string|undefined, serialForm?: string
 	): CorrespondentKeys {
 		const ck = (serialForm ?
-			new CorrespondentKeys(this, undefined, serialForm) :
-			new CorrespondentKeys(this, address));
-		if (this.corrKeys.has(ck.correspondent)) { throw new Error(
-			"Correspondent with address "+ck.correspondent+
-			" is already present."); }
+			new CorrespondentKeys(this.asKeyPairsStorage, undefined, serialForm) :
+			new CorrespondentKeys(this.asKeyPairsStorage, address)
+		);
+		if (this.corrKeys.has(ck.correspondent)) {
+			throw new Error(`Correspondent with address ${ck.correspondent} is already present.`);
+		}
 		this.corrKeys.set(ck.correspondent, ck);
 		if (serialForm) {
 			ck.mapAllKeysIntoRing();
 		}
 		return ck;
 	}
-	
+
 	private async init(fs: WritableFS): Promise<void> {
-		if (this.storage) { throw new Error(
-			"Keyring has already been initialized."); }
+		assert(!this.storage);
 		this.storage = makeKeyringStorage(fs);
 		await this.storage.start();
 		const serialForm = await this.storage.load();
@@ -125,9 +155,15 @@ export class KeyRing {
 		cryptor: AsyncSBoxCryptor, fs: WritableFS,
 		publishedKeys: ConfigOfASMailServer['publishedKeys']
 	): Promise<KeyRing> {
-		const kr = new KeyRing(cryptor, publishedKeys);
+		const kr = new KRing(cryptor, publishedKeys);
 		await kr.init(fs);
-		return kr;
+		return {
+			close: kr.close.bind(kr),
+			decrypt: kr.decrypt.bind(kr),
+			generateKeysToSend: kr.generateKeysToSend.bind(kr),
+			needIntroKeyFor: kr.needIntroKeyFor.bind(kr),
+			nextCrypto: kr.nextCrypto.bind(kr)
+		};
 	}
 
 	saveChanges(): void {
@@ -142,24 +178,26 @@ export class KeyRing {
 		this.storage.save(JSON.stringify(dataToSave));
 	}
 
-	needIntroKeyFor: SendingResources['needIntroKeyFor'] = (address) => {
+	readonly needIntroKeyFor: SendingResources['needIntroKeyFor'] = address => {
 		address = toCanonicalAddress(address);
 		return !this.corrKeys.has(address);
 	};
-	
+
 	readonly generateKeysToSend: SendingResources['generateKeysToSend'] =
-			async (address, introPKeyFromServer) => {
+	async (address, introPKeyFromServer) => {
 		address = toCanonicalAddress(address);
 
 		let ck = this.corrKeys.get(address);
 		if (!ck) {
-			if (!introPKeyFromServer) { throw new Error(
-				`There are no known keys for given address ${address} and a key from a mail server is not given either.`); }
+			if (!introPKeyFromServer) {
+				throw new Error(`There are no known keys for given address ${address} and a key from a mail server is not given either.`);
+			}
 			ck = this.addCorrespondent(address);
 		}
 
-		const { msgMasterKey, currentPair, msgCount } =
-			await ck.getSendingPair(introPKeyFromServer);
+		const {
+			msgMasterKey, currentPair, msgCount
+		} = await ck.getSendingPair(introPKeyFromServer);
 
 		// prepare message encryptor
 		const nextNonce = await random.bytes(NONCE_LENGTH);
@@ -169,18 +207,20 @@ export class KeyRing {
 		return { encryptor, currentPair, msgCount };
 	};
 
-	readonly nextCrypto: SendingResources['nextCrypto'] = async (address) => {
+	readonly nextCrypto: SendingResources['nextCrypto'] = async address => {
 		address = toCanonicalAddress(address);
 		let ck = this.corrKeys.get(address);
-		if (!ck) { throw new Error(
-			`No correspondent keys found for ${address}`); }
+		if (!ck) {
+			throw new Error(`No correspondent keys found for ${address}`);
+		}
 		const suggestPair = await ck.suggestPair();
 		return suggestPair;
 	};
 
-	private async decryptMsgKeyWithIntroPair(recipientKid: string,
-			senderPKey: string, getMainObjHeader: () => Promise<Uint8Array>):
-			Promise<MsgKeyInfo|undefined> {
+	private async decryptMsgKeyWithIntroPair(
+		recipientKid: string, senderPKey: string,
+		getMainObjHeader: () => Promise<Uint8Array>
+	): Promise<MsgKeyInfo|undefined> {
 		const recipKey = this.publishedKeys.find(recipientKid!);
 		if (!recipKey) { return; }
 
@@ -188,10 +228,13 @@ export class KeyRing {
 		const msgKeyPackLen = msgKeyPackSizeFor(recipKey.pair.skey.alg);
 		if (h.length < msgKeyPackLen) { return; }
 
-		const masterDecr = msgMasterDecryptor(this.cryptor,
-			recipKey.pair.skey, { kid: '', k: senderPKey! });
+		const masterDecr = msgMasterDecryptor(
+			this.cryptor, recipKey.pair.skey, { kid: '', k: senderPKey! }
+		);
 		try {
-			const mainObjFileKey = await masterDecr.open(h.subarray(0, msgKeyPackLen));
+			const mainObjFileKey = await masterDecr.open(
+				h.subarray(0, msgKeyPackLen)
+			);
 			const info: MsgKeyInfo = {
 				correspondent: (undefined as any),
 				keyStatus: recipKey.role,
@@ -209,13 +252,15 @@ export class KeyRing {
 		}
 	}
 
-	private findEstablishedReceptionPairs(pid: string): undefined |
-			{ correspondent: string; role: MsgKeyRole; pair: ReceptionPair; }[] {
+	private findEstablishedReceptionPairs(pid: string): {
+		correspondent: string; role: MsgKeyRole; pair: ReceptionPair;
+	}[]|undefined {
 		const emails = this.pairIdToEmailMap.getEmails(pid);
 		if (!emails) { return; }
 
-		const decryptors: { correspondent: string; role: MsgKeyRole;
-			pair: ReceptionPair; }[] = [];
+		const decryptors: {
+			correspondent: string; role: MsgKeyRole; pair: ReceptionPair;
+		}[] = [];
 		for (const email of emails) {
 			const ck = this.corrKeys.get(email);
 			if (!ck) { return; }
@@ -230,10 +275,12 @@ export class KeyRing {
 		return decryptors;
 	}
 
-	private async decryptMsgKeyWithEstablishedPair(pid: string,
-			getMainObjHeader: () => Promise<Uint8Array>):
-			Promise<{ keyInfo: MsgKeyInfo;
-				incrMsgCount: (msgCount: number) => void; }|undefined> {
+	private async decryptMsgKeyWithEstablishedPair(
+		pid: string, getMainObjHeader: () => Promise<Uint8Array>
+	): Promise<{
+		keyInfo: MsgKeyInfo;
+		incrMsgCount: (msgCount: number) => void;
+	}|undefined> {
 		const pairs = this.findEstablishedReceptionPairs(pid);
 		if (!pairs) { return; }
 		
@@ -248,7 +295,8 @@ export class KeyRing {
 				if (h.length < msgKeyPackLen) { continue; }
 				
 				const mainObjFileKey = await masterDecr.open(
-					h.subarray(0, msgKeyPackLen));
+					h.subarray(0, msgKeyPackLen)
+				);
 				const keyInfo: MsgKeyInfo = {
 					correspondent: correspondent,
 					keyStatus: role,
@@ -263,11 +311,12 @@ export class KeyRing {
 					corrKeys!.markPairAsInUse(pair);
 				}
 
-				// prepare msg count incrementor that will be "called back"
-				const incrMsgCount = (msgCount: number) =>
-					this.updateReceivedMsgCountIn(pair, msgCount);
-
-				return { keyInfo, incrMsgCount };
+				return {
+					keyInfo,
+					incrMsgCount: msgCount => this.updateReceivedMsgCountIn(
+						pair, msgCount
+					)
+				};
 			} catch (err) {
 				if (!(err as EncryptionException).failedCipherVerification) {
 					throw err;
@@ -295,46 +344,58 @@ export class KeyRing {
 		this.saveChanges();
 	}
 
-	private absorbSuggestedNextKeyPair(correspondent: string,
-			pair: SuggestedNextKeyPair): void {
+	private absorbSuggestedNextKeyPair(
+		correspondent: string, pair: SuggestedNextKeyPair
+	): void {
 		let ck = this.corrKeys.get(correspondent);
 		if (ck) {
 			ck.ratchetUpSendingPair(pair);
 		} else {
-			if (!pair.isSenderIntroKey) { throw new Error(
-				`Expected addition of correspondent to be done, when new `); }
+			if (!pair.isSenderIntroKey) {
+				throw new Error(`Expected addition of correspondent to be done, when new `);
+			}
 			const usedIntro = this.publishedKeys.find(pair.senderKid);
-			if (!usedIntro) { throw new Error(
-				`Recently used published intro key is not found`); }
+			if (!usedIntro) {
+				throw new Error(`Recently used published intro key is not found`);
+			}
 			ck = this.addCorrespondent(correspondent);
 			ck.ratchetUpSendingPair(pair, usedIntro.pair);
 		}
 		this.saveChanges();
 	}
 
-	readonly decrypt: ReceptionResources['msgDecryptor'] = async (
-		msgMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts
-	) => {
+	async decrypt(msgMeta: delivApi.msgMeta.CryptoInfo,
+		getMainObjHeader: () => Promise<Uint8Array>,
+		getOpenedMsg: (
+			mainObjFileKey: string, msgKeyPackLen: number
+		) => Promise<OpenedMsg>,
+		checkMidKeyCerts: (
+			certs: confApi.p.initPubKey.Certs
+		) => Promise<{ pkey: JsonKey; address: string; }>
+	): Promise<{ decrInfo: MsgKeyInfo; openedMsg: OpenedMsg }|undefined> {
 
 		let decrInfo: MsgKeyInfo|undefined;
 		let incrMsgCount: ((msgCount: number) => void)|undefined;
 		let openedMsg: OpenedMsg;
 		if (msgMeta.pid) {
 			const r = await this.decryptMsgKeyWithEstablishedPair(
-				msgMeta.pid, getMainObjHeader);
+				msgMeta.pid, getMainObjHeader
+			);
 			if (!r) { return; }
 			decrInfo = r.keyInfo;
 			incrMsgCount = r.incrMsgCount;
 			openedMsg = await getOpenedMsg(decrInfo.key!, decrInfo.msgKeyPackLen);
 		} else {
 			decrInfo = await this.decryptMsgKeyWithIntroPair(
-				msgMeta.recipientKid!, msgMeta.senderPKey!, getMainObjHeader);
+				msgMeta.recipientKid!, msgMeta.senderPKey!, getMainObjHeader
+			);
 			if (!decrInfo) { return; }
 			openedMsg = await getOpenedMsg(decrInfo.key!, decrInfo.msgKeyPackLen);
 			const certs = openedMsg.introCryptoCerts;
 			const { address, pkey } = await checkMidKeyCerts(certs);
-			if (pkey.k !== msgMeta.senderPKey!) { throw new Error(
-				`Key certificates in the message are not for a key that encrypted this message.`); }
+			if (pkey.k !== msgMeta.senderPKey!) {
+				throw new Error(`Key certificates in the message are not for a key that encrypted this message.`);
+			}
 			decrInfo.correspondent = toCanonicalAddress(address);
 		}
 
@@ -353,10 +414,12 @@ export class KeyRing {
 		const pair = openedMsg.nextCrypto;
 		if (pair) {
 			if (msgMeta.recipientKid) {
-				if (!pair.isSenderIntroKey) { throw new Error(
-					`Introductory message is not referencing used intro key in the next crypto`); }
-				if (msgMeta.recipientKid !== pair.senderKid) { throw new Error(
-					`Introductory message is referencing wrong key in the next crypto`); }
+				if (!pair.isSenderIntroKey) {
+					throw new Error(`Introductory message is not referencing used intro key in the next crypto`);
+				}
+				if (msgMeta.recipientKid !== pair.senderKid) {
+					throw new Error(`Introductory message is referencing wrong key in the next crypto`);
+				}
 			}
 			this.absorbSuggestedNextKeyPair(decrInfo.correspondent, pair);
 		}
@@ -369,11 +432,13 @@ export class KeyRing {
 	}
 	
 }
-Object.freeze(KeyRing.prototype);
-Object.freeze(KeyRing);
+Object.freeze(KRing.prototype);
+Object.freeze(KRing);
+
 
 function msgKeyPackLenForPair(p: ReceptionPair): number {
 	return msgKeyPackSizeFor(p.recipientKey.skey.alg);
 }
+
 
 Object.freeze(exports);

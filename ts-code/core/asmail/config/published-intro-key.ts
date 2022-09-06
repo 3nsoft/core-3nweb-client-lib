@@ -17,11 +17,12 @@
 import { MailConfigurator } from '../../../lib-client/asmail/service-config';
 import * as api from '../../../lib-common/service-api/asmail/config';
 import { GetSigner } from '../../id-manager';
-import { generateKeyPair, JWKeyPair } from '../keyring/common';
+import { generateKeyPair, JWKeyPair, MsgKeyRole } from '../keyring/common';
 import { ParamOnFileAndServer } from './common';
-import { ConfigOfASMailServer } from '../config';
 
 const INTRO_KEY_VALIDITY = 31*24*60*60;
+
+type WritableFile = web3n.files.WritableFile;
 
 export type Certs = api.p.initPubKey.Certs;
 
@@ -33,10 +34,29 @@ interface PublishedIntroKeysJSON {
 	previous?: JWKeyPair;
 }
 
-type ExposedFuncs = ConfigOfASMailServer['publishedKeys'];
+export interface PublishedIntroKey {
+	update: () => Promise<void>;
+	find: (kid: string) => {
+		role: MsgKeyRole; pair: JWKeyPair; replacedAt?: number;
+	}|undefined;
+	start: (file: WritableFile) => Promise<void>;
+}
 
-export class PublishedIntroKey
-		extends ParamOnFileAndServer<PublishedIntroKeysJSON, Certs> {
+export function makePublishedIntroKey(
+	getSigner: GetSigner, serviceConf: MailConfigurator
+): PublishedIntroKey {
+	const published = new PublishedKey(getSigner, serviceConf);
+	return {
+		find: published.find.bind(published),
+		update: published.update.bind(published),
+		start: published.start.bind(published)
+	}
+}
+
+
+class PublishedKey
+	extends ParamOnFileAndServer<PublishedIntroKeysJSON, Certs>
+	implements PublishedIntroKey {
 
 	private published: PublishedIntroKeysJSON = (undefined as any);
 
@@ -82,7 +102,7 @@ export class PublishedIntroKey
 		return { pair, certs };
 	}
 
-	update: ExposedFuncs['update'] = async () => {
+	async update(): Promise<void> {
 		const newKey = await this.makeNewIntroKey();
 		if (this.published.current) {
 			this.published.current.keyPair.retiredAt = newKey.pair.createdAt;
@@ -95,7 +115,9 @@ export class PublishedIntroKey
 		await this.save();
 	};
 
-	find: ExposedFuncs['find'] = (kid) => {
+	find(kid: string): {
+		role: MsgKeyRole; pair: JWKeyPair; replacedAt?: number;
+	}|undefined {
 
 		// check current key
 		if (this.published.current
@@ -121,7 +143,8 @@ export class PublishedIntroKey
 	}
 
 }
-Object.freeze(PublishedIntroKey.prototype);
-Object.freeze(PublishedIntroKey);
+Object.freeze(PublishedKey.prototype);
+Object.freeze(PublishedKey);
+
 
 Object.freeze(exports);

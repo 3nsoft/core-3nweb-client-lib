@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,7 +22,7 @@
 import { JWKeyPair, PID_LENGTH, generateKeyPair, extractKeyBytes, MsgKeyRole, extractSKeyBytes, ASMailKeyPair} from './common';
 import { JsonKey, JsonKeyShort } from '../../../lib-common/jwkeys';
 import { SuggestedNextKeyPair } from '../msg/opener';
-import { KeyRing } from './index';
+import { KeyPairsStorage } from './index';
 import * as random from '../../../lib-common/random-node';
 import { box } from 'ecma-nacl';
 import { base64 } from '../../../lib-common/buffer-utils';
@@ -189,7 +189,7 @@ export class CorrespondentKeys {
 	 * Either serialData, or an address should be defined, not both.
 	 */
 	constructor(
-		private keyring: KeyRing,
+		private keyring: KeyPairsStorage,
 		address: string|undefined, serialData?: string
 	) {
 		if (address) {

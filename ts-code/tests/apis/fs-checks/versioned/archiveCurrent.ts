@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { stringOfB64Chars, bytes as randomBytes } from '../../../../lib-common/random-node';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { SpecIt } from '../test-utils';
 
@@ -43,7 +44,8 @@ it = { expectation: 'archives current synced version' };
 it.func = async function(s) {
 	const { testFS } = s;
 	const filePath = `with archived inside/file`;
-	await testFS.v!.writeTxtFile(filePath, 'some');
+	const initFileTxt = await stringOfB64Chars(30);
+	await testFS.v!.writeTxtFile(filePath, initFileTxt);
 	let versions = await testFS.v!.listVersions(filePath);
 	expect(versions.archived).toBeUndefined();
 	if (testFS.v!.sync) {
@@ -68,7 +70,20 @@ it.func = async function(s) {
 	}
 	const fileVer = (await testFS.stat(filePath)).version!;
 	versions = await testFS.v!.listVersions(filePath);
-	expect(versions.archived).toContain(fileVer);	
+	expect(versions.archived).toContain(fileVer);
+
+	// after writing new version, archived version can be read
+	expect(await testFS.v!.writeBytes(filePath, await randomBytes(60)))
+	.toBeGreaterThan(fileVer);
+	expect(
+		(await testFS.v!.readTxtFile(filePath, { archivedVersion: fileVer })).txt
+	).toBe(initFileTxt);
+	if (testFS.v!.sync) {
+		await testFS.v!.sync.upload(filePath);
+		expect(
+			(await testFS.v!.readTxtFile(filePath, { archivedVersion: fileVer })).txt
+		).toBe(initFileTxt);
+	}
 };
 specs.its.push(it);
 

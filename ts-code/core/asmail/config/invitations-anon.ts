@@ -18,7 +18,8 @@ import * as random from '../../../lib-common/random-node';
 import { MailConfigurator } from '../../../lib-client/asmail/service-config';
 import * as api from '../../../lib-common/service-api/asmail/config';
 import { ParamOnFileAndServer } from './common';
-import { ConfigOfASMailServer } from '../config';
+
+type WritableFile = web3n.files.WritableFile;
 
 interface InvitesJSON {
 	invites: {
@@ -31,10 +32,27 @@ interface InvitesJSON {
 
 const INVITE_TOKEN_LEN = 40;
 
-type ExposedFuncs = ConfigOfASMailServer['anonSenderInvites'];
+export interface Invites {
+	getAll: () => Map<string, { invite: string; msgMaxSize: number; }>;
+	create: (label: string, msgMaxSize: number) => Promise<string>;
+	setMsgMaxSize: (label: string, msgMaxSize: number) => Promise<void>;
+	start: (file: WritableFile) => Promise<void>;
+}
 
-export class Invites extends
-		ParamOnFileAndServer<InvitesJSON, api.InvitesList> {
+export function makeInvites(serviceConf: MailConfigurator): Invites {
+	const invites = new InvitesData(serviceConf);
+	return {
+		create: invites.create.bind(invites),
+		getAll: invites.getAll.bind(invites),
+		setMsgMaxSize: invites.setMsgMaxSize.bind(invites),
+		start: invites.start.bind(invites)
+	};
+}
+
+
+class InvitesData
+	extends ParamOnFileAndServer<InvitesJSON, api.InvitesList>
+	implements Invites {
 	
 	private invites: {
 		[invite: string]: {
@@ -69,7 +87,7 @@ export class Invites extends
 		return serverJSON;
 	}
 
-	getAll: ExposedFuncs['getAll'] = () => {
+	getAll(): Map<string, { invite: string; msgMaxSize: number; }> {
 		const byLabel = new Map<string, { invite: string; msgMaxSize: number; }>();
 		Object.entries(this.invites)
 		.forEach(([ invite, params ]) => {
@@ -78,7 +96,7 @@ export class Invites extends
 		return byLabel;
 	};
 
-	create: ExposedFuncs['create'] = async (label, msgMaxSize) => {
+	async create(label: string, msgMaxSize: number): Promise<string> {
 		const existingInvite = this.findByLabel(label);
 		if (existingInvite) { throw new Error(
 			`Anonymous sender invite already exists with label ${label}`); }
@@ -102,7 +120,7 @@ export class Invites extends
 		return (found ? found[0] : undefined);
 	}
 
-	setMsgMaxSize: ExposedFuncs['setMsgMaxSize'] = async (label, msgMaxSize) => {
+	async setMsgMaxSize(label: string, msgMaxSize: number): Promise<void> {
 		const invite = this.findByLabel(label);
 		if (!invite) { throw new Error(
 			`There is no anonymous sender invite with label ${label}`); }
@@ -111,7 +129,8 @@ export class Invites extends
 	};
 	
 }
-Object.freeze(Invites.prototype);
-Object.freeze(Invites);
+Object.freeze(InvitesData.prototype);
+Object.freeze(InvitesData);
+
 
 Object.freeze(exports);

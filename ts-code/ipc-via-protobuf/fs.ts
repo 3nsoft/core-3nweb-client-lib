@@ -43,7 +43,8 @@ type SymLink = web3n.files.SymLink;
 type ListingEntry = web3n.files.ListingEntry;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type FileFlags = web3n.files.FileFlags;
-type VersionedFileFlags = web3n.files.VersionedFileFlags;
+type VersionedFileWriteFlags = web3n.files.VersionedFileWriteFlags;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type SelectCriteria = web3n.files.SelectCriteria;
 type FSItem = web3n.files.FSItem;
 type FSCollection = web3n.files.FSCollection;
@@ -352,12 +353,10 @@ Object.freeze(stat);
 
 namespace getXAttr {
 
-	export interface Request {
+	const requestType = ProtoType.for<{
 		path: string;
 		xaName: string;
-	}
-
-	export const requestType = ProtoType.for<Request>(pb.GetXAttrRequestBody);
+	}>(pb.GetXAttrRequestBody);
 
 	export function wrapService(fn: ReadonlyFS['getXAttr']): ExposedFn {
 		return buf => {
@@ -913,13 +912,11 @@ Object.freeze(readTxtFile);
 
 namespace readBytes {
 
-	export interface Request {
+	const requestType = ProtoType.for<{
 		path: string;
 		start?: Value<number>;
 		end?: Value<number>;
-	}
-
-	export const requestType = ProtoType.for<Request>(pb.ReadBytesRequestBody);
+	}>(pb.ReadBytesRequestBody);
 
 	export function wrapService(fn: ReadonlyFS['readBytes']): ExposedFn {
 		return buf => {
@@ -1546,14 +1543,47 @@ export namespace fsItem {
 Object.freeze(fsItem);
 
 
+const reqWithPathAndFlagsType = ProtoType.for<{
+	path: string;
+	flags?: file.VersionedReadFlagsMsg;
+}>(
+	pb.PathAndFlagsRequestBody
+);
+
+function packRequestWithPathAndFlags(
+	path: string, flags: VersionedReadFlags|undefined
+): Buffer {
+	return reqWithPathAndFlagsType.pack({
+		path,
+		flags: file.versionedReadFlagsToMsg(flags)
+	})
+}
+
+function unpackRequestWithPathAndFlags(
+	buf: Buffer
+): { path: string; flags?: VersionedReadFlags; } {
+	const { path, flags } = reqWithPathAndFlagsType.unpack(buf);
+	return {
+		path,
+		flags: file.versionedReadFlagsFromMsg(flags)
+	};
+}
+
+
 namespace vGetXAttr {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		xaName: string;
+		flags?: file.VersionedReadFlagsMsg;
+	}>(pb.VersionedGetXAttrRequestBody);
 
 	export function wrapService(
 		fn: ReadonlyFSVersionedAPI['getXAttr']
 	): ExposedFn {
 		return buf => {
-			const { path, xaName } = getXAttr.requestType.unpack(buf);
-			const promise = fn(path, xaName)
+			const { path, xaName, flags } = requestType.unpack(buf);
+			const promise = fn(path, xaName, file.versionedReadFlagsFromMsg(flags))
 			.then(attrAndVer => file.vGetXAttr.replyType.pack(attrAndVer));
 			return { promise };
 		};
@@ -1563,8 +1593,10 @@ namespace vGetXAttr {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getXAttr'] {
 		const ipcPath = objPath.concat('getXAttr');
-		return (path, xaName) => caller
-		.startPromiseCall(ipcPath, getXAttr.requestType.pack({ path, xaName }))
+		return (path, xaName, flags) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, xaName, flags: file.versionedReadFlagsToMsg(flags)
+		}))
 		.then(file.vGetXAttr.unpackReply);
 	}
 
@@ -1578,8 +1610,8 @@ namespace vListXAttrs {
 		fn: ReadonlyFSVersionedAPI['listXAttrs']
 	): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
+			const promise = fn(path, flags)
 			.then(({ version, lst }) => file.vListXAttrs.replyType.pack(
 				{ version, xaNames: lst }));
 			return { promise };
@@ -1590,8 +1622,8 @@ namespace vListXAttrs {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listXAttrs'] {
 		const ipcPath = objPath.concat('listXAttrs');
-		return path => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
 			const { version: v, xaNames } = file.vListXAttrs.replyType.unpack(buf);
 			return { version: fixInt(v), lst: (xaNames ? xaNames : []) };
@@ -1615,8 +1647,8 @@ namespace vListFolder {
 		fn: ReadonlyFSVersionedAPI['listFolder']
 	): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
+			const promise = fn(path, flags)
 			.then(({ version, lst }) => replyType.pack({
 				version, entries: lst.map(lsEntryToMsg)
 			}));
@@ -1628,8 +1660,8 @@ namespace vListFolder {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listFolder'] {
 		const ipcPath = objPath.concat('listFolder');
-		return path => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
 			const { version: v, entries } = replyType.unpack(buf);
 			return {
@@ -1648,8 +1680,8 @@ namespace vReadJSONFile {
 		fn: ReadonlyFSVersionedAPI['readJSONFile']
 	): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
+			const promise = fn(path, flags)
 			.then(({ version, json }) => {
 				return file.vReadJSON.replyType.pack(
 					{ version, json: JSON.stringify(json) });
@@ -1662,8 +1694,8 @@ namespace vReadJSONFile {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readJSONFile'] {
 		const ipcPath = objPath.concat('readJSONFile');
-		return path => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
 			const { version: v, json } = file.vReadJSON.replyType.unpack(buf);
 			return { version: fixInt(v), json: JSON.parse(json) };
@@ -1680,8 +1712,8 @@ namespace vReadTxtFile {
 		fn: ReadonlyFSVersionedAPI['readTxtFile']
 	): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
+			const promise = fn(path, flags)
 			.then(verAndTxt => file.vReadTxt.replyType.pack(verAndTxt));
 			return { promise };
 		};
@@ -1691,8 +1723,8 @@ namespace vReadTxtFile {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readTxtFile'] {
 		const ipcPath = objPath.concat('readTxtFile');
-		return path => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
 			const { version: v, txt } = file.vReadTxt.replyType.unpack(buf);
 			return { version: fixInt(v), txt };
@@ -1705,12 +1737,22 @@ Object.freeze(vReadTxtFile);
 
 namespace vReadBytes {
 
+	const requestType = ProtoType.for<{
+		path: string;
+		start?: Value<number>;
+		end?: Value<number>;
+		flags?: file.VersionedReadFlagsMsg;
+	}>(pb.VersionedReadBytesRequestBody);
+
 	export function wrapService(
 		fn: ReadonlyFSVersionedAPI['readBytes']
 	): ExposedFn {
 		return buf => {
-			const { path, start, end } = readBytes.requestType.unpack(buf);
-			const promise = fn(path, valOfOptInt(start), valOfOptInt(end))
+			const { path, start, end, flags } = requestType.unpack(buf);
+			const promise = fn(
+				path, valOfOptInt(start), valOfOptInt(end),
+				file.versionedReadFlagsFromMsg(flags)
+			)
 			.then(file.vReadBytes.packReply);
 			return { promise };
 		};
@@ -1720,12 +1762,12 @@ namespace vReadBytes {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readBytes'] {
 		const ipcPath = objPath.concat('readBytes');
-		return (path, start, end) => {
-		return caller
-		.startPromiseCall(ipcPath, readBytes.requestType.pack({
-			path, start: toOptVal(start), end: toOptVal(end) }))
+		return (path, start, end, flags) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, start: toOptVal(start), end: toOptVal(end),
+			flags: file.versionedReadFlagsToMsg(flags)
+		}))
 		.then(file.vReadBytes.unpackReply);
-		};
 	}
 
 }
@@ -1738,7 +1780,7 @@ namespace vGetByteSource {
 		fn: ReadonlyFSVersionedAPI['getByteSource'], expServices: ExposedServices
 	): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
 			const promise = fn(path)
 			.then(({ version, src }) => {
 				const ref = exposeSrcService(src, expServices);
@@ -1752,8 +1794,8 @@ namespace vGetByteSource {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getByteSource'] {
 		const ipcPath = objPath.concat('getByteSource');
-		return path => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
 			const { version: v, src } = file.vGetByteSource.replyType.unpack(buf);
 			return { version: fixInt(v), src: makeSrcCaller(caller, src) };
@@ -2378,7 +2420,7 @@ interface VerFileFlagsMsg extends FileFlagsMsg {
 }
 
 function optVerFlagsToMsg(
-	f: VersionedFileFlags|undefined
+	f: VersionedFileWriteFlags|undefined
 ): VerFileFlagsMsg|undefined {
 	if (!f) { return; }
 	const m = optFlagsToMsg(f) as VerFileFlagsMsg;
@@ -2388,9 +2430,9 @@ function optVerFlagsToMsg(
 
 function optVerFlagsFromMsg(
 	m: VerFileFlagsMsg|undefined
-): VersionedFileFlags|undefined {
+): VersionedFileWriteFlags|undefined {
 	if (!m) { return; }
-	const f = optFlagsFromMsg(m) as VersionedFileFlags;
+	const f = optFlagsFromMsg(m) as VersionedFileWriteFlags;
 	f.currentVersion = valOfOpt(m.currentVersion);
 	return f;
 }

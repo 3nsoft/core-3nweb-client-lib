@@ -231,38 +231,52 @@ message CollectionEvent {
 // ==== ReadonlyFSVersionedAPI referable object ====
 
 // --- ReadonlyFSVersionedAPI.getXAttr ---
-// Request body is GetXAttrRequestBody
+message VersionedGetXAttrRequestBody {
+	string path = 1;
+	string xa_name = 2;
+	file.VersionedReadFlags flags = 10;
+}
 // Reply body is file.VersionedGetXAttrReplyBody
 
+message PathAndFlagsRequestBody {
+	string path = 1;
+	file.VersionedReadFlags flags = 2;
+}
+
 // --- ReadonlyFSVersionedAPI.listXAttrs ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 // Reply body is file.VersionedListXAttrsReplyBody
 
 // --- ReadonlyFSVersionedAPI.listFolder ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 message VersionedListFolderReplyBody {
 	uint64 version = 1;
 	repeated ListingEntryMsg entries = 2;
 }
 
 // --- ReadonlyFSVersionedAPI.readJSONFile ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 // Reply body is file.VersionedReadJsonReplyBody
 
 // --- ReadonlyFSVersionedAPI.readTxtFile ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 // Reply body is file.VersionedReadTxtReplyBody
 
 // --- ReadonlyFSVersionedAPI.readBytes ---
-// Request body is ReadBytesRequestBody
+message VersionedReadBytesRequestBody {
+	string path = 1;
+	common.UInt64Value start = 2;
+	common.UInt64Value end = 3;
+	file.VersionedReadFlags flags = 10;
+}
 // Reply body is file.VersionedReadBytesReplyBody
 
 // --- ReadonlyFSVersionedAPI.getByteSource ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 // Reply body is file.VersionedGetByteSourceReplyBody
 
 // --- ReadonlyFSVersionedAPI.getByteSource ---
-// Request body is PathOnlyRequestBody
+// Request body is PathAndFlagsRequestBody
 // Reply body is file.ListVersionsReplyBody
 
 
@@ -406,10 +420,10 @@ message WriteBytesRequestBody {
 message VersionedWriteJsonFileRequestBody {
 	string path = 1;
 	string json = 2;
-	VersionedFileFlags flags = 3;
+	VersionedFileWriteFlags flags = 3;
 }
 
-message VersionedFileFlags {
+message VersionedFileWriteFlags {
 	common.BooleanValue truncate = 1;
 	common.BooleanValue create = 2;
 	common.BooleanValue exclusive = 3;
@@ -421,7 +435,7 @@ message VersionedFileFlags {
 message VersionedWriteTxtFileRequestBody {
 	string path = 1;
 	string txt = 2;
-	VersionedFileFlags flags = 3;
+	VersionedFileWriteFlags flags = 3;
 }
 
 // --- WritableFSVersionedAPI.writeBytes ---
@@ -429,14 +443,14 @@ message VersionedWriteTxtFileRequestBody {
 message VersionedWriteBytesRequestBody {
 	string path = 1;
 	bytes bytes = 2;
-	VersionedFileFlags flags = 3;
+	VersionedFileWriteFlags flags = 3;
 }
 
 // --- WritableFSVersionedAPI.getByteSink ---
 // Reply body is file.VersionedGetByteSinkReplyBody
 message VersionedGetByteSinkRequestBody {
 	string path = 1;
-	VersionedFileFlags flags = 2;
+	VersionedFileWriteFlags flags = 2;
 }
 
 // --- WritableFSVersionedAPI.archiveCurrent ---

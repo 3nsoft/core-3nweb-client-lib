@@ -15,15 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observable } from 'rxjs';
-import { take } from 'rxjs/operators';
-import { stringOfB64CharsSync } from '../../../../lib-common/random-node';
+import { stringOfB64CharsSync, bytes as randomBytes } from '../../../../lib-common/random-node';
+import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
-import { SpecItWithTwoDevsFSs } from '../test-utils';
+import { observeFileForOneEvent, observeFolderForOneEvent, SpecItWithTwoDevsFSs } from '../test-utils';
 
 type FileException = web3n.files.FileException;
 type RemoteChangeEvent = web3n.files.RemoteChangeEvent;
-type Observer<T> = web3n.Observer<T>;
 
 export const specs: SpecDescribe = {
 	description: '--',
@@ -35,40 +33,36 @@ let it: SpecItWithTwoDevsFSs = {
 };
 it.func = async function({ dev1FS, dev2FS }) {
 	const file = 'file-1';
+	let fs1 = dev1FS();
+	let fs2 = dev2FS();
 
-	const evAtDev2 = (new Observable((
-		obs: Observer<RemoteChangeEvent>
-	) => dev2FS().watchFolder('', obs)))
-	.pipe(
-		take(1)
-	)
-	.toPromise();
-	let status = await dev2FS().v!.sync!.status('');
+	const evAtDev2 = observeFolderForOneEvent<RemoteChangeEvent>(fs2);
+	let status = await fs2.v!.sync!.status('');
 	expect(status.state).withContext(`from setup`).toBe('synced');
 
-	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
+	await fs1.writeTxtFile(file, stringOfB64CharsSync(100));
 
-	await dev1FS().v!.sync!.upload(file);
-	await dev1FS().v!.sync!.upload('');
+	await fs1.v!.sync!.upload(file);
+	await fs1.v!.sync!.upload('');
 
 	const folderChangeEvent = await evAtDev2;
 	expect(folderChangeEvent.type).toBe('remote-change');
-	status = await dev2FS().v!.sync!.status('');
+	status = await fs2.v!.sync!.status('');
 	expect(status.state).toBe('behind');
 
-	await dev2FS().readTxtFile(file).then(
+	await fs2.readTxtFile(file).then(
 		() => fail(`There should be no file still in folder on dev 2`),
 		(exc: FileException) => expect(exc.notFound).toBeTrue()
 	);
 
-	await dev2FS().v!.sync!.adoptRemote('');
+	await fs2.v!.sync!.adoptRemote('');
 
-	status = await dev2FS().v!.sync!.status('');
-	const statusOnDev1 = await dev1FS().v!.sync!.status('');
+	status = await fs2.v!.sync!.status('');
+	const statusOnDev1 = await fs1.v!.sync!.status('');
 	expect(status.state).toBe('synced');
 	expect(status.synced!.latest).toBe(statusOnDev1.synced!.latest);
-	expect(await dev2FS().readTxtFile(file))
-	.toBe(await dev1FS().readTxtFile(file));
+	expect(await fs2.readTxtFile(file))
+	.toBe(await fs1.readTxtFile(file));
 };
 specs.its.push(it);
 
@@ -77,33 +71,123 @@ it = {
 };
 it.func = async function({ dev1FS, dev2FS, dev2 }) {
 	const file = 'file-1';
+	let fs1 = dev1FS();
+	let fs2 = dev2FS();
 
-	let status = await dev2FS().v!.sync!.status('');
+	let status = await fs2.v!.sync!.status('');
 	expect(status.state).withContext(`from setup`).toBe('synced');
 	await dev2.stop();
 
-	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
+	await fs1.writeTxtFile(file, stringOfB64CharsSync(100));
 
-	await dev1FS().v!.sync!.upload(file);
-	await dev1FS().v!.sync!.upload('');
+	await fs1.v!.sync!.upload(file);
+	await fs1.v!.sync!.upload('');
 
 	await dev2.start();
+	fs2 = dev2FS();
 
-	status = await dev2FS().v!.sync!.status('');
+	status = await fs2.v!.sync!.status('');
 	expect(status.state).toBe('synced');
 
-	status = await dev2FS().v!.sync!.updateStatusInfo('');
+	status = await fs2.v!.sync!.updateStatusInfo('');
 
 	expect(status.state).toBe('behind');
 
-	await dev2FS().v!.sync!.adoptRemote('');
+	await fs2.v!.sync!.adoptRemote('');
 
-	status = await dev2FS().v!.sync!.status('');
-	const statusOnDev1 = await dev1FS().v!.sync!.status('');
+	status = await fs2.v!.sync!.status('');
+	const statusOnDev1 = await fs1.v!.sync!.status('');
 	expect(status.state).toBe('synced');
 	expect(status.synced!.latest).toBe(statusOnDev1.synced!.latest);
-	expect(await dev2FS().readTxtFile(file))
-	.toBe(await dev1FS().readTxtFile(file));
+	expect(await fs2.readTxtFile(file))
+	.toBe(await fs1.readTxtFile(file));
+};
+specs.its.push(it);
+
+it = {
+	expectation: 'remote version is downloaded non-automatically'
+};
+it.func = async function({ dev1FS, dev2FS }) {
+	const file = 'file-1';
+	let fs1 = dev1FS();
+	let fs2 = dev2FS();
+
+	// case 1: remote version of folder
+
+	const folderEventAt2 = observeFolderForOneEvent<RemoteChangeEvent>(fs2);
+
+	await fs1.writeTxtFile(file, stringOfB64CharsSync(100));
+	await fs1.v!.sync!.upload(file);
+	await fs1.v!.sync!.upload('');
+
+	const folderEv = await folderEventAt2;
+	expect(folderEv.type).toBe('remote-change');
+	expect((await fs2.v!.sync!.status('')).remote?.latest)
+	.toBe(folderEv.newVersion);
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion)
+	).toBe('none');
+
+	await fs2.v!.sync!.download('', folderEv.newVersion);
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion)
+	).toBe('complete');
+
+	// case 2: remote version of file
+
+	expect(await fs2.checkFilePresence(file)).toBeFalse();
+	await fs2.v!.sync!.adoptRemote('');
+	expect(await fs2.readTxtFile(file)).toBe(await fs1.readTxtFile(file));
+
+	let fileEventAt2 = observeFileForOneEvent<RemoteChangeEvent>(fs2, file);
+	await fs1.writeBytes(file, await randomBytes(880000));
+	await fs1.v!.sync!.upload(file);
+
+	let fileEv = await fileEventAt2;
+	expect(fileEv.type).toBe('remote-change');
+	expect((await fs2.v!.sync!.status(file)).remote?.latest)
+	.toBe(fileEv.newVersion);
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
+	).toBe('none');
+
+	await fs2.v!.sync!.download(file, fileEv.newVersion);
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
+	).toBe('complete');
+	expect(bytesEqual(
+		(await fs2.v!.readBytes(
+			file, undefined, undefined, { remoteVersion: fileEv.newVersion }
+		)).bytes!,
+		(await fs1.readBytes(file))!
+	)).toBeTrue();
+
+	// case 3: reading remote version of file without adopting it
+
+	fileEventAt2 = observeFileForOneEvent<RemoteChangeEvent>(fs2, file);
+	await fs1.writeBytes(file, await randomBytes(770000));
+	await fs1.v!.sync!.upload(file);
+	fileEv = await fileEventAt2;
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
+	).toBe('none');
+
+	expect(bytesEqual(
+		(await fs2.v!.readBytes(
+			file, undefined, undefined, { remoteVersion: fileEv.newVersion }
+		)).bytes!,
+		(await fs1.readBytes(file))!
+	)).toBeTrue();
+
+	expect(
+		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
+	).toBe('complete');
+
 };
 specs.its.push(it);
 

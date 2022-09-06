@@ -420,9 +420,13 @@ declare namespace web3n.files {
 
 	interface ReadonlyFileVersionedAPI {
 
-		getXAttr(xaName: string): Promise<{ attr: any; version: number; }>;
+		getXAttr(
+			xaName: string, flags?: VersionedReadFlags
+		): Promise<{ attr: any; version: number; }>;
 	
-		listXAttrs(): Promise<{ lst: string[]; version: number; }>;
+		listXAttrs(
+			flags?: VersionedReadFlags
+		): Promise<{ lst: string[]; version: number; }>;
 	
 		/**
 		 * This returns a promise, resolvable to either non-empty byte array, or
@@ -433,32 +437,49 @@ declare namespace web3n.files {
 		 * @param end optional parameter, setting an end of read. If end is
 		 * greater than file length, all available bytes are read. If parameter
 		 * is missing, read will be done to file's end.
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
 		readBytes(
-			start?: number, end?: number
+			start?: number, end?: number, flags?: VersionedReadFlags
 		): Promise<{ bytes: Uint8Array|undefined; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to text, read from file, assuming
 		 * utf8 encoding.
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
-		readTxt(): Promise<{ txt: string; version: number; }>;
+		readTxt(
+			flags?: VersionedReadFlags
+		): Promise<{ txt: string; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to json, read from file
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
-		readJSON<T>(): Promise<{ json: T; version: number; }>;
+		readJSON<T>(
+			flags?: VersionedReadFlags
+		): Promise<{ json: T; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to bytes source with seek, which
 		 * allows random reads, and a file version
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
-		getByteSource(): Promise<{ src: FileByteSource; version: number; }>;
+		getByteSource(
+			flags?: VersionedReadFlags
+		): Promise<{ src: FileByteSource; version: number; }>;
 
-		listVersions(): Promise<{ current?: number; archived?: number[]; }>;
+		listVersions(
+			flags?: VersionedReadFlags
+		): Promise<{ current?: number; archived?: number[]; }>;
 
 		sync?: ReadonlyFileSyncAPI;
 
+	}
+
+	interface VersionedReadFlags {
+		archivedVersion?: number;
+		remoteVersion?: number;
 	}
 
 	interface WritableFileVersionedAPI extends ReadonlyFileVersionedAPI {
@@ -972,7 +993,7 @@ declare namespace web3n.files {
 
 	}
 
-	interface VersionedFileFlags extends FileFlags {
+	interface VersionedFileWriteFlags extends FileFlags {
 
 		/**
 		 * currentVersion flag is optional. This flag is applicable to existing
@@ -986,33 +1007,42 @@ declare namespace web3n.files {
 	interface ReadonlyFSVersionedAPI {
 
 		getXAttr(
-			path: string, xaName: string
+			path: string, xaName: string, flags?: VersionedReadFlags
 		): Promise<{ attr: any; version: number; }>;
 	
-		listXAttrs(path: string): Promise<{ lst: string[]; version: number; }>;
+		listXAttrs(
+			path: string, flags?: VersionedReadFlags
+		): Promise<{ lst: string[]; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to a list of informational objects
 		 * for entries in the folder, and a folder's version.
 		 * @param path of a folder that should be listed
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
 		listFolder(
-			path: string
+			path: string, flags?: VersionedReadFlags
 		): Promise<{ lst: ListingEntry[]; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to json, read from file, and a
 		 * version of file.
 		 * @param path of a file from which to read json
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
-		readJSONFile<T>(path: string): Promise<{ json: T; version: number; }>;
+		readJSONFile<T>(
+			path: string, flags?: VersionedReadFlags
+		): Promise<{ json: T; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to text, read from file, assuming
 		 * utf8 encoding, and version of file.
 		 * @param path of a file from which to read text
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
-		readTxtFile(path: string): Promise<{ txt: string; version: number; }>;
+		readTxtFile(
+			path: string, flags?: VersionedReadFlags
+		): Promise<{ txt: string; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to bytes, that is either non-empty
@@ -1024,18 +1054,21 @@ declare namespace web3n.files {
 		 * @param end optional parameter, setting an end of read. If end is
 		 * greater than file length, all available bytes are read. If parameter
 		 * is missing, read will be done to file's end.
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
 		readBytes(
-			path: string, start?: number, end?: number
+			path: string, start?: number, end?: number,
+			flags?: VersionedReadFlags
 		): Promise<{ bytes: Uint8Array|undefined; version: number; }>;
 
 		/**
 		 * This returns a promise, resolvable to bytes source with seek, which
 		 * allows random reads, and a file version
 		 * @param path of a file from which to read bytes
+		 * @param flags are optional flags to read archived or remote versions.
 		 */
 		getByteSource(
-			path: string
+			path: string, flags?: VersionedReadFlags
 		): Promise<{ src: FileByteSource; version: number; }>;
 
 		listVersions(
@@ -1065,7 +1098,7 @@ declare namespace web3n.files {
 		 * exclusive=false.
 		 */
 		writeJSONFile(
-			path: string, json: any, flags?: VersionedFileFlags
+			path: string, json: any, flags?: VersionedFileWriteFlags
 		): Promise<number>;
 
 		/**
@@ -1077,7 +1110,7 @@ declare namespace web3n.files {
 		 * exclusive=false.
 		 */
 		writeTxtFile(
-			path: string, txt: string, flags?: VersionedFileFlags
+			path: string, txt: string, flags?: VersionedFileWriteFlags
 		): Promise<number>;
 
 		/**
@@ -1089,7 +1122,7 @@ declare namespace web3n.files {
 		 * exclusive=false.
 		 */
 		writeBytes(
-			path: string, bytes: Uint8Array, flags?: VersionedFileFlags
+			path: string, bytes: Uint8Array, flags?: VersionedFileWriteFlags
 		): Promise<number>;
 
 		/**
@@ -1100,7 +1133,7 @@ declare namespace web3n.files {
 		 * exclusive=false, truncate=true.
 		 */
 		getByteSink(
-			path: string, flags?: VersionedFileFlags
+			path: string, flags?: VersionedFileWriteFlags
 		): Promise<{ sink: FileByteSink; version: number; }>;
 
 		archiveCurrent(path: string, version?: number): Promise<number>;

@@ -137,7 +137,7 @@ export class ObjVersionBytesLayout {
 	isFileComplete(): boolean {
 		for (const chunk of this.segsChunks) {
 			if ((chunk.type === 'new') || (chunk.type === 'new-endless')) {
-				return true;
+				return false;
 			}
 		}
 		return true;

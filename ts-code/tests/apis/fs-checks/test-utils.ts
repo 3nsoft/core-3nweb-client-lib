@@ -15,10 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { Observable } from "rxjs";
+import { take } from "rxjs/operators";
 import { MultiUserSetup } from "../../libs-for-tests/setups";
 import { SpecIt as GenericSpecIt } from "../../libs-for-tests/spec-module";
 
 type WritableFS = web3n.files.WritableFS;
+type ReadonlyFS = web3n.files.ReadonlyFS;
 
 export interface SetupWithTestFS {
 	isUp: boolean;
@@ -119,4 +122,28 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 	};
 
 	return { fsSetup, setupDevsAndFSs };
+}
+
+export function observeFolderForOneEvent<T>(
+	fs: ReadonlyFS, path = ''
+): Promise<T> {
+	return (new Observable(
+		obs => fs.watchFolder(path, obs))
+	)
+	.pipe(
+		take(1)
+	)
+	.toPromise() as Promise<T>;
+}
+
+export function observeFileForOneEvent<T>(
+	fs: ReadonlyFS, path: string
+): Promise<T> {
+	return (new Observable(
+		obs => fs.watchFile(path, obs))
+	)
+	.pipe(
+		take(1)
+	)
+	.toPromise() as Promise<T>;
 }

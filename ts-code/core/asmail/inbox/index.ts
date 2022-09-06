@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -78,21 +78,24 @@ export interface ResourcesForReceiving {
 		 * @param checkMidKeyCerts is a certifying function for MailerId certs.
 		 */
 		msgDecryptor: (msgMeta: delivApi.msgMeta.CryptoInfo,
-				getMainObjHeader: () => Promise<Uint8Array>,
-				getOpenedMsg: (mainObjFileKey: string, msgKeyPackLen: number) =>
-					Promise<OpenedMsg>,
-				checkMidKeyCerts: (certs: confApi.p.initPubKey.Certs) =>
-					Promise<{ pkey: JsonKey; address: string; }>) =>
-			Promise<{ decrInfo: MsgKeyInfo; openedMsg: OpenedMsg }|undefined>;
-		
+			getMainObjHeader: () => Promise<Uint8Array>,
+			getOpenedMsg: (
+				mainObjFileKey: string, msgKeyPackLen: number
+			) => Promise<OpenedMsg>,
+			checkMidKeyCerts: (
+				certs: confApi.p.initPubKey.Certs
+			) => Promise<{ pkey: JsonKey; address: string; }>
+		) => Promise<{ decrInfo: MsgKeyInfo; openedMsg: OpenedMsg }|undefined>;
+
 		/**
 		 * This function marks one's own sending parameters as being used by
 		 * respective correspondent/sender.
 		 * @param sender
 		 * @param invite
 		 */
-		markOwnSendingParamsAsUsed: (sender: string, invite: string) =>
-			Promise<void>;
+		markOwnSendingParamsAsUsed: (
+			sender: string, invite: string
+		) => Promise<void>;
 
 		/**
 		 * This function saves sending parameters that should be used next time
@@ -100,8 +103,9 @@ export interface ResourcesForReceiving {
 		 * @param address
 		 * @param params
 		 */
-		saveParamsForSendingTo: (address: string, params: SendingParams) =>
-			Promise<void>;
+		saveParamsForSendingTo: (
+			address: string, params: SendingParams
+		) => Promise<void>;
 
 		midResolver: ServiceLocator;
 
@@ -120,12 +124,13 @@ type R = ResourcesForReceiving['correspondents'];
  * This object is also responsible for expiring messages on the server.
  */
 export class InboxOnServer {
-	
+
 	private readonly inboxEvents: InboxEvents;
 	private readonly procs = new NamedProcs();
 	private readonly recentlyOpenedMsgs = makeTimedCache<string, OpenedMsg>(
-		60*1000);
-	
+		60*1000
+	);
+
 	private constructor(
 		private readonly r: R,
 		private readonly msgReceiver: MailRecipient,
@@ -170,7 +175,7 @@ export class InboxOnServer {
 		};
 		return Object.freeze(service);
 	}
-	
+
 	private async removeMsg(msgId: string): Promise<void> {
 		// check for an already started process
 		const procId = 'removal of '+msgId;
@@ -198,7 +203,7 @@ export class InboxOnServer {
 		const meta = await this.downloader.getMsgMeta(msgId);
 		return this.cache.addMsg(msgId, meta);
 	}
-	
+
 	private async startCachingAndAddKeyToIndex(msgId: string): Promise<boolean> {
 		const msgOnDisk = await this.msgFromDiskOrDownload(msgId);
 		const meta = await msgOnDisk.getMsgMeta();
@@ -287,7 +292,7 @@ export class InboxOnServer {
 		const address = openedMsg.sender;
 		await this.r.saveParamsForSendingTo(address, sendingParams);
 	}
-	
+
 	private checkServerAuthIfPresent(meta: MsgMeta, decrInfo: MsgKeyInfo): void {
 		// if sender authenticated to server, check that it matches address,
 		// recovered from message decryption 
@@ -296,7 +301,7 @@ export class InboxOnServer {
 			throw new Error(`Sender authenticated to server as ${meta.authSender}, while decrypting key is associated with ${decrInfo.correspondent}`);
 		}
 	}
-	
+
 	private async listMsgs(fromTS?: number): Promise<MsgInfo[]> {
 		const checkServer = true;	// XXX in future this will be an option from req
 		if (!checkServer) { return this.index.listMsgs(fromTS); }
@@ -342,14 +347,14 @@ export class InboxOnServer {
 		const promise = this.procs.latestTaskAtThisMoment<IncomingMessage>(procId);
 		if (promise) { return promise; }
 		return this.procs.start(procId, async () => {
-			
+
 			const msgOnDisk = await this.msgFromDiskOrDownload(msgId);
-			
+
 			let msg = this.recentlyOpenedMsgs.get(msgId);
 			if (msg) {
 				return this.msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
 			}
-				
+
 			if ((msgOnDisk.keyStatus === 'not-found') ||
 					(msgOnDisk.keyStatus === 'fail')) {
 				// XXX 
@@ -373,9 +378,11 @@ export class InboxOnServer {
 			if (!msgKey) {
 				throw makeMsgNotFoundException(msgId);
 			}
-			
-			msg = await openMsg(msgId, mainObjId, mainObj,
-				msgKey.mainObjHeaderOfs, msgKey.msgKey, this.cryptor);
+
+			msg = await openMsg(
+				msgId, mainObjId, mainObj,
+				msgKey.mainObjHeaderOfs, msgKey.msgKey, this.cryptor
+			);
 			msg.setMsgKeyRole(msgKey.msgKeyRole);
 			return this.msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
 		});
@@ -414,7 +421,7 @@ export class InboxOnServer {
 		}
 		return m;
 	}
-	
+
 }
 Object.freeze(InboxOnServer.prototype);
 Object.freeze(InboxOnServer);

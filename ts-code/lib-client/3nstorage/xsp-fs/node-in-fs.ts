@@ -45,6 +45,7 @@ type FSSyncException = web3n.files.FSSyncException;
 type FileException = web3n.files.FileException;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 
 
 export abstract class NodeInFS<P extends NodePersistance> implements Node {
@@ -76,6 +77,21 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		public parentId: string | undefined
 	) {
 		this.isInSyncedStorage = isSyncedStorage(this.storage);
+	}
+
+	protected getObjSrcOfVersion(
+		flags: VersionedReadFlags|undefined
+	): Promise<ObjSource> {
+		if (flags) {
+			const { remoteVersion, archivedVersion } = flags;
+			if (remoteVersion) {
+				const store = this.syncedStorage();
+				return store.getObjSrcOfRemoteVersion(this.objId, remoteVersion);
+			} else if (archivedVersion) {
+				return this.storage.getObjSrc(this.objId, archivedVersion, true);
+			}
+		}
+		return this.storage.getObjSrc(this.objId);
 	}
 
 	private updatedXAttrs(changes: XAttrsChanges|undefined): XAttrs|undefined {
@@ -116,12 +132,42 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		});
 	}
 
-	getXAttr(xaName: string): any {
-		return (this.xattrs ? this.xattrs.get(xaName) : undefined);
+	async getXAttr(
+		xaName: string, flags: VersionedReadFlags|undefined
+	): Promise<{ attr: any; version: number; }> {
+		if (shouldReadCurrentVersion(flags)) {
+			return {
+				attr: (this.xattrs ? this.xattrs.get(xaName) : undefined),
+				version: this.version
+			};
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			const payload = await this.crypto.readonlyPayload(src);
+			const xattrs = await payload.getXAttrs();
+			return {
+				attr: xattrs.get(xaName),
+				version: src.version
+			};
+		}
 	}
 
-	listXAttrs(): string[] {
-		return (this.xattrs ? this.xattrs.list() : []);
+	async listXAttrs(
+		flags: VersionedReadFlags|undefined
+	):Promise<{ lst: string[]; version: number; }> {
+		if (shouldReadCurrentVersion(flags)) {
+			return {
+				lst: (this.xattrs ? this.xattrs.list() : []),
+				version: this.version
+			};
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			const payload = await this.crypto.readonlyPayload(src);
+			const xattrs = await payload.getXAttrs();
+			return {
+				lst: xattrs.list(),
+				version: src.version
+			};
+		}
 	}
 
 	getAttrs(): CommonAttrs {
@@ -445,6 +491,18 @@ function copyWithPathIfRemoteEvent(
 		default:
 			return e as any;
 	}
+}
+
+export function shouldReadCurrentVersion(
+	flags: VersionedReadFlags|undefined
+): boolean {
+	if (flags) {
+		const { archivedVersion, remoteVersion } = flags;
+		if (archivedVersion || remoteVersion) {
+			return false;
+		}
+	}
+	return true;
 }
 
 

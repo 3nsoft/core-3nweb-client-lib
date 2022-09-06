@@ -20,8 +20,8 @@ import { MailConfigurator } from '../../../lib-client/asmail/service-config';
 import { ensureCorrectFS } from '../../../lib-common/exceptions/file';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { GetSigner } from '../../id-manager';
-import { Invites } from './invitations-anon';
-import { PublishedIntroKey } from './published-intro-key';
+import { Invites, makeInvites } from './invitations-anon';
+import { PublishedIntroKey, makePublishedIntroKey } from './published-intro-key';
 import { MsgKeyRole } from '../keyring';
 import { JWKeyPair } from '../keyring/common';
 import { NetClient } from '../../../lib-client/request-utils';
@@ -30,6 +30,7 @@ type WritableFS = web3n.files.WritableFS;
 
 const ANON_SENDER_INVITES_FILE = 'anonymous/invites.json';
 const INTRO_KEY_FILE = 'introductory-key.json';
+
 
 /**
  * Instance of this class updates and checks setting of ASMail server.
@@ -63,8 +64,9 @@ export class ConfigOfASMailServer {
 		 * @param kid
 		 * @return if key is found, object with following fields is returned:
 		 */
-		find: (kid: string) => undefined |
-			{ role: MsgKeyRole; pair: JWKeyPair; replacedAt?: number; };
+		find: (kid: string) => {
+			role: MsgKeyRole; pair: JWKeyPair; replacedAt?: number;
+		}|undefined;
 	};
 
 	private constructor(
@@ -72,9 +74,10 @@ export class ConfigOfASMailServer {
 		resolver: ServiceLocator, net: NetClient
 	) {
 		const serviceConf = new MailConfigurator(
-			address, getSigner, () => resolver(serviceConf.userId), net);
-		this.anonInvites = new Invites(serviceConf);
-		this.publishedIntroKeys = new PublishedIntroKey(getSigner, serviceConf);
+			address, getSigner, () => resolver(serviceConf.userId), net
+		);
+		this.anonInvites = makeInvites(serviceConf);
+		this.publishedIntroKeys = makePublishedIntroKey(getSigner, serviceConf);
 		
 		this.anonSenderInvites = {
 			getAll: this.anonInvites.getAll,
@@ -99,7 +102,8 @@ export class ConfigOfASMailServer {
 		try {
 			ensureCorrectFS(fs, 'synced', true);
 			const conf = new ConfigOfASMailServer(
-				address, getSigner, resolver, net);
+				address, getSigner, resolver, net
+			);
 			await Promise.all([
 				fs.writableFile(ANON_SENDER_INVITES_FILE)
 				.then(f => conf.anonInvites.start(f)),
@@ -118,5 +122,6 @@ export class ConfigOfASMailServer {
 }
 Object.freeze(ConfigOfASMailServer.prototype);
 Object.freeze(ConfigOfASMailServer);
+
 
 Object.freeze(exports);

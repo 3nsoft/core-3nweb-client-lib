@@ -48,6 +48,7 @@ type FolderDiff = web3n.files.FolderDiff;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
 
 export interface NodeInfo {
 	/**
@@ -335,6 +336,16 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		const lst = Object.values(this.currentState.nodes)
 		.map(nodeInfoToListingEntry);
 		return { lst, version: this.version };
+	}
+
+	async listNonCurrent(
+		flags: VersionedReadFlags
+	): Promise<{ lst: ListingEntry[]; version: number; }> {
+		const src = await this.getObjSrcOfVersion(flags);
+		const { folderInfo } = await this.crypto.read(src);
+		const lst = Object.values(folderInfo)
+		.map(nodeInfoToListingEntry);
+		return { lst, version: src.version };
 	}
 
 	async childExistsInSyncedVersion(childObjId: string): Promise<boolean> {
@@ -938,7 +949,6 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	private async uploadRemovalOf(removedNodes: NodeInfo[]): Promise<void> {
-		const storage = this.syncedStorage();
 		const rmObjs: ObjId[] = [];
 		for (const node of removedNodes) {
 			appendArray(rmObjs, await this.listRemovedInTreeToUploadRm(node));

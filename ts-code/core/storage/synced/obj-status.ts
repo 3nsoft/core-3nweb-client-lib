@@ -601,7 +601,8 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 
 	syncStatus(): SyncStatus {
 		const { remote, synced } = splitVersionsIntoBranches(
-			this.status.remote, this.status.synced);
+			this.status.remote, this.status.synced
+		);
 		return {
 			state: this.stateIndicator,
 			local: localVersionFromStatus(this.status.local),
@@ -665,6 +666,12 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		}
 		this.updateStateIndicator();
 		await this.triggerSaveProc();
+	}
+
+	isAmongRemote(version: number): boolean {
+		if (this.status.remote.current === version) { return true; }
+		if (this.status.remote.archived?.includes(version)) { return true; }
+		return false;
 	}
 
 }
