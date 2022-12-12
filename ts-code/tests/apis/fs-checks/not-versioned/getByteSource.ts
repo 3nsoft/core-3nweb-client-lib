@@ -49,33 +49,32 @@ it.func = async function(s) {
 	let src = await testFS.getByteSource(fName);
 	expect(await src.getPosition()).toBe(0);
 
-	let chunk = await src.read(200);
+	let chunk = await src.readNext(200);
 	expect(bytesEqual(chunk!, original.subarray(0, 200))).toBe(true);
 
 	await src.seek(3000);
 	expect(await src.getPosition()).withContext('seek method changes position in file.').toBe(3000);
-	chunk = await src.read(200);
+	chunk = await src.readNext(200);
 	expect(bytesEqual(chunk!, original.subarray(3000, 3200))).toBe(true);
 
 	await src.seek(11000);
 	expect(await src.getPosition()).withContext('seek method changes position in file.').toBe(11000);
-	chunk = await src.read(200);
+	chunk = await src.readNext(200);
 	expect(bytesEqual(chunk!, original.subarray(11000, 11200))).toBe(true);
 
-	await src.seek(1000);
-	expect(await src.getPosition()).toBe(1000);
-	chunk = await src.read(200);
+	chunk = await src.readAt(1000, 200);
+	expect(await src.getPosition()).toBe(1200);
 	expect(bytesEqual(chunk!, original.subarray(1000, 1200))).toBe(true);
 
-	chunk = await src.read(undefined);
+	chunk = await src.readNext(undefined);
 	expect(bytesEqual(chunk!, original.subarray(1200))).withContext('read should be from current position to file\'s end').toBe(true);
 
-	expect(typeof (await src.read(100))).withContext('undefined is returned, when there are no more bytes to read').toBe('undefined');
+	expect(typeof (await src.readNext(100))).withContext('undefined is returned, when there are no more bytes to read').toBe('undefined');
 
 	fName = 'file2';
 	await testFS.writeBytes(fName, new Uint8Array(0));
 	src = await testFS.getByteSource(fName);
-	expect(typeof (await src.read(100))).withContext('reading empty file should produce undefined').toBe('undefined');
+	expect(typeof (await src.readNext(100))).withContext('reading empty file should produce undefined').toBe('undefined');
 };
 specs.its.push(it);
 

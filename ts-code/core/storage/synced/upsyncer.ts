@@ -220,8 +220,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		const header = await this.headerToUpload();
 		let segs: Uint8Array|undefined = undefined;
 		if (segsToUpload > 0) {
-			await this.src.segSrc.seek(upload.segsOfs);
-			segs = await this.src.segSrc.read(segsToUpload);
+			segs = await this.src.segSrc.readAt(upload.segsOfs,segsToUpload);
 		}
 		assert(!!segs && (segs.length === segsToUpload));
 		const ver = this.info.uploadVersion;
@@ -293,8 +292,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		upload: WholeVerOrderedUpload
 	): Promise<void> {
 		const segsToUpload = Math.min(upload.segsLeft, this.maxUploadChunk());
-		await this.src.segSrc.seek(upload.segsOfs);
-		const segs = await this.src.segSrc.read(segsToUpload);
+		const segs = await this.src.segSrc.readAt(upload.segsOfs, segsToUpload);
 		assert(!!segs && (segs.length === segsToUpload));
 		const ofs = upload.segsOfs;
 		const trans = upload.transactionId!;
@@ -319,7 +317,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		const segInfo = upload.newSegsLeft[0];
 		assert(!!segInfo);
 		const len = Math.min(maxSegs, segInfo.len);
-		const segs = await this.src.segSrc.read(len);
+		const segs = await this.src.segSrc.readAt(segInfo.thisVerOfs, len);
 		assert(!!segs && (segs.length === len));
 		if (segInfo.len > len) {
 			upload.newSegsLeft.splice(1, 0, {

@@ -26,7 +26,6 @@ import { MsgKeyInfo } from '../keyring';
 import { MsgIndex } from './msg-indexing';
 import { fsForAttachments } from './attachments/fs';
 import { areAddressesEqual } from '../../../lib-common/canonical-address';
-import { base64 } from '../../../lib-common/buffer-utils';
 import { checkAndExtractPKeyWithAddress } from '../key-verification';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
@@ -43,6 +42,7 @@ import { MsgMeta } from '../../../lib-common/service-api/asmail/retrieval';
 import { MsgOnDisk } from './msg-on-disk';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { NetClient } from '../../../lib-client/request-utils';
+import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../../lib-client/fs-sync-utils';
 
 type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
@@ -80,7 +80,7 @@ export interface ResourcesForReceiving {
 		msgDecryptor: (msgMeta: delivApi.msgMeta.CryptoInfo,
 			getMainObjHeader: () => Promise<Uint8Array>,
 			getOpenedMsg: (
-				mainObjFileKey: string, msgKeyPackLen: number
+				mainObjFileKey: Uint8Array, msgKeyPackLen: number
 			) => Promise<OpenedMsg>,
 			checkMidKeyCerts: (
 				certs: confApi.p.initPubKey.Certs
@@ -116,6 +116,8 @@ export interface ResourcesForReceiving {
 
 type R = ResourcesForReceiving['correspondents'];
 
+const MSG_INDEX_FOLDER = 'msg-index';
+
 /**
  * Instance of this class represents inbox-on-mail-server.
  * It uses api to manage messages on a ASMail server, caching and recording
@@ -147,23 +149,34 @@ export class InboxOnServer {
 	}
 
 	static async makeAndStart(
-		cachePath: string, fs: WritableFS, r: ResourcesForReceiving
+		cachePath: string, syncedFS: WritableFS, r: ResourcesForReceiving
 	): Promise<InboxOnServer> {
 		try {
-			ensureCorrectFS(fs, 'synced', true);
+			ensureCorrectFS(syncedFS, 'synced', true);
 			const msgReceiver = new MailRecipient(
 				r.address, r.getSigner,
-				() => r.asmailResolver(r.address), r.makeNet());
+				() => r.asmailResolver(r.address), r.makeNet()
+			);
 			const downloader = new MsgDownloader(msgReceiver);
 			const cache = await CachedMessages.makeFor(
-				cachePath, downloader, r.logError);
-			const index = await MsgIndex.makeWith(fs);
+				cachePath, downloader, r.logError
+			);
+			const indexSyncedFS = await getOrMakeAndUploadFolderIn(
+				syncedFS, MSG_INDEX_FOLDER
+			);
+			const index = await MsgIndex.make(indexSyncedFS);
+			await uploadFolderChangesIfAny(syncedFS);
 			return new InboxOnServer(
 				r.correspondents, msgReceiver, r.getStorages, r.cryptor,
-				downloader, cache, index, r.logError);
+				downloader, cache, index, r.logError
+			);
 		} catch (err) {
 			throw errWithCause(err, 'Failed to initialize Inbox');
 		}
+	}
+
+	async close(): Promise<void> {
+		this.index.stopSyncing();
 	}
 
 	wrap(): InboxService {
@@ -184,7 +197,7 @@ export class InboxOnServer {
 		// start removal process
 		return this.procs.start<any>(procId, (async () => {
 			await Promise.all([
-				this.index.removeUsingIdOnly(msgId),
+				this.index.remove(msgId),
 				this.removeMsgFromServerAndCache(msgId)
 			]);
 		}));
@@ -219,15 +232,16 @@ export class InboxOnServer {
 				}
 				return mainObjSrc.readHeader();
 			};
-			const getOpenedMsg = async (mainObjFileKey: string,
-					msgKeyPackLen: number): Promise<OpenedMsg> => {
+			const getOpenedMsg = async (
+				mainObjFileKey: Uint8Array, msgKeyPackLen: number
+			): Promise<OpenedMsg> => {
 				if (!mainObjSrc) {
 					mainObjSrc = await msgOnDisk.getMsgObj(mainObjId);
 				}
-				const fKey = base64.open(mainObjFileKey);
-				const openedMsg = await openMsg(msgId, mainObjId,
-					mainObjSrc, msgKeyPackLen, fKey, this.cryptor);
-				fKey.fill(0);
+				const openedMsg = await openMsg(
+					msgId, mainObjId,
+					mainObjSrc, msgKeyPackLen, mainObjFileKey, this.cryptor
+				);
 				return openedMsg;
 			};
 			const checkMidKeyCerts = (certs: confApi.p.initPubKey.Certs):
@@ -238,7 +252,8 @@ export class InboxOnServer {
 			};
 
 			const decrOut = await this.r.msgDecryptor(
-				meta.extMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts);
+				meta.extMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts
+			);
 
 			if (decrOut) {
 				const { decrInfo, openedMsg } = decrOut;
@@ -262,8 +277,9 @@ export class InboxOnServer {
 
 			} else {
 				// check, if msg has already been indexed
-				const knownDecr = await this.index.fKeyFor(
-					{ msgId, deliveryTS: msgOnDisk.deliveryTS });
+				const knownDecr = await this.index.getKeyFor(
+					msgId, msgOnDisk.deliveryTS
+				);
 				if (!knownDecr) {
 					await msgOnDisk.updateMsgKeyStatus('not-found');
 					return false;
@@ -373,8 +389,9 @@ export class InboxOnServer {
 			const meta = await msgOnDisk.getMsgMeta();
 			const mainObjId = meta.extMeta.objIds[0];
 			const mainObj = await msgOnDisk.getMsgObj(mainObjId);
-			const msgKey = await this.index.fKeyFor(
-				{ msgId, deliveryTS: meta.deliveryCompletion! });
+			const msgKey = await this.index.getKeyFor(
+				msgId, meta.deliveryCompletion!
+			);
 			if (!msgKey) {
 				throw makeMsgNotFoundException(msgId);
 			}

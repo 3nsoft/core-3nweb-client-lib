@@ -29,7 +29,6 @@ export function copy<T>(orig: T, excludeTopFields?: string[]): T {
 		return ((origType !== 'function') ? orig : (undefined as any));
 	}
 	if (orig === null) { return (null as any); }
-	if (Buffer.isBuffer(orig)) { return (orig as any); }
 	if (ArrayBuffer.isView(orig)) { return (orig as any); }
 	if (Array.isArray(orig)) {
 		const arr: any[] = orig;
@@ -40,15 +39,15 @@ export function copy<T>(orig: T, excludeTopFields?: string[]): T {
 		return (c as any);
 	} else {
 		const c = ({} as T);
-		const fields = Object.keys(orig);
+		const fields = Object.keys(orig!);
 		if (excludeTopFields) {
 			for (const f of fields) {
 				if (excludeTopFields.includes(f)) { continue; }
-				c[f] = copy<any>(orig[f]);
+				c[f] = copy<any>(orig![f]);
 			}
 		} else {
 			for (const f of fields) {
-				c[f] = copy<any>(orig[f]);
+				c[f] = copy<any>(orig![f]);
 			}
 		}
 		return c;

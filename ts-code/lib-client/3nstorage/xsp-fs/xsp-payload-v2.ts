@@ -191,23 +191,29 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 
 	makeFileByteSource(): FileByteSource {
 		let pos = 0;
+		const seek: FileByteSource['seek'] = async ofs => {
+			assert(Number.isInteger(ofs) && (ofs >= 0) && (ofs <= this.size),
+				`Offset must be an integer from 0 to size value, inclusive`);
+			pos = ofs;
+		};
+		const readNext: FileByteSource['readNext'] = async len => {
+			if (len === undefined) {
+				len = this.size - pos;
+			}
+			const bytes = await this.readSomeContentBytes(pos, pos+len);
+			if (bytes) {
+				pos += bytes.length;
+			}
+			return bytes;
+		};
 		return wrapAndSyncFileSource({
-			seek: async ofs => {
-				assert(Number.isInteger(ofs) && (ofs >= 0) && (ofs <= this.size),
-					`Offset must be an integer from 0 to size value, inclusive`);
-				pos = ofs;
-			},
+			seek,
 			getSize: async () => this.size,
 			getPosition: async () => pos,
-			read: async len => {
-				if (len === undefined) {
-					len = this.size - pos;
-				}
-				const bytes = await this.readSomeContentBytes(pos, pos+len);
-				if (bytes) {
-					pos += bytes.length;
-				}
-				return bytes;
+			readNext,
+			readAt: async (pos, len) => {
+				await seek(pos);
+				return await readNext(len);
 			}
 		});
 	}
@@ -854,8 +860,7 @@ function payloadLayoutException(
 async function sureReadOfBytesFrom(
 	src: ByteSource, ofs: number, len: number
 ): Promise<Uint8Array> {
-	await src.seek(ofs);
-	const bytes = await src.read(len);
+	const bytes = await src.readAt(ofs, len);
 	assert(!!bytes && (bytes.length === len));
 	return bytes!;
 }
@@ -901,25 +906,31 @@ namespace payloadV2 {
 		const { size: srcLen, isEndless } = await src.getSize();
 		if (isEndless) {
 			throw payloadLayoutException(
-				`Payload v2 can't be present in endless byte source.`);
+				`Payload v2 can't be present in endless byte source.`
+			);
 		}
 		if (srcLen < MIN_PAYLOAD_V2_LEN) {
 			throw payloadLayoutException(
-				`Byte source is too short for smallest payload v2`);
+				`Byte source is too short for smallest payload v2`
+			);
 		}
 
 		// - read layout length from last 4 bytes
 		const layoutLen = uintFrom4Bytes(
-			await sureReadOfBytesFrom(src, srcLen - 4, 4));
+			await sureReadOfBytesFrom(src, srcLen - 4, 4)
+		);
 
 		const sectionsEnd = srcLen - (layoutLen + 4);
 		if (sectionsEnd < 0) {
 			throw payloadLayoutException(
-				`Layout length value in payload v2 is out of bound`);
+				`Layout length value in payload v2 is out of bound`
+			);
 		}
 
 		// - read layout bytes
-		const layoutBytes = await sureReadOfBytesFrom(src, sectionsEnd, layoutLen);
+		const layoutBytes = await sureReadOfBytesFrom(
+			src, sectionsEnd, layoutLen
+		);
 		let ofs = 0;
 
 		// - parse common attrs

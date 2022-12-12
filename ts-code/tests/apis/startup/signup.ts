@@ -32,7 +32,7 @@ describe('signUp process', () => {
 	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
 		({ closeIPC, coreInit, w3n } = s.runner.startCore());
-	});
+	}, 30000);
 
 	afterAllCond(async () => {
 		closeIPC();

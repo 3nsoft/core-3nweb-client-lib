@@ -22,6 +22,7 @@ import { MsgEnvelope, MainBody, SuggestedNextKeyPair, SendingParams } from './co
 import { makeSegmentsReader, AsyncSBoxCryptor, idToHeaderNonce, makeDecryptedByteSource, ObjSource } from 'xsp-files';
 import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
 import { MsgKeyRole } from '../keyring';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 export { SuggestedNextKeyPair } from './common';
 
@@ -90,17 +91,22 @@ Object.freeze(OpenedMsg.prototype);
 Object.freeze(OpenedMsg);
 
 
-export async function openMsg(msgId: string, mainObjId: string,
-		mainObj: ObjSource, headerOfs: number, fKey: Uint8Array,
-		cryptor: AsyncSBoxCryptor): Promise<OpenedMsg> {
+export async function openMsg(
+	msgId: string, mainObjId: string,
+	mainObj: ObjSource, headerOfs: number, fKey: Uint8Array,
+	cryptor: AsyncSBoxCryptor
+): Promise<OpenedMsg> {
 	try {
 		const header = await mainObj.readHeader();
 		const segReader = await makeSegmentsReader(
 			fKey, idToHeaderNonce(mainObjId), 0,
-			header.subarray(headerOfs), cryptor)
-		const byteSrc = await makeDecryptedByteSource(
-			mainObj.segSrc, segReader);
-		const bytes = await byteSrc.read(undefined);
+			header.subarray(headerOfs), cryptor,
+			cryptoWorkLabels.makeFor('asmail', msgId)
+		);
+		const byteSrc = makeDecryptedByteSource(
+			mainObj.segSrc, segReader
+		);
+		const bytes = await byteSrc.readNext(undefined);
 		if (!bytes) { throw new Error(`End of bytes is reached too soon`); }
 		const jsonOfMain = JSON.parse(utf8.open(bytes));
 		return new OpenedMsg(msgId, jsonOfMain);

@@ -81,15 +81,14 @@ class ReadonlyPayloadV1 implements ReadonlyPayload {
 		assert(Number.isInteger(end) && (end >= start) && (end <= this.size));
 		if (end === start) { return; }
 		return await this.syncProc.startOrChain(async () => {
-			await this.src.seek(start);
-			return await this.src.read(end - start);
+			return await this.src.readAt(start, end - start);
 		});
 	}
 
 	makeFileByteSource(): FileByteSource {
-		const { getPosition, seek, read } = this.src;
+		const { getPosition, seek, readNext, readAt } = this.src;
 		return {
-			seek, getPosition, read,
+			seek, getPosition, readNext, readAt,
 			getSize: async () => this.size,
 		};
 	}

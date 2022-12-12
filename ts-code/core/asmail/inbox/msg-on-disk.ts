@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjOnDisk, ObjDownloader } from '../../../lib-client/objs-on-disk/obj-on-disk';

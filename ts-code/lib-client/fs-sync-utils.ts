@@ -15,15 +15,27 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { Observable } from "rxjs";
 import { makeFSSyncException } from "./3nstorage/exceptions";
 
 type WritableFS = web3n.files.WritableFS;
+type ReadonlyFS = web3n.files.ReadonlyFS;
 type FileException = web3n.files.FileException;
+type RemoteEvent = web3n.files.RemoteEvent;
+type FileEvent = web3n.files.FileEvent;
+type FolderEvent = web3n.files.FolderEvent;
 
-
-export async function getRemoteFolderChanges(fs: WritableFS): Promise<void> {
-	const { state } = await fs.v!.sync!.updateStatusInfo('');
+export async function getRemoteFolderChanges(
+	fs: WritableFS, forceServerCheck = false
+): Promise<void> {
+	if (forceServerCheck) {
+		await fs.v!.sync!.updateStatusInfo('');
+	}
+	let { state } = await fs.v!.sync!.status('');
 	if (state === 'behind') {
+		if (!forceServerCheck) {
+			await fs.v!.sync!.updateStatusInfo('');
+		}
 		await fs.v!.sync!.adoptRemote('');
 	} else if (state === 'conflicting') {
 		const path = ((typeof fs.name === 'string') ? fs.name : '');
@@ -32,7 +44,6 @@ export async function getRemoteFolderChanges(fs: WritableFS): Promise<void> {
 			message: `Getting remote changes can't settle conflict in this function`
 		});
 	}
-
 }
 
 export async function getOrMakeAndUploadFolderIn(
@@ -54,9 +65,17 @@ export async function getOrMakeAndUploadFolderIn(
 }
 
 export async function uploadFolderChangesIfAny(fs: WritableFS): Promise<void> {
-	const { state } = await fs.v!.sync!.updateStatusInfo('');
-	if ((state === 'synced') || (state === 'behind')) { return; }
-	await fs.v!.sync!.upload('');
+	const { state } = await fs.v!.sync!.status('');
+	if (state === 'unsynced') {
+		await fs.v!.sync!.updateStatusInfo('');
+		await fs.v!.sync!.upload('');
+	}
+}
+
+export function observableFromTreeEvents(
+	fs: ReadonlyFS, rootPath: string
+): Observable<RemoteEvent|FileEvent|FolderEvent> {
+	return new Observable(obs => fs.watchTree(rootPath, undefined, obs));
 }
 
 

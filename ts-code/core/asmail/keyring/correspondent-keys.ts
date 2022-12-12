@@ -29,6 +29,7 @@ import { base64 } from '../../../lib-common/buffer-utils';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { Decryptor, makeDecryptor } from '../../../lib-common/async-cryptor-wrap';
 import { AsyncSBoxCryptor } from 'xsp-files';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 export interface ReceptionPair {
 	pids: string[];
@@ -121,7 +122,8 @@ export function msgMasterDecryptor(
 	cryptor: AsyncSBoxCryptor, skey: JsonKey, pkey: JsonKeyShort
 ): Decryptor {
 	const msgMasterKey = calcMsgMasterKey(skey, pkey);
-	const masterDecr = makeDecryptor(cryptor, msgMasterKey);
+	const workLabel = cryptoWorkLabels.makeRandom('asmail');
+	const masterDecr = makeDecryptor(cryptor, workLabel, msgMasterKey);
 	msgMasterKey.fill(0);
 	return masterDecr;
 }

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf } from "./protobuf-msg";
+import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf, methodPathFor } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "./connector";
@@ -28,6 +28,7 @@ import { toBuffer } from "../lib-common/buffer-utils";
 
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type ReadonlyFileVersionedAPI = web3n.files.ReadonlyFileVersionedAPI;
+type ReadonlyFileSyncAPI = web3n.files.ReadonlyFileSyncAPI;
 type WritableFile = web3n.files.WritableFile;
 type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
@@ -69,7 +70,7 @@ export function makeFileCaller(
 		file.writeTxt = writeTxt.makeCaller(caller, objPath);
 	}
 	if (fileMsg.isVersioned) {
-		const vPath = objPath.concat('v');
+		const vPath = methodPathFor<ReadonlyFile>(objPath, 'v');
 		file.v = {
 			getByteSource: vGetByteSource.makeCaller(caller, vPath),
 			getXAttr: vGetXAttr.makeCaller(caller, vPath),
@@ -89,8 +90,7 @@ export function makeFileCaller(
 			file.v.archiveCurrent = vArchiveCurrent.makeCaller(caller, vPath);
 		}
 		if (fileMsg.isSynced) {
-			const vsPath = objPath.concat('v', 'sync');
-			const vsConnectPath = objPath.concat('v', 'sync', 'connect');
+			const vsPath = methodPathFor<ReadonlyFileVersionedAPI>(vPath, 'sync');
 			file.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
 				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
@@ -329,7 +329,7 @@ namespace stat {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['stat'] {
-		const path = objPath.concat('stat');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'stat');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackStats);
@@ -391,7 +391,7 @@ namespace getXAttr {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['getXAttr'] {
-		const path = objPath.concat('getXAttr');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'getXAttr');
 		return xaName => caller
 		.startPromiseCall(path, requestType.pack({ xaName }))
 		.then(unpackXAttrValue);
@@ -414,7 +414,7 @@ namespace listXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['listXAttrs'] {
-		const path = objPath.concat('listXAttrs');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'listXAttrs');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
@@ -459,7 +459,7 @@ export namespace readBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['readBytes'] {
-		const path = objPath.concat('readBytes');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readBytes');
 		return (start, end) => caller
 		.startPromiseCall(path, requestType.pack({
 			start: toOptVal(start), end: toOptVal(end)
@@ -484,7 +484,7 @@ namespace readTxt {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['readTxt'] {
-		const path = objPath.concat('readTxt');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readTxt');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => (buf ? decodeFromUtf8(buf) : ''));
@@ -521,7 +521,7 @@ namespace readJSON {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['readJSON'] {
-		const path = objPath.concat('readJSON');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readJSON');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackJSON);
@@ -549,7 +549,7 @@ namespace getByteSource {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['getByteSource'] {
-		const path = objPath.concat('getByteSource');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'getByteSource');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
@@ -661,7 +661,7 @@ namespace watch {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFile['watch'] {
-		const path = objPath.concat('watch');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'watch');
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(path, undefined, s);
@@ -758,7 +758,7 @@ export namespace vGetXAttr {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['getXAttr'] {
-		const path = objPath.concat('getXAttr');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'getXAttr');
 		return (xaName, flags) => caller
 		.startPromiseCall(path, requestType.pack({
 			xaName, flags: versionedReadFlagsToMsg(flags)
@@ -814,7 +814,7 @@ export namespace vListXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['listXAttrs'] {
-		const path = objPath.concat('listXAttrs');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'listXAttrs');
 		return flags => caller
 		.startPromiseCall(path, packVersionedReadFlagsRequest(flags))
 		.then(buf => {
@@ -876,7 +876,7 @@ export namespace vReadBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readBytes'] {
-		const path = objPath.concat('readBytes');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readBytes');
 		return (start, end, flags) => caller
 		.startPromiseCall(path, requestType.pack({
 			start: toOptVal(start), end: toOptVal(end),
@@ -911,7 +911,7 @@ export namespace vReadTxt {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readTxt'] {
-		const path = objPath.concat('readTxt');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readTxt');
 		return flags => caller
 		.startPromiseCall(path, packVersionedReadFlagsRequest(flags))
 		.then(buf => {
@@ -948,7 +948,7 @@ export namespace vReadJSON {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['readJSON'] {
-		const path = objPath.concat('readJSON');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'readJSON');
 		return flags => caller
 		.startPromiseCall(path, packVersionedReadFlagsRequest(flags))
 		.then(buf => {
@@ -993,7 +993,7 @@ export namespace vGetByteSource {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['getByteSource'] {
-		const path = objPath.concat('getByteSource');
+		const path = methodPathFor<ReadonlyFile>(objPath, 'getByteSource');
 		return flags => caller
 		.startPromiseCall(path, packVersionedReadFlagsRequest(flags))
 		.then(buf => {
@@ -1098,7 +1098,7 @@ export namespace updateXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['updateXAttrs'] {
-		const path = objPath.concat('updateXAttrs');
+		const path = methodPathFor<WritableFile>(objPath, 'updateXAttrs');
 		return async changes => {
 			await caller.startPromiseCall(path, packXAttrsChanges(changes));
 		};
@@ -1127,7 +1127,7 @@ namespace writeBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['writeBytes'] {
-		const path = objPath.concat('writeBytes');
+		const path = methodPathFor<WritableFile>(objPath, 'writeBytes');
 		return bytes => caller
 		.startPromiseCall(path, requestType.pack({
 			bytes: bytes as Buffer
@@ -1157,7 +1157,7 @@ namespace writeTxt {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['writeTxt'] {
-		const path = objPath.concat('writeTxt');
+		const path = methodPathFor<WritableFile>(objPath, 'writeTxt');
 		return txt => caller
 		.startPromiseCall(path, requestType.pack({ txt })) as Promise<void>;
 	}
@@ -1185,7 +1185,7 @@ namespace writeJSON {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['writeJSON'] {
-		const path = objPath.concat('writeJSON');
+		const path = methodPathFor<WritableFile>(objPath, 'writeJSON');
 		return json => caller
 		.startPromiseCall(path, requestType.pack({
 			json: JSON.stringify(json)
@@ -1221,7 +1221,7 @@ namespace getByteSink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['getByteSink'] {
-		const path = objPath.concat('getByteSink');
+		const path = methodPathFor<WritableFile>(objPath, 'getByteSink');
 		return truncateFile => caller
 		.startPromiseCall(path, requestType.pack({
 			truncateFile: toOptVal(truncateFile)
@@ -1258,7 +1258,7 @@ namespace copy {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFile['copy'] {
-		const path = objPath.concat('copy');
+		const path = methodPathFor<WritableFile>(objPath, 'copy');
 		return async file => {
 			const fRef = caller.srvRefOf(file);
 			await caller
@@ -1286,7 +1286,7 @@ namespace vCopy {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['copy'] {
-		const path = objPath.concat('copy');
+		const path = methodPathFor<WritableFileVersionedAPI>(objPath, 'copy');
 		return file => {
 			const fRef = caller.srvRefOf(file);
 			return caller
@@ -1315,7 +1315,9 @@ namespace vUpdateXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['updateXAttrs'] {
-		const path = objPath.concat('updateXAttrs');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'updateXAttrs'
+		);
 		return changes => {
 			const reqBody = updateXAttrs.packXAttrsChanges(changes);
 			return caller.startPromiseCall(path, reqBody)
@@ -1349,7 +1351,9 @@ namespace vWriteBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeBytes'] {
-		const path = objPath.concat('writeBytes');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'writeBytes'
+		);
 		return bytes => caller
 		.startPromiseCall(path, requestType.pack({ bytes: bytes as Buffer }))
 		.then(unpackInt);
@@ -1381,7 +1385,9 @@ namespace vWriteTxt {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeTxt'] {
-		const path = objPath.concat('writeTxt');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'writeTxt'
+		);
 		return txt => caller
 		.startPromiseCall(path, requestType.pack({ txt }))
 		.then(unpackInt);
@@ -1413,7 +1419,9 @@ namespace vWriteJSON {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['writeJSON'] {
-		const path = objPath.concat('writeJSON');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'writeJSON'
+		);
 		return json => caller
 		.startPromiseCall(path, requestType.pack({ json: JSON.stringify(json) }))
 		.then(unpackInt);
@@ -1458,7 +1466,9 @@ export namespace vGetByteSink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['getByteSink'] {
-		const path = objPath.concat('getByteSink');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'getByteSink'
+		);
 		return (truncateFile, currentVersion) => caller
 		.startPromiseCall(path, requestType.pack({
 			truncateFile: toOptVal(truncateFile),
@@ -1476,7 +1486,7 @@ Object.freeze(vGetByteSink);
 
 namespace vsStatus {
 
-	export function wrapService(fn: WritableFileSyncAPI['status']): ExposedFn {
+	export function wrapService(fn: ReadonlyFileSyncAPI['status']): ExposedFn {
 		return () => {
 			const promise = fn()
 			.then(packSyncStatus);
@@ -1486,8 +1496,8 @@ namespace vsStatus {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFileSyncAPI['status'] {
-		const path = objPath.concat('status');
+	): ReadonlyFileSyncAPI['status'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'status');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackSyncStatus);
@@ -1500,7 +1510,7 @@ Object.freeze(vsStatus);
 namespace vsUpdateStatusInfo {
 
 	export function wrapService(
-		fn: WritableFileSyncAPI['updateStatusInfo']
+		fn: ReadonlyFileSyncAPI['updateStatusInfo']
 	): ExposedFn {
 		return () => {
 			const promise = fn()
@@ -1511,8 +1521,10 @@ namespace vsUpdateStatusInfo {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFileSyncAPI['updateStatusInfo'] {
-		const path = objPath.concat('updateStatusInfo');
+	): ReadonlyFileSyncAPI['updateStatusInfo'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(
+			objPath, 'updateStatusInfo'
+		);
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackSyncStatus);
@@ -1533,7 +1545,7 @@ namespace vsIsRemoteVersionOnDisk {
 	}>(pb.FileSyncIsOnDiskReplyBody);
 
 	export function wrapService(
-		fn: WritableFileSyncAPI['isRemoteVersionOnDisk']
+		fn: ReadonlyFileSyncAPI['isRemoteVersionOnDisk']
 	): ExposedFn {
 		return buf => {
 			const { version } = requestType.unpack(buf);
@@ -1545,8 +1557,10 @@ namespace vsIsRemoteVersionOnDisk {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFileSyncAPI['isRemoteVersionOnDisk'] {
-		const path = objPath.concat('isRemoteVersionOnDisk');
+	): ReadonlyFileSyncAPI['isRemoteVersionOnDisk'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(
+			objPath, 'isRemoteVersionOnDisk'
+		);
 		return version => caller
 		.startPromiseCall(path, requestType.pack({ version }))
 		.then(buf => replyType.unpack(buf).status);
@@ -1562,7 +1576,7 @@ namespace vsDownload {
 		version: number;
 	}>(pb.FileSyncDownloadRequestBody);
 
-	export function wrapService(fn: WritableFileSyncAPI['download']): ExposedFn {
+	export function wrapService(fn: ReadonlyFileSyncAPI['download']): ExposedFn {
 		return buf => {
 			const { version } = requestType.unpack(buf);
 			const promise = fn(fixInt(version));
@@ -1572,8 +1586,8 @@ namespace vsDownload {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFileSyncAPI['download'] {
-		const path = objPath.concat('download');
+	): ReadonlyFileSyncAPI['download'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'download');
 		return version => caller
 		.startPromiseCall(path, requestType.pack({ version })) as Promise<void>;
 	}
@@ -1614,10 +1628,17 @@ namespace vsUpload {
 		opts?: OptionsToUploadLocalMsg;
 	}>(pb.FileSyncUploadRequestBody);
 
+	const replyType = ProtoType.for<{
+		uploadedVersion?: Value<number>;
+	}>(pb.FileSyncUploadReplyBody);
+
 	export function wrapService(fn: WritableFileSyncAPI['upload']): ExposedFn {
 		return buf => {
 			const { opts } = requestType.unpack(buf);
-			const promise = fn(optionsToUploadLocalFromMsg(opts));
+			const promise = fn(optionsToUploadLocalFromMsg(opts))
+			.then(uploadedVersion => replyType.pack({
+				uploadedVersion: toOptVal(uploadedVersion)
+			}));
 			return { promise };
 		};
 	}
@@ -1625,11 +1646,12 @@ namespace vsUpload {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileSyncAPI['upload'] {
-		const path = objPath.concat('upload');
+		const path = methodPathFor<WritableFileSyncAPI>(objPath, 'upload');
 		return opts => caller
 		.startPromiseCall(path, requestType.pack({
 			opts: optionsToUploadLocalToMsg(opts)
-		})) as Promise<void>;
+		}))
+		.then(buf => valOfOptInt(replyType.unpack(buf).uploadedVersion));
 	}
 
 }
@@ -1681,7 +1703,7 @@ namespace vsAdoptRemote {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileSyncAPI['adoptRemote'] {
-		const path = objPath.concat('adoptRemote');
+		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'adoptRemote');
 		return opts => caller
 		.startPromiseCall(path, requestType.pack({
 			opts: remoteAdoptionOptsToMsg(opts)
@@ -1732,7 +1754,9 @@ export namespace vListVersions {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['listVersions'] {
-		const path = objPath.concat('listVersions');
+		const path = methodPathFor<ReadonlyFileVersionedAPI>(
+			objPath, 'listVersions'
+		);
 		return () => caller
 		.startPromiseCall(path)
 		.then(unpackReply);
@@ -1762,7 +1786,9 @@ namespace vArchiveCurrent {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFileVersionedAPI['archiveCurrent'] {
-		const path = objPath.concat('archiveCurrent');
+		const path = methodPathFor<WritableFileVersionedAPI>(
+			objPath, 'archiveCurrent'
+		);
 		return version => caller
 		.startPromiseCall(path, requestType.pack({ version: toOptVal(version) }))
 		.then(unpackInt);

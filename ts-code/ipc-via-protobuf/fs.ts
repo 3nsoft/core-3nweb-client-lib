@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8, intValOf } from "./protobuf-msg";
+import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8, intValOf, methodPathFor } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { fs as pb } from '../protos/fs.proto';
 import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "./connector";
@@ -30,6 +30,7 @@ import { toRxObserver } from "../lib-common/utils-for-observables";
 
 type ReadonlyFS = web3n.files.ReadonlyFS;
 type ReadonlyFSVersionedAPI = web3n.files.ReadonlyFSVersionedAPI;
+type ReadonlyFSSyncAPI = web3n.files.ReadonlyFSSyncAPI;
 type WritableFS = web3n.files.WritableFS;
 type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
 type WritableFSSyncAPI = web3n.files.WritableFSSyncAPI;
@@ -99,7 +100,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 		fs.writeTxtFile = writeTxtFile.makeCaller(caller, objPath);
 	}
 	if (fsMsg.isVersioned) {
-		const vPath = objPath.concat('v');
+		const vPath = methodPathFor<ReadonlyFS>(objPath, 'v');
 		fs.v = {
 			getByteSource: vGetByteSource.makeCaller(caller, vPath),
 			getXAttr: vGetXAttr.makeCaller(caller, vPath),
@@ -119,7 +120,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 			fs.v.archiveCurrent = vArchiveCurrent.makeCaller(caller, vPath);
 		}
 		if (fsMsg.isSynced) {
-			const vsPath = objPath.concat('v', 'sync');
+			const vsPath = methodPathFor<ReadonlyFSVersionedAPI>(vPath, 'sync');
 			fs.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
 				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
@@ -301,19 +302,19 @@ namespace checkPresence {
 	export function makeFileCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkFilePresence'] {
-		return makeCaller(caller, objPath.concat('checkFilePresence'));
+		return makeCaller(caller, methodPathFor<ReadonlyFS>(objPath, 'checkFilePresence'));
 	}
 
 	export function makeFolderCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkFolderPresence'] {
-		return makeCaller(caller, objPath.concat('checkFolderPresence'));
+		return makeCaller(caller, methodPathFor<ReadonlyFS>(objPath, 'checkFolderPresence'));
 	}
 
 	export function makeLinkCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['checkLinkPresence'] {
-		return makeCaller(caller, objPath.concat('checkLinkPresence'));
+		return makeCaller(caller, methodPathFor<ReadonlyFS>(objPath, 'checkLinkPresence'));
 	}
 
 }
@@ -341,7 +342,7 @@ namespace stat {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['stat'] {
-		const ipcPath = objPath.concat('stat');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'stat');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(unpackStats);
@@ -370,7 +371,7 @@ namespace getXAttr {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['getXAttr'] {
-		const ipcPath = objPath.concat('getXAttr');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'getXAttr');
 		return (path, xaName) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, xaName }))
 		.then(unpackXAttrValue);
@@ -394,7 +395,7 @@ namespace listXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['listXAttrs'] {
-		const ipcPath = objPath.concat('listXAttrs');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'listXAttrs');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
@@ -496,7 +497,7 @@ namespace readLink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readLink'] {
-		const ipcPath = objPath.concat('readLink');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readLink');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
@@ -717,7 +718,7 @@ namespace watch {
 	export function makeFolderCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchFolder'] {
-		const ipcPath = objPath.concat('watchFolder');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'watchFolder');
 		return makeCaller(
 			caller, ipcPath, unpackFSEvent) as ReadonlyFS['watchFolder'];
 	}
@@ -725,7 +726,7 @@ namespace watch {
 	export function makeFileCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchFile'] {
-		const ipcPath = objPath.concat('watchFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'watchFile');
 		return makeCaller(
 			caller, ipcPath, unpackFileEvent) as ReadonlyFS['watchFile'];
 	}
@@ -760,7 +761,7 @@ namespace watchTree {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['watchTree'] {
-		const ipcPath = objPath.concat('watchTree');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'watchTree');
 		return (path, depth, obs) => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
@@ -790,7 +791,7 @@ namespace close {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['close'] {
-		const path = objPath.concat('close');
+		const path = methodPathFor<ReadonlyFS>(objPath, 'close');
 		return () => caller
 		.startPromiseCall(path, undefined) as Promise<undefined>;
 	}
@@ -818,7 +819,7 @@ namespace readonlySubRoot {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readonlySubRoot'] {
-		const ipcPath = objPath.concat('readonlySubRoot');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readonlySubRoot');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
@@ -851,7 +852,7 @@ namespace listFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['listFolder'] {
-		const ipcPath = objPath.concat('listFolder');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'listFolder');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => fixArray(requestType.unpack(buf).entries).map(
@@ -876,7 +877,7 @@ namespace readJSONFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readJSONFile'] {
-		const ipcPath = objPath.concat('readJSONFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readJSONFile');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(unpackJSON);
@@ -900,7 +901,7 @@ namespace readTxtFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readTxtFile'] {
-		const ipcPath = objPath.concat('readTxtFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readTxtFile');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => (buf ? decodeFromUtf8(buf) : ''));
@@ -932,7 +933,7 @@ namespace readBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readBytes'] {
-		const ipcPath = objPath.concat('readBytes');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readBytes');
 		return (path, start, end) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, start: toOptVal(start), end: toOptVal(end)
@@ -963,7 +964,7 @@ namespace getByteSource {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['getByteSource'] {
-		const ipcPath = objPath.concat('getByteSource');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'getByteSource');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
@@ -995,7 +996,7 @@ namespace readonlyFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['readonlyFile'] {
-		const ipcPath = objPath.concat('readonlyFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readonlyFile');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(buf => {
@@ -1087,7 +1088,7 @@ namespace select {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFS['select'] {
-		const ipcPath = objPath.concat('select');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'select');
 		return async (path, criteria) => {
 			const req: Request = { path, criteria: criteriaToMsg(criteria) };
 			const s = new Subject<EnvelopeBody>();
@@ -1193,7 +1194,7 @@ namespace fsCollection {
 		export function makeCaller(
 			caller: Caller, objPath: string[]
 		): FSCollection['get'] {
-			const ipcPath = objPath.concat('get');
+			const ipcPath = methodPathFor<FSCollection>(objPath, 'get');
 			return name => caller
 			.startPromiseCall(ipcPath, requestType.pack({ name }))
 			.then(buf => {
@@ -1241,7 +1242,7 @@ namespace fsCollection {
 		export function makeCaller(
 			caller: Caller, objPath: string[]
 		): FSCollection['getAll'] {
-			const ipcPath = objPath.concat('getAll');
+			const ipcPath = methodPathFor<FSCollection>(objPath, 'getAll');
 			return () => caller
 			.startPromiseCall(ipcPath, undefined)
 			.then(buf => {
@@ -1330,7 +1331,7 @@ namespace fsCollection {
 		function makeIterNextCaller(
 			caller: Caller, objPath: string[]
 		): Iter['next'] {
-			const ipcPath = objPath.concat('next');
+			const ipcPath = methodPathFor<Iter>(objPath, 'next');
 			return () => caller
 			.startPromiseCall(ipcPath, undefined)
 			.then(buf => unpackIterRes(buf, caller));
@@ -1352,7 +1353,7 @@ namespace fsCollection {
 		export function makeCaller(
 			caller: Caller, objPath: string[]
 		): FSCollection['entries'] {
-			const ipcPath = objPath.concat('entries');
+			const ipcPath = methodPathFor<FSCollection>(objPath, 'entries');
 			return () => caller
 			.startPromiseCall(ipcPath, undefined)
 			.then(buf => {
@@ -1418,7 +1419,7 @@ namespace fsCollection {
 		export function makeCaller(
 			caller: Caller, objPath: string[]
 		): FSCollection['watch'] {
-			const path = objPath.concat('watch');
+			const path = methodPathFor<FSCollection>(objPath, 'watch');
 			return obs => {
 				const s = new Subject<EnvelopeBody>();
 				const unsub = caller.startObservableCall(path, undefined, s);
@@ -1592,7 +1593,7 @@ namespace vGetXAttr {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getXAttr'] {
-		const ipcPath = objPath.concat('getXAttr');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'getXAttr');
 		return (path, xaName, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, xaName, flags: file.versionedReadFlagsToMsg(flags)
@@ -1621,7 +1622,7 @@ namespace vListXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listXAttrs'] {
-		const ipcPath = objPath.concat('listXAttrs');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'listXAttrs');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
@@ -1659,7 +1660,7 @@ namespace vListFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listFolder'] {
-		const ipcPath = objPath.concat('listFolder');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'listFolder');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
@@ -1693,7 +1694,7 @@ namespace vReadJSONFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readJSONFile'] {
-		const ipcPath = objPath.concat('readJSONFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readJSONFile');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
@@ -1722,7 +1723,7 @@ namespace vReadTxtFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readTxtFile'] {
-		const ipcPath = objPath.concat('readTxtFile');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readTxtFile');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
@@ -1761,7 +1762,7 @@ namespace vReadBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['readBytes'] {
-		const ipcPath = objPath.concat('readBytes');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'readBytes');
 		return (path, start, end, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, start: toOptVal(start), end: toOptVal(end),
@@ -1793,7 +1794,7 @@ namespace vGetByteSource {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['getByteSource'] {
-		const ipcPath = objPath.concat('getByteSource');
+		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'getByteSource');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
 		.then(buf => {
@@ -1839,7 +1840,7 @@ namespace updateXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['updateXAttrs'] {
-		const ipcPath = objPath.concat('updateXAttrs');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'updateXAttrs');
 		return (path, changes) => caller
 		.startPromiseCall(ipcPath, packRequest(path, changes)) as Promise<void>;
 	}
@@ -1868,7 +1869,7 @@ namespace makeFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['makeFolder'] {
-		const ipcPath = objPath.concat('makeFolder');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'makeFolder');
 		return (path, exclusive) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, exclusive: toOptVal(exclusive)
@@ -1899,7 +1900,7 @@ namespace deleteFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['deleteFolder'] {
-		const ipcPath = objPath.concat('deleteFolder');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'deleteFolder');
 		return (path, removeContent) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, removeContent: toOptVal(removeContent)
@@ -1923,7 +1924,7 @@ namespace deleteFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['deleteFile'] {
-		const ipcPath = objPath.concat('deleteFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'deleteFile');
 		return path => caller
 		.startPromiseCall(
 			ipcPath, reqWithPathType.pack({ path })
@@ -1947,7 +1948,7 @@ namespace deleteLink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['deleteLink'] {
-		const ipcPath = objPath.concat('deleteLink');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'deleteLink');
 		return path => caller
 		.startPromiseCall(
 			ipcPath, reqWithPathType.pack({ path })
@@ -1978,7 +1979,7 @@ namespace move {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['move'] {
-		const ipcPath = objPath.concat('move');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'move');
 		return (src, dst) => caller
 		.startPromiseCall(
 			ipcPath, requestType.pack({ src, dst })
@@ -2010,7 +2011,7 @@ namespace copyFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['copyFile'] {
-		const ipcPath = objPath.concat('copyFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'copyFile');
 		return (src, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			src, dst, overwrite: toOptVal(overwrite)
@@ -2042,7 +2043,7 @@ namespace copyFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['copyFolder'] {
-		const ipcPath = objPath.concat('copyFolder');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'copyFolder');
 		return (src, dst, mergeAndOverwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			src, dst, mergeAndOverwrite: toOptVal(mergeAndOverwrite)
@@ -2077,7 +2078,7 @@ namespace saveFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['saveFile'] {
-		const ipcPath = objPath.concat('saveFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'saveFile');
 		return (f, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			file: caller.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
@@ -2112,7 +2113,7 @@ namespace saveFolder {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['saveFolder'] {
-		const ipcPath = objPath.concat('saveFolder');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'saveFolder');
 		return (f, dst, overwrite) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			folder: caller.srvRefOf(f), dst, overwrite: toOptVal(overwrite)
@@ -2146,7 +2147,7 @@ namespace link {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['link'] {
-		const ipcPath = objPath.concat('link');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'link');
 		return (path, f) => caller
 		.startPromiseCall(ipcPath, requestType.pack(
 			{ path, target: caller.srvRefOf(f) })) as Promise<void>;
@@ -2216,7 +2217,7 @@ namespace writableSubRoot {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['writableSubRoot'] {
-		const ipcPath = objPath.concat('writableSubRoot');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'writableSubRoot');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
@@ -2248,7 +2249,7 @@ namespace writableFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['writableFile'] {
-		const ipcPath = objPath.concat('writableFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'writableFile');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
@@ -2282,7 +2283,7 @@ namespace writeJSONFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['writeJSONFile'] {
-		const ipcPath = objPath.concat('writeJSONFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'writeJSONFile');
 		return (path, json, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, json: JSON.stringify(json), flags: optFlagsToMsg(flags)
@@ -2314,7 +2315,7 @@ namespace writeTxtFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['writeTxtFile'] {
-		const ipcPath = objPath.concat('writeTxtFile');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'writeTxtFile');
 		return (path, txt, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, txt, flags: optFlagsToMsg(flags)
@@ -2346,7 +2347,7 @@ namespace writeBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['writeBytes'] {
-		const ipcPath = objPath.concat('writeBytes');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'writeBytes');
 		return (path, bytes, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, bytes: bytes as Buffer, flags: optFlagsToMsg(flags)
@@ -2376,7 +2377,7 @@ namespace getByteSink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFS['getByteSink'] {
-		const ipcPath = objPath.concat('getByteSink');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'getByteSink');
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, packPathAndFlags(path, flags))
 		.then(buf => {
@@ -2405,7 +2406,7 @@ namespace vUpdateXAttrs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['updateXAttrs'] {
-		const ipcPath = objPath.concat('updateXAttrs');
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'updateXAttrs');
 		return (path, changes) => caller
 		.startPromiseCall(ipcPath, updateXAttrs.packRequest(path, changes))
 		.then(unpackInt);
@@ -2463,7 +2464,9 @@ namespace vWriteJSONFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeJSONFile'] {
-		const ipcPath = objPath.concat('writeJSONFile');
+		const ipcPath = methodPathFor<WritableFSVersionedAPI>(
+			objPath, 'writeJSONFile'
+			);
 		return (path, json, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, json: JSON.stringify(json), flags: optVerFlagsToMsg(flags)
@@ -2500,7 +2503,9 @@ namespace vWriteTxtFile {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeTxtFile'] {
-		const ipcPath = objPath.concat('writeTxtFile');
+		const ipcPath = methodPathFor<WritableFSVersionedAPI>(
+			objPath, 'writeTxtFile'
+		);
 		return (path, txt, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, txt, flags: optVerFlagsToMsg(flags)
@@ -2537,7 +2542,9 @@ namespace vWriteBytes {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['writeBytes'] {
-		const ipcPath = objPath.concat('writeBytes');
+		const ipcPath = methodPathFor<WritableFSVersionedAPI>(
+			objPath, 'writeBytes'
+		);
 		return (path, bytes, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, bytes: bytes as Buffer, flags: optVerFlagsToMsg(flags)
@@ -2576,7 +2583,9 @@ namespace vGetByteSink {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['getByteSink'] {
-		const ipcPath = objPath.concat('getByteSink');
+		const ipcPath = methodPathFor<WritableFSVersionedAPI>(
+			objPath, 'getByteSink'
+		);
 		return (path, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, flags: optVerFlagsToMsg(flags)
@@ -2593,7 +2602,7 @@ Object.freeze(vGetByteSink);
 
 namespace vsStatus {
 
-	export function wrapService(fn: WritableFSSyncAPI['status']): ExposedFn {
+	export function wrapService(fn: ReadonlyFSSyncAPI['status']): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
@@ -2604,8 +2613,8 @@ namespace vsStatus {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['status'] {
-		const ipcPath = objPath.concat('status');
+	): ReadonlyFSSyncAPI['status'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'status');
 		return (path) => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(file.unpackSyncStatus);
@@ -2618,7 +2627,7 @@ Object.freeze(vsStatus);
 namespace vsUpdateStatusInfo {
 
 	export function wrapService(
-		fn: WritableFSSyncAPI['updateStatusInfo']
+		fn: ReadonlyFSSyncAPI['updateStatusInfo']
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
@@ -2630,8 +2639,10 @@ namespace vsUpdateStatusInfo {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['updateStatusInfo'] {
-		const ipcPath = objPath.concat('updateStatusInfo');
+	): ReadonlyFSSyncAPI['updateStatusInfo'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(
+			objPath, 'updateStatusInfo'
+		);
 		return (path) => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(file.unpackSyncStatus);
@@ -2665,8 +2676,10 @@ namespace vsIsRemoteVersionOnDisk {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['isRemoteVersionOnDisk'] {
-		const ipcPath = objPath.concat('isRemoteVersionOnDisk');
+	): ReadonlyFSSyncAPI['isRemoteVersionOnDisk'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(
+			objPath, 'isRemoteVersionOnDisk'
+		);
 		return (path, version) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, version }))
 		.then(buf => replyType.unpack(buf).status);
@@ -2683,7 +2696,7 @@ namespace vsDownload {
 		version: number;
 	}>(pb.FSSyncDownloadRequestBody);
 
-	export function wrapService(fn: WritableFSSyncAPI['download']): ExposedFn {
+	export function wrapService(fn: ReadonlyFSSyncAPI['download']): ExposedFn {
 		return buf => {
 			const { path, version } = requestType.unpack(buf);
 			const promise = fn(path, fixInt(version));
@@ -2693,8 +2706,8 @@ namespace vsDownload {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['download'] {
-		const ipcPath = objPath.concat('download');
+	): ReadonlyFSSyncAPI['download'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'download');
 		return (path, version) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, version
@@ -2712,10 +2725,17 @@ namespace vsUpload {
 		opts?: file.OptionsToUploadLocalMsg;
 	}>(pb.FSSyncUploadRequestBody);
 
+	const replyType = ProtoType.for<{
+		uploadedVersion?: Value<number>;
+	}>(pb.FSSyncUploadReplyBody);
+
 	export function wrapService(fn: WritableFSSyncAPI['upload']): ExposedFn {
 		return buf => {
 			const { path, opts } = requestType.unpack(buf);
-			const promise = fn(path, file.optionsToUploadLocalFromMsg(opts));
+			const promise = fn(path, file.optionsToUploadLocalFromMsg(opts))
+			.then(uploadedVersion => replyType.pack({
+				uploadedVersion: toOptVal(uploadedVersion)
+			}));
 			return { promise };
 		};
 	}
@@ -2723,11 +2743,12 @@ namespace vsUpload {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSSyncAPI['upload'] {
-		const ipcPath = objPath.concat('upload');
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'upload');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, opts: file.optionsToUploadLocalToMsg(opts)
-		})) as Promise<void>;
+		}))
+		.then(buf => valOfOptInt(replyType.unpack(buf).uploadedVersion));
 	}
 
 }
@@ -2784,7 +2805,9 @@ namespace vsAdoptRemoteFolderItem {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSSyncAPI['adoptRemoteFolderItem'] {
-		const ipcPath = objPath.concat('adoptRemoteFolderItem');
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(
+			objPath, 'adoptRemoteFolderItem'
+		);
 		return (path, itemName, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, itemName, opts: optionsToAdoptRemoteItemToMsg(opts)
@@ -2804,7 +2827,7 @@ namespace vsAdoptRemote {
 	}>(pb.AdoptRemoteRequestBody);
 
 	export function wrapService(
-		fn: WritableFSSyncAPI['adoptRemote']
+		fn: ReadonlyFSSyncAPI['adoptRemote']
 	): ExposedFn {
 		return buf => {
 			const { path, opts } = requestType.unpack(buf);
@@ -2816,7 +2839,7 @@ namespace vsAdoptRemote {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSSyncAPI['adoptRemote'] {
-		const ipcPath = objPath.concat('adoptRemote');
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'adoptRemote');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, opts: file.remoteAdoptionOptsToMsg(opts)
@@ -2843,7 +2866,9 @@ namespace vListVersions {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFSVersionedAPI['listVersions'] {
-		const ipcPath = objPath.concat('listVersions');
+		const ipcPath = methodPathFor<ReadonlyFSVersionedAPI>(
+			objPath, 'listVersions'
+		);
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
 		.then(file.vListVersions.unpackReply);
@@ -2874,7 +2899,9 @@ namespace vArchiveCurrent {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSVersionedAPI['archiveCurrent'] {
-		const ipcPath = objPath.concat('archiveCurrent');
+		const ipcPath = methodPathFor<WritableFSVersionedAPI>(
+			objPath, 'archiveCurrent'
+		);
 		return (path, version)=> caller
 		.startPromiseCall(
 			ipcPath, requestType.pack({ path, version: toOptVal(version) })
@@ -2999,8 +3026,10 @@ namespace vsDiffCurrentAndRemoteFolderVersions {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['diffCurrentAndRemoteFolderVersions'] {
-		const ipcPath = objPath.concat('diffCurrentAndRemoteFolderVersions');
+	): ReadonlyFSSyncAPI['diffCurrentAndRemoteFolderVersions'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(
+			objPath, 'diffCurrentAndRemoteFolderVersions'
+		);
 		return (path, remoteVersion) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			path, remoteVersion: toOptVal(remoteVersion)

@@ -400,8 +400,9 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	private async getOrMakeChildNodeForInfo<T extends NodeInFS<any>>(
 		info: NodeInfo
 	): Promise<T> {
-		const { node, nodePromise } =
-			this.storage.nodes.getNodeOrPromise<T>(info.objId);
+		const {
+			node, nodePromise
+		} = this.storage.nodes.getNodeOrPromise<T>(info.objId);
 		if (node) { return node; }
 		if (nodePromise) { return nodePromise; }
 		const deferred = defer<T>();
@@ -410,26 +411,30 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			let node: Node;
 			if (info.isFile) {
 				node = await FileNode.makeForExisting(
-					this.storage, this.objId, info.name, info.objId, info.key);
+					this.storage, this.objId, info.name, info.objId, info.key
+				);
 			} else if (info.isFolder) {
 				const src = await this.storage.getObjSrc(info.objId);
 				node = await FolderNode.readNodeFromObjBytes(
-					this.storage, info.name, info.objId, src, info.key);
+					this.storage, info.name, info.objId, src, info.key
+				);
 			} else if (info.isLink) {
 				node = await LinkNode.makeForExisting(
-					this.storage, this.objId, info.name, info.objId, info.key);
+					this.storage, this.objId, info.name, info.objId, info.key
+				);
 			} else {
 				throw new Error(`Unknown type of fs node`);
 			}
-			deferred!.resolve(node as T);
-			return node as T;
+			deferred.resolve(node as T);
+			return deferred.promise;
 		} catch (exc) {
-			deferred!.reject(exc);
 			if (exc.objNotFound) {
 				await this.fixMissingChildAndThrow(exc, info);
 			}
-			throw errWithCause(exc,
-				`Failed to instantiate fs node '${this.name}/${info.name}'`);
+			deferred.reject(errWithCause(
+				exc, `Failed to instantiate fs node '${this.name}/${info.name}'`
+			));
+			return deferred.promise;
 		}
 	}
 
@@ -820,11 +825,12 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		src: FSChangeSrc, passIdsForRmUpload = false
 	): Promise<ObjId[]|undefined> {
 		const childrenNodes = await this.doChange(true, async () => {
+			if (this.version < 0) { return; }
 			const childrenNodes = await this.getAllNodes();
-			await this.removeThisNodeAsLeaf(src);
+			await this.removeThisFromStorageNodes(src);
 			return childrenNodes;
 		});
-		if (childrenNodes.length === 0) { return; }
+		if (!childrenNodes || (childrenNodes.length === 0)) { return; }
 		if (this.isInSyncedStorage) {
 			if (passIdsForRmUpload) {
 				return this.removeChildrenObjsInSyncedStorage(
@@ -848,6 +854,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		childrenNodes: NodeInFS<NodePersistance>[], src: FSChangeSrc,
 		passIdsForRmUpload: boolean
 	): Promise<ObjId[]|undefined> {
+		if (this.version < 0) { return; }
 		let uploadRmsHere: boolean;
 		let collectedIds: ObjId[]|undefined;
 		if (passIdsForRmUpload) {
@@ -921,20 +928,23 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return linkParams;
 	}
 
-	async upload(opts: OptionsToUploadLocal|undefined): Promise<void> {
+	async upload(
+		opts: OptionsToUploadLocal|undefined
+	): Promise<number|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts?.localVersion);
 			if (!toUpload) { return; }
 			if (toUpload.createOnRemote) {
-				await super.upload(opts);
-				return;
+				return await super.upload(opts);
 			}
 			const storage = this.syncedStorage();
 			const { localVersion, uploadVersion } = toUpload;
 			const removedNodes = await this.getNodesRemovedBetweenVersions(
-				localVersion, uploadVersion - 1);
+				localVersion, uploadVersion - 1
+			);
 			const uploadHeader = await this.uploadHeaderChange(
-				localVersion, uploadVersion);
+				localVersion, uploadVersion
+			);
 			await storage.upload(
 				this.objId, localVersion, uploadVersion, uploadHeader, false
 			);
@@ -943,6 +953,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				// we also don't await for chidren removal
 				this.uploadRemovalOf(removedNodes);
 			}
+			return uploadVersion;
 		} catch (exc) {
 			throw setPathInExc(exc, this.name);
 		}

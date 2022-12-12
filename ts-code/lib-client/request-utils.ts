@@ -19,7 +19,7 @@ import { BytesFIFOBuffer } from '../lib-common/byte-streaming/bytes-fifo-buffer'
 import * as https from 'https';
 import { IncomingMessage, IncomingHttpHeaders, ClientRequest } from 'http';
 import { parse as parseUrl } from 'url';
-import { fromEvent, merge } from 'rxjs';
+import { fromEvent, lastValueFrom, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { defer } from '../lib-common/processes/deferred';
 import { take, map, takeUntil, mergeMap } from 'rxjs/operators';
@@ -111,40 +111,48 @@ export function formHttpsReqOpts(
 	return netReqOpts;
 }
 
-function attachRequestReaders(clReq: ClientRequest, opts: RequestOpts):
-		Promise<{ res: IncomingMessage, resBody: Uint8Array|undefined }> {
+async function attachRequestReaders(
+	clReq: ClientRequest, opts: RequestOpts
+): Promise<{ res: IncomingMessage, resBody: Uint8Array|undefined }> {
 	// XXX do something for timeouts, that doesn't break good long connections
 	// const timeout = (opts.timeout ? opts.timeout : DEFAULT_TIMEOUT);
 
 	// note that we attach reading of body to response as close as possible to
 	// its appearance, so as not to miss any incoming data, which may happen if
 	// next tick occurs in between.
-	const response$ = fromEvent(clReq, 'response',
-		(res: IncomingMessage) => ({res, resBodyPromise: readAllBytesFrom(res)}))
+	const response$ = fromEvent(
+		clReq, 'response',
+		(res: IncomingMessage) => ({res, resBodyPromise: readAllBytesFrom(res)})
+	)
 	.pipe(take(1));
 
-	const err$ = fromEvent<IncomingMessage>(clReq, 'error')
+	const err$ = fromEvent(
+		clReq, 'error',
+		e => makeConnectionException(opts.url, opts.method, 'Cannot connect', e)
+	)
 	.pipe(
-		map(e => { throw makeConnectionException(
-			opts.url, opts.method, 'Cannot connect', e); }),
+		map(exc => { throw exc; }),
 		takeUntil(response$)
 	);
 	
-	return merge(response$, err$)
-	.pipe(
-		mergeMap(async resAndBodyProm => {
-			const { res, resBodyPromise } = resAndBodyProm;
-			const resBody = await resBodyPromise;
-			return { res, resBody };
-		}, 1)
-	)
-	.toPromise()
-	.catch((exc: HTTPException) => {
-		if (exc.cause === TIMEOUT_FLAG) {
+	try {
+		const reply = await lastValueFrom(
+			merge(response$, err$)
+			.pipe(
+				mergeMap(async resAndBodyProm => {
+					const { res, resBodyPromise } = resAndBodyProm;
+					const resBody = await resBodyPromise;
+					return { res, resBody };
+				}, 1)
+			)
+		);
+		return reply;
+	} catch (exc) {
+		if ((exc as HTTPException).cause === TIMEOUT_FLAG) {
 			clReq.abort();
 		}
 		throw exc;
-	});
+	}
 }
 
 const TIMEOUT_FLAG = 'Request Timeout';

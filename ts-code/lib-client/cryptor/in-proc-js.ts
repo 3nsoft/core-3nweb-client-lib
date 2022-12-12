@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2022 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,8 +17,9 @@
 
 import { Cryptor } from './cryptor';
 import { scrypt, box, secret_box as sbox, signing as sign, arrays } from 'ecma-nacl';
+import { InProcAsyncExecutor } from '../cryptor-work-labels';
 
-function inNextTick<T>(f: () => T): Promise<T> {
+function onNextTick<T>(f: () => T): Promise<T> {
 	return new Promise((resolve, reject) => process.nextTick(() => {
 		try {
 			resolve(f());
@@ -30,36 +31,54 @@ function inNextTick<T>(f: () => T): Promise<T> {
 
 export function makeInProcessCryptor(): Cryptor {
 	const arrFactory = arrays.makeFactory();
+	const workExecutor = new InProcAsyncExecutor();
 	return {
 
-		scrypt: (passwd, salt, logN, r, p, dkLen, progressCB) => inNextTick(
-			() => scrypt(passwd, salt, logN, r, p, dkLen, progressCB, arrFactory)),
+		scrypt: (passwd, salt, logN, r, p, dkLen, progressCB) => onNextTick(
+			() => scrypt(passwd, salt, logN, r, p, dkLen, progressCB, arrFactory)
+		),
 
 		box: {
-			calc_dhshared_key: (pk, sk) => inNextTick(
-				() => box.calc_dhshared_key(pk, sk, arrFactory)),
-			generate_pubkey: sk => inNextTick(
-				() => box.generate_pubkey(sk, arrFactory))
+			calc_dhshared_key: (pk, sk) => onNextTick(
+				() => box.calc_dhshared_key(pk, sk, arrFactory)
+			),
+			generate_pubkey: sk => onNextTick(
+				() => box.generate_pubkey(sk, arrFactory)
+			)
 		},
 
 		sbox: {
-			open: (c, n, k) => inNextTick(() => sbox.open(c, n, k, arrFactory)),
-			pack: (m, n, k) => inNextTick(() => sbox.pack(m, n, k, arrFactory)),
+			canStartUnderWorkLabel: l => workExecutor.canStartUnderWorkLabel(l),
+			open: (c, n, k, workLabel) => workExecutor.execOpOnNextTick(
+				workLabel,
+				() => sbox.open(c, n, k, arrFactory)
+			),
+			pack: (m, n, k, workLabel) => workExecutor.execOpOnNextTick(
+				workLabel,
+				() => sbox.pack(m, n, k, arrFactory)
+			),
 			formatWN: {
-				open: (cn, k) => inNextTick(
-					() => sbox.formatWN.open(cn, k, arrFactory)),
-				pack: (m, n, k) => inNextTick(
-					() => sbox.formatWN.pack(m, n, k, arrFactory))
+				open: (cn, k, workLabel) => workExecutor.execOpOnNextTick(
+					workLabel,
+					() => sbox.formatWN.open(cn, k, arrFactory)
+				),
+				pack: (m, n, k, workLabel) => workExecutor.execOpOnNextTick(
+					workLabel,
+					() => sbox.formatWN.pack(m, n, k, arrFactory)
+				)
 			}
 		},
 
 		signing: {
-			generate_keypair: seed => inNextTick(
-				() => sign.generate_keypair(seed, arrFactory)),
-			signature: (m, sk) => inNextTick(
-				() => sign.signature(m, sk, arrFactory)),
-			verify: (sig, m, pk) => inNextTick(
-				() => sign.verify(sig, m, pk, arrFactory))
+			generate_keypair: seed => onNextTick(
+				() => sign.generate_keypair(seed, arrFactory)
+			),
+			signature: (m, sk) => onNextTick(
+				() => sign.signature(m, sk, arrFactory)
+			),
+			verify: (sig, m, pk) => onNextTick(
+				() => sign.verify(sig, m, pk, arrFactory)
+			)
 		}
 
 	};

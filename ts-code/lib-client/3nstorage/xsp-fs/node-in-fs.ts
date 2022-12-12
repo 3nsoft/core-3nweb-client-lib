@@ -212,10 +212,11 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 
 	removeNonFolderObj(src: FSChangeSrc): Promise<void> {
 		assert(this.type !== 'folder');
-		return this.doChange(true, () => this.removeThisNodeAsLeaf(src));
+		return this.doChange(true, () => this.removeThisFromStorageNodes(src));
 	}
 
-	protected async removeThisNodeAsLeaf(src: FSChangeSrc): Promise<void> {
+	protected async removeThisFromStorageNodes(src: FSChangeSrc): Promise<void> {
+		if (this.currentVersion < 0) { return; }
 		await this.storage.removeObj(this.objId);
 		this.storage.nodes.delete(this);
 		this.currentVersion = -1;
@@ -436,7 +437,9 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 	}
 
-	async upload(opts: OptionsToUploadLocal|undefined): Promise<void> {
+	async upload(
+		opts: OptionsToUploadLocal|undefined
+	): Promise<number|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts?.localVersion);
 			if (!toUpload) { return; }
@@ -448,11 +451,14 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 				this.objId, localVersion, uploadVersion, uploadHeader,
 				createOnRemote
 			);
-			await this.doChange(true, async () => {
-				storage.dropCachedLocalObjVersionsLessOrEqual(this.objId, localVersion);
+			return await this.doChange(true, async () => {
+				storage.dropCachedLocalObjVersionsLessOrEqual(
+					this.objId, localVersion
+				);
 				if (this.currentVersion === localVersion) {
 					this.currentVersion = uploadVersion;
 				}
+				return uploadVersion;
 			});
 		} catch (exc) {
 			throw setPathInExc(exc, this.name);

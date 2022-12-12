@@ -26,6 +26,8 @@ import { ProtoType } from '../protobuf-type';
 import { cryptor as pb } from '../../protos/cryptor.proto';
 import { signing } from 'ecma-nacl';
 import { assert } from '../../lib-common/assert';
+import { packRequestToWASM, toArgs, toLocalErr, unpackBoolVal, unpackReplyFromWASM, unpackSigningKeyPair, WasmRequest } from './serialization-for-wasm';
+import { ExecCounter } from '../cryptor-work-labels';
 
 const MAX_IDLE_MILLIS = 60*1000;
 
@@ -112,6 +114,11 @@ abstract class Workers<Rep> {
 			maxThreads : cpus().length - 1));
 	}
 
+	numOfIdle(): number {
+		return this.idleWorkers.length +
+			Math.max(this.maxThreads - this.allWorkers.size, 0);
+	}
+
 	protected async getIdleWorker(): Promise<Worker> {
 		const idle = this.idleWorkers.pop();
 		if (idle) { return idle.worker; }
@@ -129,7 +136,7 @@ abstract class Workers<Rep> {
 		request: In, trans: ArrayBuffer[]|undefined,
 		d: { res: Deferred<Out>; interim?: (v: any) => void; }
 	): Promise<Out> {
-		if (this.isClosed) { new Error(`Async cryptor is already closed`); }
+		if (this.isClosed) { throw new Error(`Async cryptor is already closed`); }
 		const worker = await this.getIdleWorker();
 		this.replySinks.set(worker, d);
 		if (trans) {
@@ -305,6 +312,7 @@ export const makeInWorkerCryptor: makeCryptor = (
 
 	const workers = new JsWorkers(logErr, logWarning, maxThreads);
 	const close = workers.close.bind(workers);
+	const execCounter = new ExecCounter(() => workers.numOfIdle());
 
 	const cryptor: Cryptor = {
 
@@ -312,44 +320,67 @@ export const makeInWorkerCryptor: makeCryptor = (
 				'scrypt',
 				[ passwd, salt, logN, r, p, dkLen ],
 				undefined,
-				progressCB),
+				progressCB
+			),
 
 		box: {
 			calc_dhshared_key: (pk, sk) => workers.call(
 				'box.calc_dhshared_key',
-				[ pk, sk ]),
+				[ pk, sk ]
+			),
 			generate_pubkey: (sk) => workers.call(
 				'box.generate_pubkey',
-				[ sk ])
+				[ sk ]
+			)
 		},
 
 		sbox: {
-			open: (c, n, k) => workers.call(
-				'sbox.open',
-				[ c, n, k ]),
-			pack: (m, n, k) => workers.call(
-				'sbox.pack',
-				[ m, n, k ]),
+			canStartUnderWorkLabel: l => execCounter.canStartUnderWorkLabel(l),
+			open: (c, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				workers.call(
+					'sbox.open',
+					[ c, n, k ]
+				)
+			),
+			pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				workers.call(
+					'sbox.pack',
+					[ m, n, k ]
+				)
+			),
 			formatWN: {
-				open: (cn, k) => workers.call(
-					'sbox.formatWN.open',
-					[ cn, k ]),
-				pack: (m, n, k) => workers.call(
-					'sbox.formatWN.pack',
-					[ m, n, k ])
+				open: (cn, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					workers.call(
+						'sbox.formatWN.open',
+						[ cn, k ]
+					)
+				),
+				pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					workers.call(
+						'sbox.formatWN.pack',
+						[ m, n, k ]
+					)
+				)
 			}
 		},
 
 		signing: {
 			generate_keypair: (seed) => workers.call(
 				'sign.generate_keypair',
-				[ seed ]),
+				[ seed ]
+			),
 			signature: (m, sk) => workers.call(
 				'sign.signature',
-				[ m, sk ]),
+				[ m, sk ]
+			),
 			verify: (sig, m, pk) => workers.call(
 				'sign.verify',
-				[ sig, m, pk ])
+				[ sig, m, pk ]
+			)
 		}
 
 	};
@@ -360,9 +391,6 @@ export const makeInWorkerCryptor: makeCryptor = (
 
 class WasmWorkers extends Workers<Uint8Array> {
 
-	private readonly reqType = ProtoType.for<WasmRequest>(pb.Request);
-	private readonly replyType = ProtoType.for<WasmReply>(pb.Reply);
-
 	constructor(
 		logErr: LogError, logWarning: LogWarning, maxThreads: number|undefined
 	) {
@@ -370,14 +398,14 @@ class WasmWorkers extends Workers<Uint8Array> {
 	}
 
 	call(req: WasmRequest, interim?: (v: any) => void): Promise<Uint8Array> {
-		const msg = this.reqType.pack(req);
+		const msg = packRequestToWASM(req);
 		return this.doRequest(
 			msg, undefined, { res: defer<Uint8Array>(), interim }
 		);
 	}
 
 	protected processReply(replyBytes: Uint8Array): ReplyMsg {
-		const { res, interim, err } = this.replyType.unpack(replyBytes as Buffer);
+		const { res, interim, err } = unpackReplyFromWASM(replyBytes as Buffer);
 		return {
 			res: res ? res.val : undefined,
 			interim: interim ? interim.val : undefined,
@@ -390,58 +418,6 @@ Object.freeze(WasmWorkers.prototype);
 Object.freeze(WasmWorkers);
 
 
-interface WasmScryptRequest {
-	func: 1;
-	scryptArgs: {
-		passwd: Uint8Array;
-		salt: Uint8Array;
-		logN: number;
-		r: number;
-		p: number;
-		dkLen: number;
-	};
-}
-
-interface WasmBinArgsRequest {
-	func: 2|3|4|5|6|7|8|9|10;
-	byteArgs: ByteArg[];
-}
-
-interface ByteArg {
-	val: Uint8Array;
-}
-
-function toArgs(...args: Uint8Array[]): ByteArg[] {
-	return args.map(val => ({ val }));
-}
-
-type WasmRequest = WasmScryptRequest | WasmBinArgsRequest;
-
-interface WasmReply {
-	res?: ByteArg;
-	interim?: ByteArg;
-	err?: ReplyError;
-}
-
-interface ReplyError {
-	condition: 'cipher-verification' | 'signature-verification' |
-		'configuration-error' | 'message-passing-error';
-	message: string;
-}
-
-function toLocalErr(
-	replyErr: ReplyError
-): Error|web3n.EncryptionException {
-	if (replyErr.condition === 'cipher-verification') {
-		return { failedCipherVerification: true };
-	} else if (replyErr.condition === 'signature-verification') {
-		return { failedSignatureVerification: true };
-	} else {
-		return new Error(
-			`WASM cryptor ${replyErr.condition}: ${replyErr.message}`);
-	}
-}
-
 export const makeInWorkerWasmCryptor: makeCryptor = (
 	logErr, logWarning, maxThreads
 ) => {
@@ -450,9 +426,7 @@ export const makeInWorkerWasmCryptor: makeCryptor = (
 
 	const workers = new WasmWorkers(logErr, logWarning, maxThreads);
 	const close = workers.close.bind(workers);
-
-	const boolValType = ProtoType.for<{ val: boolean; }>(pb.BoolVal);
-	const kpairType = ProtoType.for<signing.Keypair>(pb.Keypair);
+	const execCounter = new ExecCounter(() => workers.numOfIdle());
 
 	const cryptor: Cryptor = {
 
@@ -473,23 +447,36 @@ export const makeInWorkerWasmCryptor: makeCryptor = (
 		},
 
 		sbox: {
-			open: (c, n, k) => workers.call({
-				func: 4,
-				byteArgs: toArgs( c, n, k )
-			}),
-			pack: (m, n, k) => workers.call({
-				func: 5,
-				byteArgs: toArgs( m, n, k )
-			}),
-			formatWN: {
-				open: (cn, k) => workers.call({
-					func: 6,
-					byteArgs: toArgs( cn, k )
-				}),
-				pack: (m, n, k) => workers.call({
-					func: 7,
+			canStartUnderWorkLabel: l => execCounter.canStartUnderWorkLabel(l),
+			open: (c, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				workers.call({
+					func: 4,
+					byteArgs: toArgs( c, n, k )
+				})
+			),
+			pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				workers.call({
+					func: 5,
 					byteArgs: toArgs( m, n, k )
 				})
+			),
+			formatWN: {
+				open: (cn, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					workers.call({
+						func: 6,
+						byteArgs: toArgs( cn, k )
+					})
+				),
+				pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					workers.call({
+						func: 7,
+						byteArgs: toArgs( m, n, k )
+					})
+				)
 			}
 		},
 
@@ -499,7 +486,7 @@ export const makeInWorkerWasmCryptor: makeCryptor = (
 					func: 8,
 					byteArgs: toArgs( seed )
 				});
-				return kpairType.unpack(rep as Buffer);
+				return unpackSigningKeyPair(rep as Buffer);
 			},
 			signature: (m, sk) => workers.call({
 				func: 9,
@@ -510,7 +497,7 @@ export const makeInWorkerWasmCryptor: makeCryptor = (
 					func: 10,
 					byteArgs: toArgs( sig, m, pk )
 				});
-				return boolValType.unpack(rep as Buffer).val;
+				return unpackBoolVal(rep as Buffer);
 			}
 		}
 

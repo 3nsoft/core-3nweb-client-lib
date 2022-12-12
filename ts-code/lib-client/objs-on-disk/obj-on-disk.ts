@@ -315,7 +315,7 @@ class ByteSourceFromObjOnDisk implements ByteSource {
 		Object.seal(this);
 	}
 
-	async read(len: number): Promise<Uint8Array|undefined> {
+	async readNext(len: number): Promise<Uint8Array|undefined> {
 		assert((Number.isInteger(len) && (len >= 0)) || (len === undefined),
 			'Illegal length parameter given: '+len);
 		const start = this.segsPointer;
@@ -348,6 +348,11 @@ class ByteSourceFromObjOnDisk implements ByteSource {
 		} else {
 			this.segsPointer = Math.min(offset, segsLen);
 		}
+	}
+
+	async readAt(pos: number, len: number): Promise<Uint8Array|undefined> {
+		await this.seek(pos);
+		return await this.readNext(len);
 	}
 
 	async getPosition(): Promise<number> {

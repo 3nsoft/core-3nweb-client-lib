@@ -55,8 +55,11 @@ export class Downloader implements ObjDownloader {
 			// XXX this gets current version, but it will have to change to getting
 			// just version. It will be seen, if version's state needs passing.
 
-			const { header, segsTotalLen, version, segsChunk } =
-				await this.remoteStorage.getCurrentObj(objId, DOWNLOAD_START_CHUNK);
+			const {
+				header, segsTotalLen, version, segsChunk
+			} = await this.remoteStorage.getCurrentObj(
+				objId, DOWNLOAD_START_CHUNK
+			);
 			const layout: Layout = {
 				sections: [ { src: 'new', ofs: 0, len: segsTotalLen } ]
 			};
@@ -95,8 +98,11 @@ export class Downloader implements ObjDownloader {
 		objId: ObjId
 	): Promise<{ version: number, parts: InitDownloadParts; }> {
 		return await this.sync(objId, -1, async () => {
-			const { header, segsTotalLen, version, segsChunk } =
-				await this.remoteStorage.getCurrentObj(objId, DOWNLOAD_START_CHUNK);
+			const {
+				header, segsTotalLen, version, segsChunk
+			} = await this.remoteStorage.getCurrentObj(
+				objId, DOWNLOAD_START_CHUNK
+			);
 			const layout: Layout = {
 				sections: [ { src: 'new', ofs: 0, len: segsTotalLen } ]
 			};

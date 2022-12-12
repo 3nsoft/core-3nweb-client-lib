@@ -28,16 +28,16 @@ export async function saveUploadHeaderFile(
 	objFolder: string, headers: UploadHeaderChange
 ): Promise<void> {
 	const bytes = packUploadHeaderChange(headers);
-	await writeFile(
-		uploadHeaderFilePath(objFolder, headers.uploadVersion), bytes);
+	const upFile = uploadHeaderFilePath(objFolder, headers.uploadVersion);
+	await writeFile(upFile, bytes);
 }
 
 export async function readUploadHeaderFromFile(
 	objFolder: string, uploadVersion: number
 ): Promise<UploadHeaderChange|undefined> {
 	try {
-		const bytes = await readFile(
-			uploadHeaderFilePath(objFolder, uploadVersion));
+		const upFile = uploadHeaderFilePath(objFolder, uploadVersion);
+		const bytes = await readFile(upFile);
 		return unpackUploadHeaderChange(bytes);
 	} catch (exc) {
 		if ((exc as FileException).code !== Code.notFound) {

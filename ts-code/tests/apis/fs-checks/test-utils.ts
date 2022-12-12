@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observable } from "rxjs";
+import { lastValueFrom, Observable } from "rxjs";
 import { take } from "rxjs/operators";
 import { MultiUserSetup } from "../../libs-for-tests/setups";
 import { SpecIt as GenericSpecIt } from "../../libs-for-tests/spec-module";
@@ -127,23 +127,23 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 export function observeFolderForOneEvent<T>(
 	fs: ReadonlyFS, path = ''
 ): Promise<T> {
-	return (new Observable(
+	return lastValueFrom(
+	(new Observable(
 		obs => fs.watchFolder(path, obs))
 	)
 	.pipe(
 		take(1)
-	)
-	.toPromise() as Promise<T>;
+	)) as Promise<T>;
 }
 
 export function observeFileForOneEvent<T>(
 	fs: ReadonlyFS, path: string
 ): Promise<T> {
-	return (new Observable(
+	return lastValueFrom(
+	(new Observable(
 		obs => fs.watchFile(path, obs))
 	)
 	.pipe(
 		take(1)
-	)
-	.toPromise() as Promise<T>;
+	)) as Promise<T>;
 }

@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt } from './protobuf-msg';
+import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt, methodPathFor } from './protobuf-msg';
 import { ProtoType } from '../lib-client/protobuf-type';
 import { bytes as pb } from '../protos/bytes.proto';
 import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from './connector';
@@ -64,7 +64,8 @@ export function makeSrcCaller(
 	const src: FileByteSource = {
 		getPosition: srcGetPosition.makeCaller(caller, objPath),
 		getSize: srcGetSize.makeCaller(caller, objPath),
-		read: srcRead.makeCaller(caller, objPath),
+		readNext: srcReadNext.makeCaller(caller, objPath),
+		readAt: srcReadAt.makeCaller(caller, objPath),
 		seek: srcSeek.makeCaller(caller, objPath)
 	};
 	caller.registerClientDrop(src, ref);
@@ -77,7 +78,8 @@ export function exposeSrcService(
 	const wrap: ExposedObj<FileByteSource> = {
 		getPosition: srcGetPosition.wrapService(src.getPosition),
 		getSize: srcGetSize.wrapService(src.getSize),
-		read: srcRead.wrapService(src.read),
+		readNext: srcReadNext.wrapService(src.readNext),
+		readAt: srcReadAt.wrapService(src.readAt),
 		seek: srcSeek.wrapService(src.seek)
 	};
 	const ref = expServices.exposeDroppableService<'FileByteSource'>(
@@ -99,7 +101,7 @@ namespace sinkGetSize {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSink['getSize'] {
-		const path = objPath.concat('getSize');
+		const path = methodPathFor<FileByteSink>(objPath, 'getSize');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
@@ -130,7 +132,7 @@ namespace sinkSplice {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSink['splice'] {
-		const path = objPath.concat('splice');
+		const path = methodPathFor<FileByteSink>(objPath, 'splice');
 		return async (pos, del, bytes) => {
 			await caller
 			.startPromiseCall(path, requestType.pack({
@@ -162,7 +164,7 @@ namespace sinkTruncate {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSink['truncate'] {
-		const path = objPath.concat('truncate');
+		const path = methodPathFor<FileByteSink>(objPath, 'truncate');
 		return async (size) => {
 			await caller
 			.startPromiseCall(path, requestType.pack({ size }));
@@ -208,7 +210,7 @@ namespace sinkShowLayout {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSink['showLayout'] {
-		const path = objPath.concat('showLayout');
+		const path = methodPathFor<FileByteSink>(objPath, 'showLayout');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => unpackLayout(replyType.unpack(buf)));
@@ -237,7 +239,7 @@ namespace sinkDone {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSink['done'] {
-		const path = objPath.concat('done');
+		const path = methodPathFor<FileByteSink>(objPath, 'done');
 		return async (err) => {
 			const req: Request = (err ? { err: errToMsg(err) } : {});
 			await caller
@@ -262,7 +264,7 @@ namespace srcGetSize {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSource['getSize'] {
-		const path = objPath.concat('getSize');
+		const path = methodPathFor<FileByteSource>(objPath, 'getSize');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
@@ -285,7 +287,7 @@ namespace srcGetPosition {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSource['getPosition'] {
-		const path = objPath.concat('getPosition');
+		const path = methodPathFor<FileByteSource>(objPath, 'getPosition');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(unpackInt);
@@ -295,7 +297,7 @@ namespace srcGetPosition {
 Object.freeze(srcGetPosition);
 
 
-namespace srcRead {
+namespace srcReadNext {
 
 	interface Request {
 		len?: Value<number>;
@@ -305,11 +307,11 @@ namespace srcRead {
 		bytes?: Value<Uint8Array>;
 	}
 
-	const requestType = ProtoType.for<Request>(pb.ReadRequestBody);
+	const requestType = ProtoType.for<Request>(pb.ReadNextRequestBody);
 
 	const replyType = ProtoType.for<Reply>(pb.ReadReplyBody);
 
-	export function wrapService(fn: FileByteSource['read']): ExposedFn {
+	export function wrapService(fn: FileByteSource['readNext']): ExposedFn {
 		return buf => {
 			const { len } = requestType.unpack(buf);
 			const promise = fn(valOfOptInt(len))
@@ -320,15 +322,52 @@ namespace srcRead {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): FileByteSource['read'] {
-		const path = objPath.concat('read');
+	): FileByteSource['readNext'] {
+		const path = methodPathFor<FileByteSource>(objPath, 'readNext');
 		return len => caller
 		.startPromiseCall(path, requestType.pack({ len: toOptVal(len) }))
 		.then(buf => valOfOpt(replyType.unpack(buf).bytes));
 	}
 
 }
-Object.freeze(srcRead);
+Object.freeze(srcReadNext);
+
+
+namespace srcReadAt {
+
+	interface Request {
+		pos: number;
+		len?: Value<number>;
+	}
+
+	interface Reply {
+		bytes?: Value<Uint8Array>;
+	}
+
+	const requestType = ProtoType.for<Request>(pb.ReadAtRequestBody);
+
+	const replyType = ProtoType.for<Reply>(pb.ReadReplyBody);
+
+	export function wrapService(fn: FileByteSource['readAt']): ExposedFn {
+		return buf => {
+			const { pos, len } = requestType.unpack(buf);
+			const promise = fn(fixInt(pos), valOfOptInt(len))
+			.then(bytes => replyType.pack({ bytes: toOptVal(bytes) }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): FileByteSource['readAt'] {
+		const path = methodPathFor<FileByteSource>(objPath, 'readAt');
+		return (pos, len) => caller
+		.startPromiseCall(path, requestType.pack({ pos, len: toOptVal(len) }))
+		.then(buf => valOfOpt(replyType.unpack(buf).bytes));
+	}
+
+}
+Object.freeze(srcReadAt);
 
 
 namespace srcSeek {
@@ -350,7 +389,7 @@ namespace srcSeek {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): FileByteSource['seek'] {
-		const path = objPath.concat('seek');
+		const path = methodPathFor<FileByteSource>(objPath, 'seek');
 		return async offset => {
 			await caller
 			.startPromiseCall(path, requestType.pack({ offset }));

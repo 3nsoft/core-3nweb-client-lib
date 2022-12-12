@@ -44,7 +44,7 @@ export class DevFileByteSource implements ByteSource {
 		return { size: this.size, isEndless: false };
 	}
 	
-	async read(len: number): Promise<Uint8Array|undefined> {
+	async readNext(len: number): Promise<Uint8Array|undefined> {
 		if (this.offset >= this.size) { return; }
 		let fd: number|undefined = undefined;
 		try {
@@ -70,6 +70,11 @@ export class DevFileByteSource implements ByteSource {
 		if ((offset < 0) || (offset > this.size)) { throw new Error(
 			`Given offset ${offset} is out of bounds.`); }
 		this.offset = offset;
+	}
+
+	async readAt(pos: number, len: number): Promise<Uint8Array|undefined> {
+		await this.seek(pos);
+		return await this.readNext(len);
 	}
 
 	async getPosition(): Promise<number> {

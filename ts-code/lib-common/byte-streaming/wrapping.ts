@@ -38,7 +38,8 @@ export function wrapAndSyncSource(src: ByteSource): ByteSource {
 	const w: ByteSource = {
 		getPosition: makeSyncedFunc(syncProc, src, src.getPosition),
 		getSize: makeSyncedFunc(syncProc, src, src.getSize),
-		read: makeSyncedFunc(syncProc, src, src.read),
+		readNext: makeSyncedFunc(syncProc, src, src.readNext),
+		readAt: makeSyncedFunc(syncProc, src, src.readAt),
 		seek: makeSyncedFunc(syncProc, src, src.seek)
 	};
 	return w;
@@ -49,7 +50,8 @@ export function wrapAndSyncFileSource(src: FileByteSource): FileByteSource {
 	const w: FileByteSource = {
 		getPosition: makeSyncedFunc(syncProc, src, src.getPosition),
 		getSize: makeSyncedFunc(syncProc, src, src.getSize),
-		read: makeSyncedFunc(syncProc, src, src.read),
+		readNext: makeSyncedFunc(syncProc, src, src.readNext),
+		readAt: makeSyncedFunc(syncProc, src, src.readAt),
 		seek: makeSyncedFunc(syncProc, src, src.seek),
 	};
 	return w;

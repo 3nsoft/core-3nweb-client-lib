@@ -302,9 +302,12 @@ message OptionsToAdopteRemote {
 // ==== WritableFileSyncAPI referable object ====
 
 // --- WritableFileSyncAPI.upload ---
-// Reply has only status and body is empty
+// Reply body is common.UInt64Value
 message FileSyncUploadRequestBody {
 	OptionsToUploadLocal opts = 1;
+}
+message FileSyncUploadReplyBody {
+	common.UInt64Value uploaded_version = 1;
 }
 
 message OptionsToUploadLocal {

@@ -25,6 +25,7 @@ import { cryptor as pb } from '../../protos/cryptor.proto';
 import { defer, Deferred } from '../../lib-common/processes/deferred';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
+import { ExecCounter } from '../cryptor-work-labels';
 
 function wasmBytes(): Buffer {
 	// There is a bug with electrons 12, 13, that doesn't let
@@ -113,6 +114,7 @@ export function makeInProcessWasmCryptor(): Cryptor {
 
 	let deferred: Deferred<Uint8Array>|undefined = undefined;
 	let interimSink: ((bytes: Uint8Array) => void)|undefined = undefined;
+	const execCounter = new ExecCounter(() => (deferred ? 0 : 1));
 
 	async function call(
 		req: WasmRequest, interim?: (m: Uint8Array) => void
@@ -168,7 +170,8 @@ export function makeInProcessWasmCryptor(): Cryptor {
 				func: 1,
 				scryptArgs: { passwd, salt, logN, r, p, dkLen }
 			},
-			bytes => progressCB(bytes[0])),
+			bytes => progressCB(bytes[0])
+		),
 
 		box: {
 			calc_dhshared_key: (pk, sk) => call({
@@ -182,23 +185,36 @@ export function makeInProcessWasmCryptor(): Cryptor {
 		},
 
 		sbox: {
-			open: (c, n, k) => call({
-				func: 4,
-				byteArgs: toArgs( c, n, k )
-			}),
-			pack: (m, n, k) => call({
-				func: 5,
-				byteArgs: toArgs( m, n, k )
-			}),
-			formatWN: {
-				open: (cn, k) => call({
-					func: 6,
-					byteArgs: toArgs( cn, k )
-				}),
-				pack: (m, n, k) => call({
-					func: 7,
+			canStartUnderWorkLabel: l => execCounter.canStartUnderWorkLabel(l),
+			open: (c, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				call({
+					func: 4,
+					byteArgs: toArgs( c, n, k )
+				})
+			),
+			pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+				workLabel,
+				call({
+					func: 5,
 					byteArgs: toArgs( m, n, k )
 				})
+			),
+			formatWN: {
+				open: (cn, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					call({
+						func: 6,
+						byteArgs: toArgs( cn, k )
+					})
+				),
+				pack: (m, n, k, workLabel) => execCounter.wrapOpPromise(
+					workLabel,
+					call({
+						func: 7,
+						byteArgs: toArgs( m, n, k )
+					})
+				)
 			}
 		},
 

@@ -127,10 +127,12 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		parentId: string|undefined, key: Uint8Array
 	) {
 		super(storage, 'file', fileName, objId, version, parentId);
-		if (!fileName || !objId) { throw new Error(
-			"Bad file parameter(s) given"); }
+		if (!fileName || !objId) {
+			throw new Error("Bad file parameter(s) given");
+		}
 		this.crypto = new FilePersistance(
-			idToHeaderNonce(this.objId), key, this.storage.cryptor);
+			idToHeaderNonce(this.objId), key, this.storage.cryptor
+		);
 		Object.seal(this);
 	}
 
@@ -150,7 +152,8 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	): Promise<FileNode> {
 		if (!parentId) { throw new Error("Bad parent id"); }
 		const file = await FileNode.initWithAttrs(
-			storage, parentId, fileName, objId, key);
+			storage, parentId, fileName, objId, key
+		);
 		return file;
 	}
 
@@ -221,24 +224,6 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		}
 		const bytes = await this.crypto.readBytes(objSrc, start, end);
 		return { bytes, version };
-
-		// if ((this.storage.type === 'synced') || (this.storage.type === 'local')) {
-		// 	const version = objSrc.version;
-		// 	if (this.version < version) {
-		// 		const {
-		// 			bytes, fileAttrs
-		// 		} = await this.crypto.readBytes(objSrc, start, end, true);
-		// 		// this.setUpdatedState(version, fileAttrs!);
-		// 		return { bytes, version };
-		// 	} else {
-		// 		const { bytes } = await this.crypto.readBytes(objSrc, start, end);
-		// 		return { bytes, version };
-		// 	}
-		// } else {
-		// 	const { bytes } = await this.crypto.readBytes(objSrc, start, end);
-		// 	// unversioned storage passes undefined version
-		// 	return { bytes, version: (undefined as any) };
-		// }
 	}
 
 	async writeSink(

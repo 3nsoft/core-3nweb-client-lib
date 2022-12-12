@@ -179,5 +179,9 @@ export function decodeFromUtf8(bytes: Uint8Array): string {
 	return dec.decode(bytes);
 }
 
+export function methodPathFor<T>(objPath: string[], method: keyof T): string[] {
+	return objPath.concat(method as string);
+}
+
 
 Object.freeze(exports);

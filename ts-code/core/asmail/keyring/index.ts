@@ -35,6 +35,7 @@ import { assert } from '../../../lib-common/assert';
 import * as confApi from '../../../lib-common/service-api/asmail/config';
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
 import { JsonKey } from '../../../lib-common/jwkeys';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 export { KEY_USE, MsgKeyRole } from './common';
 
@@ -44,10 +45,7 @@ export interface MsgKeyInfo {
 	
 	correspondent: string;
 
-	/**
-	 * This is a base64 form of key's byte array.
-	 */
-	key?: string;
+	key?: Uint8Array;
 
 	/**
 	 * This is a current status of the key in this keyring.
@@ -100,6 +98,8 @@ class KRing implements KeyRing, KeyPairsStorage {
 	private readonly corrKeys = new Map<string, CorrespondentKeys>();
 
 	readonly pairIdToEmailMap = new IdToEmailMap();
+
+	private readonly workLabel = cryptoWorkLabels.makeRandom('asmail');
 
 	private storage: KeyringStorage = (undefined as any);
 
@@ -201,7 +201,9 @@ class KRing implements KeyRing, KeyPairsStorage {
 
 		// prepare message encryptor
 		const nextNonce = await random.bytes(NONCE_LENGTH);
-		const encryptor = makeEncryptor(this.cryptor, msgMasterKey, nextNonce);
+		const encryptor = makeEncryptor(
+			this.cryptor, this.workLabel, msgMasterKey, nextNonce
+		);
 		msgMasterKey.fill(0);
 
 		return { encryptor, currentPair, msgCount };
@@ -238,10 +240,9 @@ class KRing implements KeyRing, KeyPairsStorage {
 			const info: MsgKeyInfo = {
 				correspondent: (undefined as any),
 				keyStatus: recipKey.role,
-				key: base64.pack(mainObjFileKey),
+				key: mainObjFileKey,
 				msgKeyPackLen
 			};
-			mainObjFileKey.fill(0);
 			return info;
 		} catch (err) {
 			if (!(err as EncryptionException).failedCipherVerification) {
@@ -288,7 +289,9 @@ class KRing implements KeyRing, KeyPairsStorage {
 		const h = await getMainObjHeader();
 		for (const { correspondent, pair, role } of pairs) {
 			const masterKey = base64.open(pair.msgMasterKey);
-			const masterDecr = makeDecryptor(this.cryptor, masterKey);
+			const masterDecr = makeDecryptor(
+				this.cryptor, this.workLabel, masterKey
+			);
 			masterKey.fill(0);
 			try {
 				const msgKeyPackLen = msgKeyPackLenForPair(pair);
@@ -300,10 +303,9 @@ class KRing implements KeyRing, KeyPairsStorage {
 				const keyInfo: MsgKeyInfo = {
 					correspondent: correspondent,
 					keyStatus: role,
-					key: base64.pack(mainObjFileKey),
+					key: mainObjFileKey,
 					msgKeyPackLen
 				};
-				mainObjFileKey.fill(0);
 
 				// set pair as in use
 				if (keyInfo.keyStatus === 'suggested') {
@@ -367,7 +369,7 @@ class KRing implements KeyRing, KeyPairsStorage {
 	async decrypt(msgMeta: delivApi.msgMeta.CryptoInfo,
 		getMainObjHeader: () => Promise<Uint8Array>,
 		getOpenedMsg: (
-			mainObjFileKey: string, msgKeyPackLen: number
+			mainObjFileKey: Uint8Array, msgKeyPackLen: number
 		) => Promise<OpenedMsg>,
 		checkMidKeyCerts: (
 			certs: confApi.p.initPubKey.Certs

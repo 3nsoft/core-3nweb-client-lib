@@ -326,7 +326,7 @@ class S implements WritableFileSyncAPI {
 		Object.freeze(this);
 	}
 
-	async upload(opts?: OptionsToUploadLocal): Promise<void> {
+	async upload(opts?: OptionsToUploadLocal): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.getNode();
 		const uploadVersion = await node.upload(opts);

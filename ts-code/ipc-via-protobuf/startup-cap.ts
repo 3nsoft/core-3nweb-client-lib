@@ -16,7 +16,7 @@
 */
 
 import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
-import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal } from "./protobuf-msg";
+import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal, methodPathFor } from "./protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
 import { defer } from "../lib-common/processes/deferred";
@@ -97,7 +97,7 @@ namespace getAvailableAddresses {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignUpService['getAvailableAddresses'] {
-		const path = objPath.concat('getAvailableAddresses');
+		const path = methodPathFor<SignUpService>(objPath, 'getAvailableAddresses');
 		return (name, token) => caller
 		.startPromiseCall(path, requestType.pack(
 			{ name, token: toOptVal(token) }))
@@ -129,7 +129,7 @@ namespace addUser {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignUpService['addUser'] {
-		const path = objPath.concat('addUser');
+		const path = methodPathFor<SignUpService>(objPath, 'addUser');
 		return (userId, token) => caller
 		.startPromiseCall(path, requestType.pack(
 			{ userId, token: toOptVal(token) }))
@@ -160,7 +160,7 @@ namespace isActivated {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignUpService['isActivated'] {
-		const path = objPath.concat('isActivated');
+		const path = methodPathFor<SignUpService>(objPath, 'isActivated');
 		return userId => caller
 		.startPromiseCall(path, requestType.pack({ userId }))
 		.then(buf => boolValType.unpack(buf).value);
@@ -196,7 +196,7 @@ namespace createUserParams {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignUpService['createUserParams'] {
-		const path = objPath.concat('createUserParams');
+		const path = methodPathFor<SignUpService>(objPath, 'createUserParams');
 		return (pass, progressCB) => {
 			const s = new Subject<EnvelopeBody>();
 			const completion = defer<void>();
@@ -230,7 +230,7 @@ namespace getUsersOnDisk {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignInService['getUsersOnDisk'] {
-		const path = objPath.concat('getUsersOnDisk');
+		const path = methodPathFor<SignInService>(objPath, 'getUsersOnDisk');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => fixArray(strArrValType.unpack(buf).values));
@@ -263,7 +263,9 @@ namespace startLoginToRemoteStorage {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignInService['startLoginToRemoteStorage'] {
-		const path = objPath.concat('startLoginToRemoteStorage');
+		const path = methodPathFor<SignInService>(
+			objPath, 'startLoginToRemoteStorage'
+		);
 		return address => caller
 		.startPromiseCall(path, requestType.pack({ address }))
 		.then(buf => boolValType.unpack(buf).value);
@@ -305,7 +307,9 @@ namespace completeLoginAndLocalSetup {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignInService['completeLoginAndLocalSetup'] {
-		const path = objPath.concat('completeLoginAndLocalSetup');
+		const path = methodPathFor<SignInService>(
+			objPath, 'completeLoginAndLocalSetup'
+		);
 		return (pass, progressCB) => {
 			const s = new Subject<EnvelopeBody>();
 			const completion = defer<boolean>();
@@ -362,7 +366,7 @@ namespace useExistingStorage {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): SignInService['useExistingStorage'] {
-		const path = objPath.concat('useExistingStorage');
+		const path = methodPathFor<SignInService>(objPath, 'useExistingStorage');
 		return (address, pass, progressCB) => {
 			const s = new Subject<EnvelopeBody>();
 			const completion = defer<boolean>();

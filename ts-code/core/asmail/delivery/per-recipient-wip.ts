@@ -259,7 +259,8 @@ export class WIP {
 		// get crypto parts for encrypting this message
 		const { currentPair, encryptor, msgCount } =
 			await this.msg.r.correspondents.generateKeysToSend(
-				recipient, introPKeyFromServer);
+				recipient, introPKeyFromServer
+			);
 		
 		// add crypto parameters to the message
 		if (currentPair.pid) {
@@ -410,7 +411,9 @@ export class WIP {
 
 		let src: ObjSource;
 		if (this.currentObjIndInMeta === 0) {
-			if (!mainObjEnc) { throw new Error(`Object master encryptor is not given for the main object.`); }
+			if (!mainObjEnc) {
+				throw new Error(`Object master encryptor is not given for the main object.`);
+			}
 			src = await this.packer.getSrcForMainObj(mainObjEnc, this.cryptor);
 		} else if (upload.header) {
 			const header = base64.open(upload.header);
@@ -446,7 +449,8 @@ export class WIP {
 	private async sendObjs(): Promise<void> {
 		if (!this.sender) {
 			this.sender = await MailSender.resume(
-				this.msg.r.makeNet(), this.state.recipient, this.state.session!);
+				this.msg.r.makeNet(), this.state.recipient, this.state.session!
+			);
 		}
 
 		// ensure there is an object to send, or complete delivery
@@ -489,8 +493,9 @@ export class WIP {
 		if (!isEndless) {
 			obj.upload.expectedSegsSize = size;
 		}
-		let segsChunk = await obj.src.segSrc.read(
-			this.sender.maxChunkSize - header.length);
+		let segsChunk = await obj.src.segSrc.readNext(
+			this.sender.maxChunkSize - header.length
+		);
 
 		// check if we'll be done in this request
 		const segsSize = obj.upload.expectedSegsSize;
@@ -531,19 +536,24 @@ export class WIP {
 	private async followingObjSendingRequest(obj: CurrentObj): Promise<boolean> {
 		// read from source
 		const segsSize = obj.upload.expectedSegsSize;
-		const chunk = await obj.src.segSrc.read(this.sender.maxChunkSize);
+		const chunk = await obj.src.segSrc.readNext(this.sender.maxChunkSize);
 		
 		// return early, when there are no bytes
 		if (!chunk) {
-			await this.sender.sendObj(obj.objId, EMPTY_BYTE_ARR, undefined,
-				{ ofs: obj.upload.segsOffset, last: true });
+			await this.sender.sendObj(
+				obj.objId, EMPTY_BYTE_ARR, undefined,
+				{ ofs: obj.upload.segsOffset, last: true }
+			);
 			return true;
 		}
 
 		// check for an overrun
 		const ofs = obj.upload.segsOffset;
 		if (segsSize && ((ofs + chunk.length) > segsSize)) {
-			throw new Error(`Segments source produced ${obj.upload.segsOffset} bytes, while expectation was for ${segsSize} bytes.`); }
+			throw new Error(
+				`Segments source produced ${obj.upload.segsOffset} bytes, while expectation was for ${segsSize} bytes.`
+			);
+		}
 		
 		// if we shouldn't expect any more bytes from source, we are done
 		const isObjDone = (chunk.length < this.sender.maxChunkSize) ||

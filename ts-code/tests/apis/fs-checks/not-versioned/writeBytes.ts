@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -129,5 +129,20 @@ it.func = async function(s) {
 };
 specs.its.push(it);
 
+it = { expectation: 'writes 4K-even content' };
+it.func = async function(s) {
+	const { testFS } = s;
+	const kb4 = 4 * 1024;
+	for (const [ fName, contentLen ] of [
+		[ 'file-4kb', kb4 ],
+		[ 'file-16kb', 4 * kb4 ],
+		[ 'file-20kb', 5 * kb4 ],
+	] as [string, number][]) {
+		const content = randomBytes(contentLen);
+		await testFS.writeBytes(fName, content);
+		expect(bytesEqual((await testFS.readBytes(fName))!, content)).toBeTrue();
+	}
+};
+specs.its.push(it);
 
 Object.freeze(exports);

@@ -445,7 +445,8 @@ export class DeviceFS implements WritableFS, Linkable {
 		return {
 			getPosition: byteSrc.getPosition,
 			getSize: async () => (await byteSrc.getSize()).size,
-			read: byteSrc.read,
+			readNext: byteSrc.readNext,
+			readAt: byteSrc.readAt,
 			seek: byteSrc.seek
 		};
 	}

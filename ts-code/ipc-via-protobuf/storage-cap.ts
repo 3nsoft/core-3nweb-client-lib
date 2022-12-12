@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Value, valOfOpt, toOptVal } from './protobuf-msg';
+import { Value, valOfOpt, toOptVal, methodPathFor } from './protobuf-msg';
 import { ExposedObj, ExposedFn, Caller, ExposedServices } from './connector';
 import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from './fs';
 import { ProtoType } from '../lib-client/protobuf-type';
@@ -99,7 +99,7 @@ namespace getAppLocalFS {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Storage['getAppLocalFS'] {
-		const path = objPath.concat('getAppLocalFS');
+		const path = methodPathFor<Storage>(objPath, 'getAppLocalFS');
 		return appName => caller
 		.startPromiseCall(path, requestType.pack({ appName: toOptVal(appName) }))
 		.then(buf => {
@@ -137,7 +137,7 @@ namespace getAppSyncedFS {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Storage['getAppSyncedFS'] {
-		const path = objPath.concat('getAppSyncedFS');
+		const path = methodPathFor<Storage>(objPath, 'getAppSyncedFS');
 		return appName => caller
 		.startPromiseCall(path, requestType.pack({ appName: toOptVal(appName) }))
 		.then(buf => {
@@ -176,7 +176,7 @@ namespace getSysFS {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Storage['getSysFS'] {
-		const ipcPath = objPath.concat('getSysFS');
+		const ipcPath = methodPathFor<Storage>(objPath, 'getSysFS');
 		return (type, path) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			type, path: toOptVal(path)
@@ -217,7 +217,7 @@ namespace getUserFS {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Storage['getUserFS'] {
-		const ipcPath = objPath.concat('getUserFS');
+		const ipcPath = methodPathFor<Storage>(objPath, 'getUserFS');
 		return (type, path) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
 			type, path: toOptVal(path)

@@ -37,7 +37,7 @@ it.func = async function(s) {
 	.then(() => {
 		fail('reading status must fail, when path does not exist');
 	}, (err: FileException) => {
-		expect(err.notFound).toBe(true);
+		expect(err.notFound).toBeTrue();
 		if (!err.notFound) { throw err; }
 	});
 };
@@ -67,15 +67,19 @@ it.func = async function(s) {
 		expect((exc as FSSyncException).type).toBe('fs-sync');
 	}
 
-	await testFS.v!.sync!.upload(file1, { localVersion: v2 });
+	let uploadedVersion = await testFS.v!.sync!.upload(
+		file1, { localVersion: v2 }
+	);
+	expect(uploadedVersion)
+	.withContext(`first uploaded version should be equal to 1`)
+	.toBe(1);
 
 	syncStatus = await testFS.v!.sync!.status(file1);
 	expect(syncStatus.state).toBe('synced');
 	expect(syncStatus.synced).toBeDefined();
 	expect(syncStatus.local).toBeUndefined();
-	expect(syncStatus.synced!.latest)
-	.withContext(`first uploaded version should be equal to 1`).toBe(1);
-	expect((await testFS.stat(file1)).version!).toBe(1);
+	expect(syncStatus.synced!.latest).toBe(uploadedVersion);
+	expect((await testFS.stat(file1)).version!).toBe(uploadedVersion!);
 
 	// file version written as a diff from a synced version
 	const {
@@ -88,12 +92,10 @@ it.func = async function(s) {
 	expect(syncStatus.local!.latest).toBe(v3);
 
 	// note upload of latest version, when version isn't given
-	await testFS.v!.sync!.upload(file1);
-	syncStatus = await testFS.v!.sync!.status(file1);
-	expect(syncStatus.state).toBe('synced');
-	expect(syncStatus.synced).toBeDefined();
-	expect(syncStatus.synced!.latest)
-	.withContext(`next uploaded version increases by 1`).toBe(2);
+	uploadedVersion = await testFS.v!.sync!.upload(file1);
+	expect(uploadedVersion)
+	.withContext(`next uploaded version increases by 1`)
+	.toBe(2);
 
 	// file version written as a diff from a synced version and diff of that
 	let sink = (await testFS.v!.getByteSink(file1, { truncate: false })).sink;
@@ -105,16 +107,20 @@ it.func = async function(s) {
 	syncStatus = await testFS.v!.sync!.status(file1);
 	expect(syncStatus.local!.latest).toBe(v3 + 2);
 
-	await testFS.v!.sync!.upload(file1);
+	uploadedVersion = await testFS.v!.sync!.upload(file1);
+	expect(uploadedVersion)
+	.withContext(`next uploaded version increases by 1`)
+	.toBe(3);
 	syncStatus = await testFS.v!.sync!.status(file1);
-	expect(syncStatus.state).toBe('synced');
-	expect(syncStatus.synced!.latest)
-	.withContext(`next uploaded version increases by 1`).toBe(3);
 
 	// upload of uploaded is a noop
-	await testFS.v!.sync!.upload(file1);
-	expect(deepEqual(
-		syncStatus, await testFS.v!.sync!.status(file1))).toBeTrue();
+	uploadedVersion = await testFS.v!.sync!.upload(file1);
+	expect(uploadedVersion)
+	.withContext(`noop returns no version, as nothing was uploaded`)
+	.toBeUndefined();
+	expect(deepEqual(syncStatus, await testFS.v!.sync!.status(file1)))
+	.withContext(`nothing changed with noop`)
+	.toBeTrue();
 
 };
 specs.its.push(it);

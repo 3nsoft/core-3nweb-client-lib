@@ -24,6 +24,7 @@ import { AsyncSBoxCryptor, SegmentsWriter, makeSegmentsWriter, makeSegmentsReade
 import { base64 } from '../../../lib-common/buffer-utils';
 import { defer } from '../../../lib-common/processes/deferred';
 import * as random from '../../../lib-common/random-node';
+import { cryptoWorkLabels } from '../../cryptor-work-labels';
 import { CommonAttrs, XAttrs } from './attrs';
 import * as pv1 from './xsp-payload-v1';
 import * as pv2 from './xsp-payload-v2';
@@ -36,11 +37,17 @@ const SEG_SIZE = 16;	// in 256-byte blocks = 4K in bytes
  */
 export abstract class NodePersistance {
 
+	private workLabel: number;
+
 	protected constructor(
 		private zerothHeaderNonce: Uint8Array,
 		private key: Uint8Array,
 		private cryptor: AsyncSBoxCryptor
-	) {}
+	) {
+		this.workLabel = cryptoWorkLabels.makeForNonce(
+			'storage', this.zerothHeaderNonce
+		);
+	}
 	
 	wipe(): void {
 		if (this.key) {
@@ -66,7 +73,7 @@ export abstract class NodePersistance {
 		return makeSegmentsWriter(
 			this.key, this.zerothHeaderNonce, version,
 			{ type: 'new', segSize: SEG_SIZE, payloadFormat: 2 },
-			random.bytes, this.cryptor);
+			random.bytes, this.cryptor, this.workLabel);
 	}
 
 	private async segWriterWithBase(
@@ -76,7 +83,7 @@ export abstract class NodePersistance {
 		return makeSegmentsWriter(
 			this.key, this.zerothHeaderNonce, newVersion,
 			{ type: 'update', base, payloadFormat: 2 },
-			random.bytes, this.cryptor);
+			random.bytes, this.cryptor, this.workLabel);
 	}
 
 	private async decryptedByteSrc(src: ObjSource): Promise<{
@@ -86,7 +93,8 @@ export abstract class NodePersistance {
 		const version = src.version;
 		const header = await src.readHeader();
 		const segReader = await makeSegmentsReader(
-			this.key, this.zerothHeaderNonce, version, header, this.cryptor
+			this.key, this.zerothHeaderNonce, version, header,
+			this.cryptor, this.workLabel
 		);
 		return {
 			version,
@@ -205,9 +213,12 @@ export abstract class NodePersistance {
 	): Promise<Uint8Array> {
 		if (!this.key) { throw new Error("Cannot use wiped object."); }
 		const headerContent = await this.cryptor.formatWN.open(
-			initHeader, this.key);
+			initHeader, this.key, this.workLabel
+		);
 		const n = calculateNonce(this.zerothHeaderNonce, newVersion);
-		return this.cryptor.formatWN.pack(headerContent, n, this.key);
+		return this.cryptor.formatWN.pack(
+			headerContent, n, this.key, this.workLabel
+		);
 	}
 
 }

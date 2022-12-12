@@ -23,11 +23,13 @@ type WritableFS = web3n.files.WritableFS;
 export interface SetupWithTwoDevsFSs {
 	isUp: boolean;
 	dev1FS: () => WritableFS;
+	dev1LocalFS: () => WritableFS;
 	dev2: {
 		stop(): Promise<void>;
 		start(): Promise<void>;
 	};
 	dev2FS: () => WritableFS;
+	dev2LocalFS: () => WritableFS;
 	resetFS: () => Promise<void>;
 }
 
@@ -48,10 +50,18 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 		const dev1AppFS = await w3n1.storage!.getAppSyncedFS();
 		const dev2AppFS = () => dev2.w3n.storage!.getAppSyncedFS();
 
+		const dev1LocalAppFS = await w3n1.storage!.getAppLocalFS();
+		const dev2LocalAppFS = () => dev2.w3n.storage!.getAppLocalFS();
+
 		let dev1FS: WritableFS;
 		let dev2FS: WritableFS;
 		fsSetup.dev1FS = () => dev1FS;
 		fsSetup.dev2FS = () => dev2FS;
+
+		let dev1LocalFS: WritableFS;
+		let dev2LocalFS: WritableFS;
+		fsSetup.dev1LocalFS = () => dev1LocalFS;
+		fsSetup.dev2LocalFS = () => dev2LocalFS;
 
 		fsSetup.dev2 = {
 			start: async () => {
@@ -67,7 +77,8 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 		fsSetup.resetFS = async () => {
 			await clearFS(dev1AppFS);
 			dev1FS = await dev1AppFS.writableSubRoot(
-				testFolder, { create: true, exclusive: true });
+				testFolder, { create: true, exclusive: true }
+			);
 			await dev1AppFS.v!.sync!.upload(testFolder);
 			await dev1AppFS.v!.sync!.upload('');
 			const d2AppFS = await dev2AppFS();
@@ -78,7 +89,16 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 				throw new Error(`Test file system on a second device has inconvenient conflicting sync state`);
 			}
 			dev2FS = await d2AppFS.writableSubRoot(
-				testFolder, { create: false });
+				testFolder, { create: false }
+			);
+			await clearFS(dev1LocalAppFS);
+			dev1LocalFS = await dev1LocalAppFS.writableSubRoot(
+				testFolder, { create: true, exclusive: true }
+			);
+			const d2LocalAppFS = await dev2LocalAppFS();
+			dev2LocalFS = await d2LocalAppFS.writableSubRoot(
+				testFolder, { create: true, exclusive: true }
+			);
 		};
 
 		await fsSetup.resetFS();

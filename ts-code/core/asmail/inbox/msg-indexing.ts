@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020 3NSoft Inc.
+ Copyright (C) 2022 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,383 +15,630 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { FileException } from '../../../lib-common/exceptions/file';
 import { SingleProc } from '../../../lib-common/processes/synced';
 import { MsgKeyInfo, MsgKeyRole } from '../keyring';
-import { base64 } from '../../../lib-common/buffer-utils';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
+import { BindParams, SQLiteOnSyncedFS, SQLiteOnVersionedFS } from '../../../lib-sqlite-on-3nstorage';
+import { Database, QueryExecResult } from '../../../lib-sqlite-on-3nstorage/sqljs';
+import { ensureCorrectFS } from '../../../lib-common/exceptions/file';
+import { base64, utf8 } from '../../../lib-common/buffer-utils';
+import { getOrMakeAndUploadFolderIn, getRemoteFolderChanges, observableFromTreeEvents, uploadFolderChangesIfAny } from '../../../lib-client/fs-sync-utils';
+import { merge, Observable, Unsubscribable } from 'rxjs';
+import { filter } from 'rxjs/operators';
 
 type WritableFS = web3n.files.WritableFS;
+type WritableFile = web3n.files.WritableFile;
+type ReadonlyFS = web3n.files.ReadonlyFS;
+type RemoteEvent = web3n.files.RemoteEvent;
+type SyncState = web3n.files.SyncState;
+type FileEvent = web3n.files.FileEvent;
+type FolderEvent = web3n.files.FolderEvent;
+type MsgInfo = web3n.asmail.MsgInfo;
 
-interface MsgRecord extends web3n.asmail.MsgInfo {
+interface MsgRecord extends MsgInfo {
 	key: string;
 	keyStatus: MsgKeyRole;
 	mainObjHeaderOfs: number;
 	removeAfter?: number;
 }
 
-interface MsgRecords {
-	fileTS: number;
-	byId: Map<string, MsgRecord>;
-	ordered: MsgRecord[];
+const indexTab = 'inbox_index';
+const column: Record<keyof MsgRecord, string> = {
+	msgId: 'msg_id',
+	msgType: 'msg_type',
+	deliveryTS: 'delivery_ts',
+	key: 'msg_key',
+	keyStatus: 'key_status',
+	mainObjHeaderOfs: 'main_obj_header_ofs',
+	removeAfter: 'remove_after'
+};
+Object.freeze(column);
+
+const createIndexTab = `CREATE TABLE ${indexTab} (
+	${column.msgId} TEXT PRIMARY KEY,
+	${column.msgType} TEXT,
+	${column.deliveryTS} INTEGER,
+	${column.key} BLOB,
+	${column.keyStatus} TEXT,
+	${column.mainObjHeaderOfs} INTEGER,
+	${column.removeAfter} INTEGER DEFAULT 0
+) STRICT`;
+
+const insertRec = `INSERT INTO ${indexTab} (
+	${column.msgId}, ${column.msgType}, ${column.deliveryTS},
+	${column.key}, ${column.keyStatus}, ${column.mainObjHeaderOfs},
+	${column.removeAfter}
+) VALUES (
+	$${column.msgId}, $${column.msgType}, $${column.deliveryTS},
+	$${column.key}, $${column.keyStatus}, $${column.mainObjHeaderOfs},
+	$${column.removeAfter}
+)`;
+
+const deleteRec = `DELETE FROM ${indexTab}
+WHERE ${column.msgId}=$${column.msgId}`;
+
+function listMsgInfos(db: Database, fromTS: number|undefined): MsgInfo[] {
+	let result: QueryExecResult[];
+	if (fromTS) {
+		result = db.exec(`SELECT ${
+			column.msgId}, ${column.msgType}, ${column.deliveryTS
+		} FROM ${indexTab
+		} WHERE ${column.deliveryTS}>$fromTS`,
+		{ '$fromTS': fromTS });
+	} else {
+		result = db.exec(`SELECT ${
+			column.msgId}, ${column.msgType}, ${column.deliveryTS
+		} FROM ${indexTab}`);
+	}
+	if (result.length === 0) { return []; }
+	const { columns, values: rows } = result[0];
+	const indecies = columnIndecies(
+		columns, column.msgId, column.msgType, column.deliveryTS
+	);
+	const msgs: MsgInfo[] = [];
+	for (const row of rows) {
+		msgs.push({
+			msgId: row[indecies.get(column.msgId)!] as any,
+			msgType: row[indecies.get(column.msgType)!] as any,
+			deliveryTS: row[indecies.get(column.deliveryTS)!] as any
+		});
+	}
+	return msgs;
+}
+
+function columnIndecies(
+	columns: QueryExecResult['columns'], ...columnNames: string[]
+): Map<string, number> {
+	const indecies = new Map<string, number>();
+	for (const colName of columnNames) {
+		indecies.set(colName, columns.indexOf(colName));
+	}
+	return indecies;
+}
+
+function deleteMsgFrom(db: Database, msgId: string): boolean {
+	db.exec(deleteRec, { [`$${column.msgId}`]: msgId });
+	return (db.getRowsModified() > 0);
 }
 
 const LIMIT_RECORDS_PER_FILE = 200;
 
-const LATEST_INDEX = 'latest.json';
-const INDEX_EXT = '.json';
-const INDEX_FNAME_REGEXP = /^\d+\.json$/;
-
-// XXX request to 'undefined.json' was spotted, and it probably comes from here.
-//		Either ensure that it doesn't happen here, or find it and fix it.
-
-function fileTSOrderComparator(a: number, b: number): number {
-	return (a - b);
+interface DBsFiles {
+	getDBFile(fileTS: number): Promise<WritableFile>;
 }
 
-function insertInto(records: MsgRecords, rec: MsgRecord): void {
-	records.byId.set(rec.msgId, rec);
-	if (records.ordered.length === 0) {
-		records.ordered.push(rec);
-	} else {
-		const ts = rec.deliveryTS;
-		for (let i=(records.ordered.length-1); i>=0; i-=1) {
-			if (records.ordered[i].deliveryTS <= ts) {
-				records.ordered.splice(i+1, 0, rec);
-				return;
-			}
-		}
-		records.ordered.splice(0, 0, rec);
-	}
-}
 
-function removeFrom(records: MsgRecords, msgId: string): void {
-	records.byId.delete(msgId);
-	for (let i=0; i<records.ordered.length; i+=1) {
-		if (records.ordered[i].msgId === msgId) {
-			records.ordered.splice(i, 1);
-			break;
-		}
-	}
-}
+class RecordsInSQL {
 
-function extractEarlyRecords(records: MsgRecords, recToExtract: number):
-		MsgRecords {
-	if (records.ordered.length < recToExtract) { throw new Error(
-		'Given too few records.'); }
-	const byId = new Map<string, MsgRecord>();
-	const ordered = records.ordered.splice(0, recToExtract);
-	const fileTS = ordered[ordered.length-1].deliveryTS;
-	for (const rec of ordered) {
-		byId.set(rec.msgId, rec);
-		records.byId.delete(rec.msgId);
-	}
-	return { byId, ordered, fileTS };
-}
+	private readonly older = makeTimedCache<number, SQLiteOnSyncedFS>(
+		10*60*1000
+	);
 
-function reduceToMsgInfosInPlace(records: web3n.asmail.MsgInfo[]): void {
-	for (let i=0; i<records.length; i+=1) {
-		const orig = records[i];
-		records[i] = {
-			msgType: orig.msgType,
-			msgId: orig.msgId,
-			deliveryTS: orig.deliveryTS
-		};
-	}
-}
-	
-interface MsgInfoWithoutType {
-	msgId: string;
-	deliveryTS: number;
-}
-
-/**
- * This message index stores MsgRecord's for message present on the server, i.e.
- * inbox. Records contain message key info, time of delivery, and time of
- * desired removal. Note that when user wants to keep a particular message for
- * a long time, it should be copied elsewhere, and not kept in the asmail
- * server inbox. Therefore, this index has to deal only with more-or-less
- * recent messages.
- * 
- * This implementation is not using database for records, but a log-like files.
- * Latest file is appended to certain length, and then is left to a mostly-read
- * existence, carrying messages' info till message removal.
- * When lookup is done only with message id, all files potentially need to be
- * read. When both message id and delivery timestamp are given, lookup will at
- * most touch two-three files.
- * 
- */
-export class MsgIndex {
-	
-	private latest: MsgRecords = (undefined as any);
-	private readonly cached = makeTimedCache<number, MsgRecords>(10*60*1000);
-	private fileTSs: number[] = (undefined as any);
-	private readonly fileProc = new SingleProc();
-	
-	private constructor(
-		private files: WritableFS
+	constructor(
+		private readonly files: DBsFiles,
+		private readonly latest: SQLiteOnVersionedFS,
+		private readonly fileTSs: number[]
 	) {
 		Object.seal(this);
 	}
-	
-	static async makeWith(files: WritableFS): Promise<MsgIndex> {
-		const index = new MsgIndex(files);
-			
-		// 1) initialize latest records index
-		const latest = await index.getRecords(undefined);
-		if (latest) {
-			index.latest = latest;
-		} else {
-			index.latest = {
-				fileTS: (undefined as any),
-				byId: new Map<string, MsgRecord>(),
-				ordered: []
-			};
-			await index.saveRecords(index.latest);
-		}
-		
-		// 2) initialize list of file timestamps, that act as index file names
-		index.fileTSs = (await index.files.listFolder('.'))
-		.map(f => f.name)
-		.filter(fName => fName.match(INDEX_FNAME_REGEXP))
-		.map(fName => parseInt(fName.substring(
-			0, fName.length-INDEX_EXT.length)))
-		.sort(fileTSOrderComparator);
 
+	async add(
+		msgInfo: MsgInfo, decrInfo: MsgKeyInfo, removeAfter: number
+	): Promise<MsgAddition|undefined> {
+		const { msgId, msgType, deliveryTS } = msgInfo;
+		const { key, keyStatus, msgKeyPackLen: mainObjHeaderOfs } = decrInfo;
+		const params: BindParams = {
+			[`$${column.msgId}`]: msgId,
+			[`$${column.msgType}`]: msgType,
+			[`$${column.deliveryTS}`]: deliveryTS,
+			[`$${column.key}`]: key!,
+			[`$${column.keyStatus}`]: keyStatus,
+			[`$${column.mainObjHeaderOfs}`]: mainObjHeaderOfs,
+			[`$${column.removeAfter}`]: removeAfter,
+		};
+		const { db, fileTS } = await this.getDbFor(msgInfo.deliveryTS);
+		db.db.exec(insertRec, params);
+		if (fileTS) {
+			await db.saveToFile();
+			return;
+		} else {
+			return {
+				type: 'addition',
+				record: {
+					msgId, msgType, deliveryTS,
+					key: base64.pack(key!),
+					keyStatus, mainObjHeaderOfs, removeAfter
+				}
+			};
+		} 
+	}
+
+	async saveLatestWithAttr(logTail: LogsTail): Promise<void> {
+		// XXX
+
+	}
+
+	private async getDbFor(deliveryTS: number): Promise<{
+		db: SQLiteOnVersionedFS|SQLiteOnSyncedFS; fileTS?: number;
+	}> {
+		if ((this.fileTSs.length === 0)
+		|| (this.fileTSs[this.fileTSs.length-1] < deliveryTS)) {
+			return { db: this.latest };
+		}
+		let fileTS = this.fileTSs[this.fileTSs.length-1];
+		for (let i=(this.fileTSs.length-2); i>=0; i-=1) {
+			if (this.fileTSs[i] >= deliveryTS) {
+				fileTS = this.fileTSs[i];
+			} else {
+				break;
+			}
+		}
+		const db = await this.dbFromCacheOrInit(fileTS);
+		return { db, fileTS };
+	}
+
+	private async dbFromCacheOrInit(fileTS: number): Promise<SQLiteOnSyncedFS> {
+		let db = this.older.get(fileTS);
+		if (db) { return db; }
+		const dbFile = await this.files.getDBFile(fileTS);
+		db = await SQLiteOnSyncedFS.makeAndStart(dbFile);
+		this.older.set(fileTS, db);
+		return db;
+	}
+
+	async remove(msgId: string): Promise<MsgRemoval|undefined> {
+		for await (const { db, fileTS } of this.iterateDBs()) {
+			if (deleteMsgFrom(db.db, msgId)) {
+				if (fileTS) {
+					await db.saveToFile();
+					return;
+				} else {
+					return {
+						type: 'removal',
+						msgId
+					};
+				}
+			}
+		}
+	}
+
+	private async* iterateDBs() {
+		yield { db: this.latest };
+		for (let i=(this.fileTSs.length-1); i>=0; i=-1) {
+			const fileTS = this.fileTSs[i];
+			if (!fileTS) { continue; }
+			const db = await this.dbFromCacheOrInit(fileTS);
+			if (db) {
+				yield { db, fileTS };
+			}
+		}
+	}
+
+	async listMsgs(fromTS: number|undefined): Promise<MsgInfo[]> {
+		let lst = listMsgInfos(this.latest.db, fromTS);
+		for (let i=(this.fileTSs.length-1); i>=0; i-=1) {
+			const fileTS = this.fileTSs[i];
+			if (fromTS && (fileTS <= fromTS)) { break; }
+			const older = await this.dbFromCacheOrInit(fileTS);
+			lst = listMsgInfos(older.db, fromTS).concat(lst);
+		}
+		lst.sort((a, b) => (a.deliveryTS - b.deliveryTS));
+		return lst;
+	}
+
+	private async getIndexWith(
+		deliveryTS: number
+	): Promise<SQLiteOnVersionedFS|SQLiteOnSyncedFS> {
+		let fileTS: number|undefined = undefined;
+		for (let i=(this.fileTSs.length-1); i>=0; i-=1) {
+			const fTS = this.fileTSs[i];
+			if (fTS < deliveryTS) { break; }
+			fileTS = fTS;
+		}
+		if (fileTS) {
+			return await this.dbFromCacheOrInit(fileTS);
+		} else {
+			return this.latest;
+		}
+	}
+
+	async getKeyFor(msgId: string, deliveryTS: number): Promise<{
+		msgKey: Uint8Array; msgKeyRole: MsgKeyRole; mainObjHeaderOfs: number;
+	}|undefined> {
+		const db = await this.getIndexWith(deliveryTS);
+		const result = db.db.exec(`SELECT
+			${column.key}, ${column.keyStatus}, ${column.mainObjHeaderOfs}
+			FROM ${indexTab}
+			WHERE ${column.msgId}=$${column.msgId}`,
+			{ [`$${column.msgId}`]: msgId }
+		);
+		if (result.length === 0) { return; }
+		const { columns, values: [ row ] } = result[0];
+		const indecies = columnIndecies(
+			columns, column.key, column.keyStatus, column.mainObjHeaderOfs
+		);
+		return {
+			msgKey: row[indecies.get(column.key)!] as Uint8Array,
+			msgKeyRole: row[indecies.get(column.keyStatus)!] as any,
+			mainObjHeaderOfs: row[indecies.get(column.mainObjHeaderOfs)!] as number
+		}
+	}
+
+}
+Object.freeze(RecordsInSQL.prototype);
+Object.freeze(RecordsInSQL);
+
+
+interface LogFiles {
+	createNewLogFile(logNum: number, jsonStr?: string): Promise<LogsTail>;
+	appendLogFile(logNum: number, bytes: Uint8Array): Promise<{
+		uploadedVersion: number; writeOfs: number;
+	}>;
+}
+
+interface MsgAddition {
+	type: 'addition';
+	record: MsgRecord;
+}
+
+interface MsgRemoval {
+	type: 'removal';
+	msgId: string;
+}
+
+interface NewShard {
+	type: 'new-shard';
+	fileTS: number;
+}
+
+type ChangeToLog = MsgAddition | MsgRemoval | NewShard;
+
+interface LogsTail {
+	num: number;
+	version: number;
+	writeOfs: number;
+}
+
+
+class LogOfChanges {
+
+	private latestLogNum: number;
+
+	constructor(
+		private readonly files: LogFiles,
+		private logNums: number[],
+		private latestLogVersion: number
+	) {
+		this.latestLogNum = this.logNums[this.logNums.length-1];
+		Object.seal(this);
+	}
+
+	async push(change: ChangeToLog): Promise<LogsTail> {
+		const bytes = utf8.pack(JSON.stringify(change));
+		const {
+			uploadedVersion, writeOfs
+		} = await this.files.appendLogFile(this.latestLogNum, bytes);
+		this.latestLogVersion = uploadedVersion;
+		return {
+			num: this.latestLogNum,
+			version: this.latestLogVersion,
+			writeOfs
+		};
+	}
+
+}
+Object.freeze(LogOfChanges.prototype);
+Object.freeze(LogOfChanges);
+
+
+const DBS_FOLDER = 'dbs';
+const CHANGES_FOLDER = 'changes';
+const LOG_EXT = '.log.json';
+const DB_EXT = '.sqlite';
+const LATEST_DB = `latest${DB_EXT}`;
+
+const COMMA_BYTE = utf8.pack(',');
+const SQ_BRACKET_BYTE = utf8.pack(']');
+
+
+class LogAndStructFiles implements LogFiles, DBsFiles {
+
+	private syncing: Unsubscribable|undefined = undefined;
+
+	private constructor(
+		private readonly logsFS: WritableFS,
+		private readonly dbsFS: WritableFS
+	) {
+		ensureCorrectFS(this.logsFS, 'synced', true);
+		Object.seal(this);
+	}
+
+	static async makeAndStart(syncedFS: WritableFS): Promise<{
+		files: LogAndStructFiles; logs: LogOfChanges; records: RecordsInSQL;
+	}> {
+		ensureCorrectFS(syncedFS, 'synced', true);
+		await getRemoteFolderChanges(syncedFS);
+		const logsFS = await getOrMakeAndUploadFolderIn(syncedFS, CHANGES_FOLDER);
+		const dbsFS = await getOrMakeAndUploadFolderIn(syncedFS, DBS_FOLDER);
+		await uploadFolderChangesIfAny(syncedFS);
+		const files = new LogAndStructFiles(logsFS, dbsFS);
+		const logs = await files.makeLogOfChanges();
+		const records = await files.makeRecords();
+		files.startSyncing();
+		return { files, logs, records };
+	}
+
+	private async makeLogOfChanges(): Promise<LogOfChanges> {
+		const logNums = await this.logsInFolder();
+		let logsTail: LogsTail;
+		if (logNums.length === 0) {
+			logsTail = await this.createNewLogFile(1);
+			logNums.push(logsTail.num);
+		} else {
+			const lastLog = logNums[logNums.length-1];
+			({ tail: logsTail } = await this.statLogFile(lastLog));
+		}
+		return new LogOfChanges(this, logNums, logsTail.version);
+	}
+
+	private logFileName(logNum: number): string {
+		return `${logNum}${LOG_EXT}`;
+	}
+
+	private async logsInFolder(): Promise<number[]> {
+		const lst = await this.logsFS.listFolder(``);
+		const logNums: number[] = [];
+		for (const { isFile, name } of lst) {
+			if (!isFile || !name.endsWith(LOG_EXT)) { continue; }
+			const numStr = name.substring(0, LOG_EXT.length);
+			const logNum = parseInt(numStr);
+			if (isNaN(logNum)) { continue; }
+			logNums.push(logNum);
+		}
+		logNums.sort();
+		return logNums;
+	}
+
+	async createNewLogFile(
+		logNum: number, jsonStr = '[]'
+	): Promise<LogsTail> {
+		const logFile = this.logFileName(logNum);
+		const version = await this.logsFS.v!.writeTxtFile(
+			logFile, jsonStr, { create: true, exclusive: true }
+		);
+		await this.logsFS.v!.sync!.upload(logFile);
+		await this.logsFS.v!.sync!.upload('');
+		return {
+			num: logNum,
+			version,
+			writeOfs: jsonStr.length - 1
+		};
+	}
+
+	private async statLogFile(
+		logNum: number
+	): Promise<{ tail: LogsTail; syncState: SyncState; }> {
+		const logFile = this.logFileName(logNum);
+		const { state: syncState } = await this.logsFS.v!.sync!.status(logFile);
+		if (syncState === 'behind') {
+			await this.logsFS.v!.sync!.adoptRemote(logFile);
+		} else if (syncState === 'unsynced') {
+			await this.logsFS.v!.sync!.upload(logFile);
+		} else if (syncState === 'conflicting') {
+			// XXX
+			throw new Error(`conflict resolution needs implementation`);
+		}
+		const { size, version } = await this.logsFS.stat(logFile);
+		return {
+			syncState,
+			tail: {
+				num: logNum,
+				version: version!,
+				writeOfs: size! - 1
+			}
+		};
+	}
+
+	async appendLogFile(logNum: number, bytes: Uint8Array): Promise<{
+		uploadedVersion: number; writeOfs: number;
+	}> {
+		const logFile = this.logFileName(logNum);
+		const { state } = await this.logsFS.v!.sync!.status(logFile);
+		if (state === 'behind') {
+			await this.logsFS.v!.sync!.adoptRemote(logFile);
+		} else if (state === 'conflicting') {
+			// XXX
+			throw new Error(`conflict resolution needs implementation`);
+		}
+		const sink = await this.logsFS.getByteSink(logFile, { truncate: false });
+		const len = await sink.getSize();
+		let writeOfs: number;
+		if (len === 2) {
+			await sink.splice(len-1, 1);
+			writeOfs = len-1;
+		} else {
+			await sink.splice(len-1, 1, COMMA_BYTE);
+			writeOfs = len;
+		}
+		await sink.splice(writeOfs, 0, bytes);
+		writeOfs += bytes.length
+		await sink.splice(writeOfs, 0, SQ_BRACKET_BYTE);
+		await sink.done();
+		const uploadedVersion = (await this.logsFS.v!.sync!.upload(logFile))!;
+		return { uploadedVersion, writeOfs };
+	}
+
+	private dbFileName(fileTS: number): string {
+		return `${fileTS}${DB_EXT}`;
+	}
+
+	private async makeRecords(): Promise<RecordsInSQL> {
+		const latest = await this.readOrInitializeLatestDB();
+		const fileTSs = await this.fileTSsOfDBShards();
+		return new RecordsInSQL(this, latest, fileTSs);
+	}
+
+	async getDBFile(fileTS: number): Promise<WritableFile> {
+		return await this.dbsFS.writableFile(
+			this.dbFileName(fileTS), { create: false }
+		);
+	}
+
+	private async readOrInitializeLatestDB(): Promise<SQLiteOnVersionedFS> {
+		if (await this.dbsFS.checkFilePresence(LATEST_DB)) {
+			const dbFile = await this.dbsFS.writableFile(
+				LATEST_DB, { create: false }
+			);
+			return await SQLiteOnVersionedFS.makeAndStart(dbFile);
+		} else {
+			const dbFile = await this.dbsFS.writableFile(
+				LATEST_DB, { create: true, exclusive: true }
+			);
+			const latest = await SQLiteOnVersionedFS.makeAndStart(dbFile);
+			latest.db.run(createIndexTab);
+			await latest.saveToFile();
+			return latest;
+		}
+	}
+
+	private async fileTSsOfDBShards(): Promise<number[]> {
+		const lst = await this.dbsFS.listFolder('');
+		const fileTSs: number[] = [];
+		for (const { isFile, name } of lst) {
+			if (!isFile || !name.endsWith(DB_EXT)) { continue; }
+			const numStr = name.substring(0, DB_EXT.length);
+			const fileTS = parseInt(numStr);
+			if (isNaN(fileTS)) { continue; }
+			fileTSs.push(fileTS);
+		}
+		fileTSs.sort();
+		return fileTSs;
+	}
+
+	private startSyncing(): void {
+		const db$ = observableFromTreeEvents(this.dbsFS, '');
+		const change$ = observableFromTreeEvents(this.logsFS, '');
+
+		// XXX
+		// - start from data in fs, attempt to get fresh, etc. Both log and data
+		//   (in parallel ?).
+		// - start sync process
+		// - unblock processing, as init is done
+		// Write theses in functions that use RecordsInSQL and LogOfChanges
+		// structures.
+		// Somehow aforementioned processes ain't exclusive to either point.
+
+		// XXX
+		//  should start from reading folder and placing logs into yet unsynced db
+
+		this.syncing = merge(change$, db$)
+		.pipe(
+			filter(ev => ev.type.startsWith('remote-'))
+		)
+		// .subscribe({
+		// 	next: ev => console.log(`------ fs event:`, ev),
+		// 	complete: () => console.log(` +++ MsgIndex's sync process completed`),
+		// 	error: err => console.log(` *** error in MsgIndex's sync process`, err)
+		// });
+		.subscribe();
+	}
+
+	stopSyncing(): void {
+		if (this.syncing) {
+			this.syncing.unsubscribe();
+			this.syncing = undefined;
+		}
+	}
+
+
+}
+Object.freeze(LogAndStructFiles.prototype);
+Object.freeze(LogAndStructFiles);
+
+
+/**
+ * This message index stores info for messages present on the server, in the
+ * inbox. Records contain message key info, time of delivery, and time of
+ * desired removal.
+ * 
+ * Message info with keys is stored in SQLite dbs sharded/partitioned by
+ * delivery timestamp. The latest shard, shard without upper time limit
+ * is stored in local storage, while all other shards with limits are stored in
+ * synced storage. Information in synced storage is a sum of all limited shards
+ * and action logs. Action logs 
+ * 
+ */
+export class MsgIndex {
+
+	private constructor(
+		private readonly files: LogAndStructFiles,
+		private readonly records: RecordsInSQL,
+		private readonly changes: LogOfChanges
+	) {
+		Object.seal(this);
+	}
+
+	static async make(syncedFS: WritableFS): Promise<MsgIndex> {
+		const {
+			files, logs, records
+		} = await LogAndStructFiles.makeAndStart(syncedFS);
+		const index = new MsgIndex(files, records, logs);
 		return index;
 	}
 
-	/**
-	 * @param recs that need to be saved
-	 * @return a promise, resolvable when given records are saved. Latest
-	 * records can also be chunked and saved as needed. 
-	 */
-	private async saveRecords(recs: MsgRecords): Promise<void> {
-		if (typeof recs.fileTS !== 'number') {
-			if (this.latest.ordered.length > 1.25*LIMIT_RECORDS_PER_FILE) {
-				const recs = extractEarlyRecords(this.latest, LIMIT_RECORDS_PER_FILE);
-				const recsFileTS = recs.ordered[recs.ordered.length-1].deliveryTS;
-				const fName = recsFileTS+INDEX_EXT;
-				await this.files.writeJSONFile(fName, recs.ordered);
-				this.cached.set(recsFileTS, recs);
-				this.fileTSs.push(recsFileTS);
-			}
-			await this.files.writeJSONFile(LATEST_INDEX, this.latest.ordered);
-		} else {
-			const fName = recs.fileTS+INDEX_EXT;
-			await this.files.writeJSONFile(fName, recs.ordered);
-			this.cached.set(recs.fileTS, recs);
-		}
+	stopSyncing(): void {
+		this.files.stopSyncing();
 	}
-	
-	/**
-	 * @param fileTS is index file's timestamp. Undefined value means latest
-	 * records.
-	 * @return a promise, resolvable to found records, either from a memory
-	 * cache, or from a file.
-	 */
-	private async getRecords(fileTS: number|undefined):
-			Promise<MsgRecords|undefined> {
-		if (typeof fileTS === 'number') {
-			const recs = this.cached.get(fileTS);
-			if (recs) { return recs; }
-		} else {
-			if (this.latest) { return this.latest; }
-		}
-		const fName = (typeof fileTS === 'number') ?
-			`${fileTS}INDEX_EXT` : LATEST_INDEX;
-		const ordered = await this.files.readJSONFile<MsgRecord[]>(fName)
-		.catch(notFoundOrReThrow);
-		if (!ordered) { return; }
-		ordered.sort(sortMsgByDeliveryTime);
-		const byId = new Map<string, MsgRecord>();
-		for (const rec of ordered) {
-			byId.set(rec.msgId, rec);
-		}
-		const records = { byId, ordered, fileTS: fileTS! };
-		if (typeof fileTS === 'number') {
-			this.cached.set(fileTS, records);
-		}
-		return records;
+
+	async add(
+		msgInfo: MsgInfo, decrInfo: MsgKeyInfo, removeAfter = 0
+	): Promise<void> {
+		const logChange = await this.records.add(msgInfo, decrInfo, removeAfter);
+		if (!logChange) { return; }
+		const logTail = await this.changes.push(logChange);
+		await this.records.saveLatestWithAttr(logTail);
 	}
-	
-	/**
-	 * @param msgInfo is a minimal message info object
-	 * @param decrInfo
-	 * @return a promise, resolvable when given message info bits are recorded. 
-	 */
-	add(msgInfo: web3n.asmail.MsgInfo, decrInfo: MsgKeyInfo): Promise<void> {
-		if (!decrInfo.key) { throw new Error(`Given message decryption info doesn't have a key for message ${msgInfo.msgId}`); }
-		const msg: MsgRecord = {
-			msgType: msgInfo.msgType,
-			msgId: msgInfo.msgId,
-			deliveryTS: msgInfo.deliveryTS,
-			key: decrInfo.key,
-			keyStatus: decrInfo.keyStatus,
-			mainObjHeaderOfs: decrInfo.msgKeyPackLen
-		};
-		return this.fileProc.startOrChain(async () => {
-			
-			// 1) msg should be inserted into latest part of index
-			if ((this.fileTSs.length === 0) ||
-					(msg.deliveryTS >= this.fileTSs[this.fileTSs.length-1])) {
-				insertInto(this.latest, msg);
-				await this.saveRecords(this.latest);
-				return;
-			}
-			
-			// 2) find non-latest file for insertion
-			let fileTS = this.fileTSs[this.fileTSs.length-1];
-			for (let i=(this.fileTSs.length-2); i<=0; i-=1) {
-				if (msg.deliveryTS >= this.fileTSs[i]) {
-					break;
-				} else {
-					fileTS = this.fileTSs[i];
-				}
-			}
-			const records = await this.getRecords(fileTS);
-			if (!records) { throw new Error(`Expectation fail: there should be some message records.`); }
-			insertInto(records, msg);
-			await this.saveRecords(records);
-		});
+
+	async remove(msgId: string): Promise<void> {
+		const logChange = await this.records.remove(msgId);
+		if (!logChange) { return; }
+		const logTail = await this.changes.push(logChange);
+		await this.records.saveLatestWithAttr(logTail);
 	}
-	
-	private async findRecordsWith(msg: MsgInfoWithoutType):
-			Promise<MsgRecords|undefined> {
-		// 1) msg should be in latest part of index
-		if ((this.fileTSs.length === 0) ||
-				(msg.deliveryTS >= this.fileTSs[this.fileTSs.length-1])) {
-			if (!this.latest.byId.has(msg.msgId)) { return; }
-			return this.latest;
-		}
-		
-		// 2) find non-latest index
-		let fileTS = this.fileTSs[this.fileTSs.length-1];
-		for (let i=(this.fileTSs.length-2); i<=0; i-=1) {
-			if (msg.deliveryTS >= this.fileTSs[i]) {
-				let records = await this.getRecords(fileTS);
-				if (!records || !records.byId.has(msg.msgId)) {
-					if (msg.deliveryTS !== this.fileTSs[i]) { return; }
-					fileTS = this.fileTSs[i];
-					records = await this.getRecords(fileTS);
-					if (!records || !records.byId.has(msg.msgId)) { return; }
-				}
-				return records;
-			} else {
-				fileTS = this.fileTSs[i];
-			}
-		}
-		const records = await this.getRecords(this.fileTSs[0]);
-		if (!records || !records.byId.has(msg.msgId)) { return; }
-		return records;
+
+	listMsgs(fromTS: number|undefined): Promise<MsgInfo[]> {
+		return this.records.listMsgs(fromTS);
 	}
-	
-	/**
-	 * @param msg is a message identifying info used to find and remove message
-	 * @return a promise, resolvable when message is removed from this index.
-	 */
-	remove(msg: MsgInfoWithoutType): Promise<void> {
-		return this.fileProc.startOrChain(async () => {
-			const records = await this.findRecordsWith(msg);
-			if (!records) { return; }
-			removeFrom(records, msg.msgId);
-			if ((records.fileTS !== null) && (records.ordered.length === 0)) {
-				await this.files.deleteFile(records.fileTS+INDEX_EXT);
-			} else {
-				await this.saveRecords(records);
-			}
-		});
+
+	getKeyFor(msgId: string, deliveryTS: number): Promise<{
+		msgKey: Uint8Array; msgKeyRole: MsgKeyRole; mainObjHeaderOfs: number;
+	}|undefined> {
+		return this.records.getKeyFor(msgId, deliveryTS);
 	}
-	
-	/**
-	 * @param msg is an id of a message to remove
-	 * @return a promise, resolvable when message is removed from this index.
-	 */
-	removeUsingIdOnly(msgId: string): Promise<void> {
-		return this.fileProc.startOrChain(async () => {
-			let records = this.latest;
-			let msgFound = records.byId.has(msgId);
-			const i = this.fileTSs.length-1;
-			while (!msgFound && (i >= 0)) {
-				records = (await this.getRecords(this.fileTSs[i]))!;
-				msgFound = records.byId.has(msgId);
-			}
-			if (msgFound) {
-				removeFrom(records, msgId);
-				if (!!records.fileTS && (records.ordered.length === 0)) {
-					await this.files.deleteFile(records.fileTS+INDEX_EXT);
-				} else {
-					await this.saveRecords(records);
-				}
-			}
-		});
-	}
-	
-	/**
-	 * @param fromTS
-	 * @return a promise, resolvable to an ordered array of MsgInfo's that have
-	 * delivery timestamp same or later, than the given one.
-	 */
-	async listMsgs(fromTS: number|undefined): Promise<web3n.asmail.MsgInfo[]> {
-		return this.fileProc.startOrChain(async () => {
-			// find time starting point and get all records
-			let list: web3n.asmail.MsgInfo[] = [];
-			for (let i=0; i<this.fileTSs.length; i+=1) {
-				if (fromTS && (fromTS > this.fileTSs[i])) { continue; }
-				const recs = (await this.getRecords(this.fileTSs[i]))!;
-				list = list.concat(recs.ordered);
-			}
-			list = list.concat(this.latest.ordered);
-			// truncate records
-			for (let i=0; i<list.length; i+=1) {
-				if (fromTS && (fromTS >= list[i].deliveryTS)) {
-					list = list.slice(i);
-					break;
-				}
-			}
-			reduceToMsgInfosInPlace(list);
-			return list;
-		});
-	}
-	
-	/**
-	 * This returns a promise resolvable to message's file key holder and key
-	 * role, when message is found, and resolvabel to an undefined, when message
-	 * is not known.
-	 * @param msg is a message identifying info used to find message
-	 */
-	fKeyFor(msg: MsgInfoWithoutType): Promise<
-			{ msgKey: Uint8Array; msgKeyRole: MsgKeyRole;
-				mainObjHeaderOfs: number; }|undefined> {
-		return this.fileProc.startOrChain(async () => {
-			const records = await this.findRecordsWith(msg);
-			if (!records) { return; }
-			const rec = records.byId.get(msg.msgId);
-			if (!rec) { return; }
-			return {
-				msgKey: base64.open(rec.key),
-				msgKeyRole: rec.keyStatus,
-				mainObjHeaderOfs: rec.mainObjHeaderOfs
-			};
-		});
-	}
-	
+
 }
 Object.freeze(MsgIndex.prototype);
 Object.freeze(MsgIndex);
 
-/**
- * This is a catch callback, which returns undefined on file(folder) not found
- * exception, and re-throws all other exceptions/errors.
- */
-function notFoundOrReThrow(exc: FileException): undefined {
-	if (!exc.notFound) { throw exc; }
-	return;
-}
-
-function sortMsgByDeliveryTime(a: MsgInfoWithoutType,
-		b: MsgInfoWithoutType): number {
-	return (a.deliveryTS - b.deliveryTS);
-}
 
 Object.freeze(exports);

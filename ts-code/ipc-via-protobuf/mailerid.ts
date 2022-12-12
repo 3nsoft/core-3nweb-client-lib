@@ -18,7 +18,7 @@
 import { ExposedFn, Caller, makeIPCException, ExposedObj } from "./connector";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { mailerid as pb } from '../protos/mailerid.proto';
-import { decodeFromUtf8, encodeToUtf8 } from "./protobuf-msg";
+import { decodeFromUtf8, encodeToUtf8, methodPathFor } from "./protobuf-msg";
 
 type MailerId = web3n.mailerid.Service;
 
@@ -52,7 +52,7 @@ namespace getUserId {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): MailerId['getUserId'] {
-		const path = objPath.concat('getUserId');
+		const path = methodPathFor<MailerId>(objPath, 'getUserId');
 		return () => caller.startPromiseCall(path, undefined)
 		.then(buf => {
 			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
@@ -90,7 +90,7 @@ namespace login {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): MailerId['login'] {
-		const path = objPath.concat('login');
+		const path = methodPathFor<MailerId>(objPath, 'login');
 		return async serviceUrl => {
 			const req = requestType.pack({ serviceUrl });
 			const buf = await caller.startPromiseCall(path, req)

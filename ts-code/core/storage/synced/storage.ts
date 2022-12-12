@@ -28,7 +28,7 @@ import { AsyncSBoxCryptor, NONCE_LENGTH, Subscribe, ObjSource } from 'xsp-files'
 import { RemoteEvents } from './remote-events';
 import { UpSyncer } from './upsyncer';
 import { NetClient } from '../../../lib-client/request-utils';
-import { Observable } from 'rxjs';
+import { lastValueFrom, Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
 import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
 
@@ -291,12 +291,13 @@ export class SyncedStore implements ISyncedStorage {
 			const obj = await this.files.findObj(objId);
 			if (obj) { throw makeObjExistsExc(objId); }
 			const { fileWrite$ } = await this.files.saveFirstVersion(
-				objId, encSub);
-			await fileWrite$.toPromise();
+				objId, encSub
+			);
+			await lastValueFrom(fileWrite$);
 		} else {
 			const obj = await this.getObjOrThrow(objId);
 			const { fileWrite$ } = await obj.saveNewVersion(version, encSub);
-			await fileWrite$.toPromise();
+			await lastValueFrom(fileWrite$);
 		}
 	}
 

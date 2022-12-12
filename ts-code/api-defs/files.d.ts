@@ -44,6 +44,7 @@ declare namespace web3n.files {
 		versionMismatch?: true;
 		isEndless?: true;
 		storageClosed?: true;
+		remoteNotSet?: true;
 	}
 
 	interface exceptionCode {
@@ -192,7 +193,17 @@ declare namespace web3n.files {
 		 * @param len maximum number of bytes to read from file. If undefine is
 		 * given, all bytes are read from current postion to the end of file.
 		 */
-		read(len: number|undefined): Promise<Uint8Array|undefined>;
+		readNext(len: number|undefined): Promise<Uint8Array|undefined>;
+
+		/**
+		 * This moves current position to a given value and read given number of
+		 * bytes. It is equivalent to calling seek() and readNext() with
+		 * respective arguments.
+		 * @param pos is a position at which to start read.
+		 * @param len maximum number of bytes to read from file. If undefine is
+		 * given, all bytes are read from current postion to the end of file.
+		 */
+		readAt(pos: number, len: number|undefined): Promise<Uint8Array|undefined>;
 
 		/**
 		 * This returns a promise, resolvable to the size of this file.
@@ -264,7 +275,8 @@ declare namespace web3n.files {
 		 * sink with this error. When err is given, no errors will be thrown back
 		 * to this call.
 		 */
-		done(err?: any): Promise<void>;
+		done(err?: any, xattrChanges?: XAttrsChanges): Promise<void>;
+
 	}
 
 	type Linkable = File | FS;
@@ -382,20 +394,28 @@ declare namespace web3n.files {
 		/**
 		 * This returns a promise, resolvable when file is written
 		 * @param bytes is a complete file content to write
+		 * @param xattrChanges is optional changes to xattrs, to pack them in the
+		 * same go
 		 */
-		writeBytes(bytes: Uint8Array): Promise<void>;
+		writeBytes(
+			bytes: Uint8Array, xattrChanges?: XAttrsChanges
+		): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable when file is written
 		 * @param txt to write to file, using utf8 encoding
+		 * @param xattrChanges is optional changes to xattrs, to pack them in the
+		 * same go
 		 */
-		writeTxt(txt: string): Promise<void>;
+		writeTxt(txt: string, xattrChanges?: XAttrsChanges): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable when file is written
 		 * @param json
+		 * @param xattrChanges is optional changes to xattrs, to pack them in the
+		 * same go
 		 */
-		writeJSON(json: any): Promise<void>;
+		writeJSON(json: any, xattrChanges?: XAttrsChanges): Promise<void>;
 
 		/**
 		 * This returns a promise, resolvable to byte sink with seek
@@ -495,22 +515,30 @@ declare namespace web3n.files {
 		 * This returns a promise, resolvable to new file's version when file is
 		 * written
 		 * @param bytes is a complete file content to write
+		 * @param xattrChanges is optional changes to xattrs, to pack them into
+		 * the same file version
 		 */
-		writeBytes(bytes: Uint8Array): Promise<number>;
+		writeBytes(
+			bytes: Uint8Array, xattrChanges?: XAttrsChanges
+		): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to new file's version when file is
 		 * written
 		 * @param txt to write to file, using utf8 encoding
+		 * @param xattrChanges is optional changes to xattrs, to pack them into
+		 * the same file version
 		 */
-		writeTxt(txt: string): Promise<number>;
+		writeTxt(txt: string, xattrChanges?: XAttrsChanges): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to new file's version when file is
 		 * written
 		 * @param json
+		 * @param xattrChanges is optional changes to xattrs, to pack them into
+		 * the same file version
 		 */
-		writeJSON(json: any): Promise<number>;
+		writeJSON(json: any, xattrChanges?: XAttrsChanges): Promise<number>;
 
 		/**
 		 * This returns a promise, resolvable to byte sink with seek, and a file
@@ -567,7 +595,7 @@ declare namespace web3n.files {
 
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
 
-		upload(opts?: OptionsToUploadLocal): Promise<void>;
+		upload(opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 	}
 
@@ -1191,7 +1219,9 @@ declare namespace web3n.files {
 
 	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
 
-		upload(path: string, opts?: OptionsToUploadLocal): Promise<void>;
+		upload(
+			path: string, opts?: OptionsToUploadLocal
+		): Promise<number|undefined>;
 
 		adoptRemoteFolderItem(
 			path: string, itemName: string, opts?: OptionsToAdoptRemoteItem

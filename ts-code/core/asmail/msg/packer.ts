@@ -31,6 +31,7 @@ import { MsgEnvelope, SuggestedNextKeyPair, MetaForNewKey,
 import { isContainerEmpty, iterFilesIn, iterFoldersIn }
 	from './attachments-container';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FS = web3n.files.FS;
@@ -123,6 +124,7 @@ export class MsgPacker {
 	private hasAttachments = false;
 	private attachmentsFS: FS|undefined = undefined;
 	private attachmentsCont: AttachmentsContainer|undefined = undefined;
+	private workLabel: number;
 
 	private constructor(
 		private segSizeIn256bs: number
@@ -136,6 +138,7 @@ export class MsgPacker {
 			'From': undefined as any
 		};
 		this.mainObjId = this.addJsonObj(this.main);
+		this.workLabel = cryptoWorkLabels.makeFor('asmail', this.mainObjId);
 		Object.seal(this);
 	}
 
@@ -149,6 +152,7 @@ export class MsgPacker {
 		const packer = new MsgPacker(segSizeIn256bs);
 		packer.readyPack = p;
 		packer.mainObjId = p.meta.objIds[0];
+		packer.workLabel = cryptoWorkLabels.makeFor('asmail', packer.mainObjId);
 		Object.values(copy(p.objs))
 		.forEach(obj => {
 			packer.allObjs.set(obj.id, obj);
@@ -421,7 +425,8 @@ export class MsgPacker {
 		const segWriter = await makeSegmentsWriter(
 			obj.key, idToHeaderNonce(obj.id), 0,
 			{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
-			random.bytes, cryptor);
+			random.bytes, cryptor, this.workLabel
+		);
 
 		// make source that inserts message key pack into header
 		return makeMainObjSrc(msgKeyPack, bytes, segWriter);
@@ -490,12 +495,14 @@ export class MsgPacker {
 			segWriter = await makeSegmentsWriter(
 				obj.key, idToHeaderNonce(obj.id), 0,
 				{ type: 'restart', header },
-				random.bytes, cryptor);
+				random.bytes, cryptor, this.workLabel
+			);
 		} else {
 			segWriter = await makeSegmentsWriter(
 				obj.key, idToHeaderNonce(obj.id), 0,
 				{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
-				random.bytes, cryptor);
+				random.bytes, cryptor, this.workLabel
+			);
 		}
 
 		// make object source
@@ -576,7 +583,8 @@ function fileSrcToByteSrc(fileSrc: FileByteSource): ByteSource {
 				size: await fileSrc.getSize()
 			};
 		},
-		read: fileSrc.read,
+		readNext: fileSrc.readNext,
+		readAt: fileSrc.readAt,
 		seek: fileSrc.seek
 	}
 }

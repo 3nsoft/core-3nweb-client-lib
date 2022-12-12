@@ -98,6 +98,7 @@ export class NodesContainer {
 			}
 		})();
 		this.promises.set(objId, envelopedPromise);
+		envelopedPromise.catch(noop);
 	}
 
 	delete(node: Node): boolean {
@@ -119,6 +120,8 @@ export class NodesContainer {
 	}
 
 }
+
+function noop() {}
 
 export interface NodeEvent {
 	objId: ObjId;

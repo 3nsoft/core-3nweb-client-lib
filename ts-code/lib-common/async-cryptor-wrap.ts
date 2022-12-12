@@ -65,6 +65,7 @@ export interface Decryptor {
  * This returns an encryptor that packs bytes according to "with-nonce" format,
  * keeping track and automatically advancing nonce.
  * @param cryptor is an async cryptor that will be used by created encryptor.
+ * @param workLabel
  * @param key for new encryptor.
  * Note that key will be copied, thus, if given array shall never be used
  * anywhere, it should be wiped after this call.
@@ -75,8 +76,10 @@ export interface Decryptor {
  * @param delta is a number between 1 and 255 inclusive, used to advance nonce.
  * When missing, it defaults to one.
  */
-export function makeEncryptor(cryptor: AsyncSBoxCryptor,
-		key: Uint8Array, nextNonce: Uint8Array, delta?: number): Encryptor {
+export function makeEncryptor(
+	cryptor: AsyncSBoxCryptor, workLabel: number,
+	key: Uint8Array, nextNonce: Uint8Array, delta?: number
+): Encryptor {
 	if (!(nextNonce instanceof Uint8Array)) { throw new TypeError(
 		"Nonce array nextNonce must be Uint8Array."); }
 	if (nextNonce.length !== 24) { throw new Error(
@@ -102,7 +105,7 @@ export function makeEncryptor(cryptor: AsyncSBoxCryptor,
 				`This encryptor cannot be used, as it had already been destroyed.`); }
 			if (counter > counterMax) { throw new Error(
 				`This encryptor has been used too many times. Further use may lead to duplication of nonces.`); }
-			const c = await cryptor.formatWN.pack(m, nextNonce, key);
+			const c = await cryptor.formatWN.pack(m, nextNonce, key, workLabel);
 			advanceNonce(nextNonce, delta!);
 			counter += 1;
 			return c;
@@ -123,16 +126,16 @@ export function makeEncryptor(cryptor: AsyncSBoxCryptor,
 }
 
 /**
- * 
+ * @param cryptor
+ * @param workLabel
  * @param key for new decryptor.
- * @param arrFactory is typed arrays factory, used to allocated/find an array for use.
- * It may be undefined, in which case an internally created one is used.
- * Note that key will be copied, thus, if given array shall never be used anywhere,
- * it should be wiped after this call.
+ * Note that key will be copied, thus, if given array shall never be used
+ * anywhere, it should be wiped after this call.
  * @return a frozen object with pack & open and destroy functions.
  */
-export function makeDecryptor(cryptor: AsyncSBoxCryptor, key: Uint8Array):
-		Decryptor {
+export function makeDecryptor(
+	cryptor: AsyncSBoxCryptor, workLabel: number, key: Uint8Array
+): Decryptor {
 	if (!(key instanceof Uint8Array)) { throw new TypeError(
 		"Key array key must be Uint8Array."); }
 	if (key.length !== 32) { throw new Error(
@@ -142,9 +145,10 @@ export function makeDecryptor(cryptor: AsyncSBoxCryptor, key: Uint8Array):
 	
 	const decryptor = {
 		open: (c) => {
-			if (!key) { throw new Error(
-				`This decryptor cannot be used, as it had already been destroyed.`); }
-			return cryptor.formatWN.open(c, key);
+			if (!key) {
+				throw new Error(`This decryptor cannot be used, as it had already been destroyed.`);
+			}
+			return cryptor.formatWN.open(c, key, workLabel);
 		},
 		destroy: () => {
 			if (!key) { return; }
@@ -156,19 +160,25 @@ export function makeDecryptor(cryptor: AsyncSBoxCryptor, key: Uint8Array):
 	return Object.freeze(decryptor);
 }
 
-export function makeDecryptorForKeyPair(cryptor: AsyncSBoxCryptor,
-		pkey: Uint8Array, skey: Uint8Array): Decryptor {
+export function makeDecryptorForKeyPair(
+	cryptor: AsyncSBoxCryptor, workLabel: number,
+	pkey: Uint8Array, skey: Uint8Array
+): Decryptor {
 	const dhSharedKey = box.calc_dhshared_key(pkey, skey);
-	const decryptor = makeDecryptor(cryptor, dhSharedKey);
+	const decryptor = makeDecryptor(cryptor, workLabel, dhSharedKey);
 	dhSharedKey.fill(0);
 	return decryptor;
 }
 
-export function makeEncryptorWithKeyPair(cryptor: AsyncSBoxCryptor,
-		pkey: Uint8Array, skey: Uint8Array,
-		nextNonce: Uint8Array, delta?: number): Encryptor {
+export function makeEncryptorWithKeyPair(
+	cryptor: AsyncSBoxCryptor, workLabel: number,
+	pkey: Uint8Array, skey: Uint8Array,
+	nextNonce: Uint8Array, delta?: number
+): Encryptor {
 	const dhSharedKey = box.calc_dhshared_key(pkey, skey);
-	const decryptor = makeEncryptor(cryptor, dhSharedKey, nextNonce, delta);
+	const decryptor = makeEncryptor(
+		cryptor, workLabel, dhSharedKey, nextNonce, delta
+	);
 	dhSharedKey.fill(0);
 	return decryptor;
 }

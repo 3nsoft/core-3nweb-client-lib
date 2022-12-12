@@ -16,8 +16,7 @@
 
 import { MailRecipient } from '../../../lib-client/asmail/recipient';
 import { Observable, MonoTypeOperatorFunction } from 'rxjs';
-import { msgRecievedCompletely }
-	from '../../../lib-common/service-api/asmail/retrieval';
+import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { ServerEvents } from '../../../lib-client/server-events';
 import { mergeMap, filter, share } from 'rxjs/operators';
@@ -29,6 +28,7 @@ type Events = msgRecievedCompletely.Event;
 type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
+
 
 /**
  * Instance of this class handles event subscription from UI side. It observes
@@ -49,11 +49,15 @@ export class InboxEvents {
 
 		this.newMsg$ = serverEvents.observe(msgRecievedCompletely.EVENT_NAME)
 		.pipe(
-			mergeMap(ev => getMsg(ev.msgId)
-				.catch(async (err) => {
+			mergeMap(async ev => {
+				try {
+					const msg = await getMsg(ev.msgId)
+					return msg;
+				} catch (err) {
 					// TODO should more error handling logic be added here?
 					await logError(err, `Cannot get message ${ev.msgId}`);
-				})),
+				}
+			}),
 			filter(msg => !!msg) as MonoTypeOperatorFunction<IncomingMessage>,
 			share()
 		);
@@ -76,5 +80,6 @@ export class InboxEvents {
 }
 Object.freeze(InboxEvents.prototype);
 Object.freeze(InboxEvents);
+
 
 Object.freeze(exports);

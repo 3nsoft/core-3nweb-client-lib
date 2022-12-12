@@ -181,9 +181,11 @@ export interface ResourcesForSending {
 		 * @param introPKeyFromServer is an optional recipient's key from a mail
 		 * server.
 		 */
-		generateKeysToSend: (address: string, introPKeyFromServer?: JsonKey) =>
-			Promise<{ encryptor: Encryptor; currentPair: ASMailKeyPair;
-				msgCount: number; }>;
+		generateKeysToSend: (
+			address: string, introPKeyFromServer?: JsonKey
+		) => Promise<{
+			encryptor: Encryptor; currentPair: ASMailKeyPair; msgCount: number;
+		}>;
 
 		/**
 		 * This function returns sending parameters that should be used now to

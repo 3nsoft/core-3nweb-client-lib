@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8 } from './protobuf-msg';
+import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8, methodPathFor } from './protobuf-msg';
 import { ProtoType } from '../lib-client/protobuf-type';
 import { asmail as pb } from '../protos/asmail.proto';
 import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
@@ -61,9 +61,8 @@ export function exposeASMailCAP(
 export function makeASMailCaller(
 	caller: Caller, objPath: string[]
 ): ASMailService {
-	const delivPath = objPath.concat('delivery');
-	const inboxPath = objPath.concat('inbox');
-	const connectPath = objPath.concat('connect');
+	const delivPath = methodPathFor<ASMailService>(objPath, 'delivery');
+	const inboxPath = methodPathFor<ASMailService>(objPath, 'inbox');
 	return {
 		getUserId: getUserId.makeCaller(caller, objPath),
 		delivery: {
@@ -99,7 +98,7 @@ namespace getUserId {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ASMailService['getUserId'] {
-		const path = objPath.concat('getUserId');
+		const path = methodPathFor<ASMailService>(objPath, 'getUserId');
 		return () => caller.startPromiseCall(path, undefined)
 		.then(buf => {
 			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
@@ -143,7 +142,7 @@ namespace inboxListMsgs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Inbox['listMsgs'] {
-		const path = objPath.concat('listMsgs');
+		const path = methodPathFor<Inbox>(objPath, 'listMsgs');
 		return fromTS => {
 			const req: Request = (fromTS ? { fromTS: toVal(fromTS) } : {});
 			return caller
@@ -175,7 +174,7 @@ namespace removeMsg {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Inbox['removeMsg'] {
-		const path = objPath.concat('removeMsg');
+		const path = methodPathFor<Inbox>(objPath, 'removeMsg');
 		return async msgId => {
 			await caller.startPromiseCall(path, requestType.pack({ msgId }));
 		};
@@ -207,7 +206,7 @@ namespace getMsg {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Inbox['getMsg'] {
-		const path = objPath.concat('getMsg');
+		const path = methodPathFor<Inbox>(objPath, 'getMsg');
 		return msgId => caller
 		.startPromiseCall(path, requestType.pack({ msgId }))
 		.then(buf => unpackIncomingMessage(buf, caller));
@@ -302,7 +301,7 @@ namespace inboxSubscribe {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Inbox['subscribe'] {
-		const path = objPath.concat('subscribe');
+		const path = methodPathFor<Inbox>(objPath, 'subscribe');
 		return (event, obs) => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
@@ -340,7 +339,7 @@ namespace preFlight {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['preFlight'] {
-		const path = objPath.concat('preFlight');
+		const path = methodPathFor<Delivery>(objPath, 'preFlight');
 		return toAddress => caller
 		.startPromiseCall(path, requestType.pack({ toAddress }))
 		.then(unpackInt);
@@ -479,7 +478,7 @@ namespace addMsg {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['addMsg'] {
-		const path = objPath.concat('addMsg');
+		const path = methodPathFor<Delivery>(objPath, 'addMsg');
 		return async (recipients, msg, id, opts) => {
 			const req: Request = { id, msg: packMsg(msg, caller), recipients };
 			if (opts) {
@@ -517,7 +516,7 @@ namespace delivListMsgs {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['listMsgs'] {
-		const path = objPath.concat('listMsgs');
+		const path = methodPathFor<Delivery>(objPath, 'listMsgs');
 		return () => caller
 		.startPromiseCall(path, undefined)
 		.then(buf => {
@@ -617,7 +616,7 @@ namespace currentState {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['currentState'] {
-		const path = objPath.concat('currentState');
+		const path = methodPathFor<Delivery>(objPath, 'currentState');
 		return id => caller
 		.startPromiseCall(path, requestType.pack({ id }))
 		.then(buf => {
@@ -652,7 +651,7 @@ namespace rmMsg {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['rmMsg'] {
-		const path = objPath.concat('rmMsg');
+		const path = methodPathFor<Delivery>(objPath, 'rmMsg');
 		return (id, cancelSending) => caller
 		.startPromiseCall(path, requestType.pack({
 			id, cancelSending: toOptVal(cancelSending)
@@ -691,7 +690,7 @@ namespace observeAllDeliveries {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['observeAllDeliveries'] {
-		const path = objPath.concat('observeAllDeliveries');
+		const path = methodPathFor<Delivery>(objPath, 'observeAllDeliveries');
 		return obs => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(path, undefined, s);
@@ -736,7 +735,7 @@ namespace observeDelivery {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): Delivery['observeDelivery'] {
-		const path = objPath.concat('observeDelivery');
+		const path = methodPathFor<Delivery>(objPath, 'observeDelivery');
 		return (id, obs) => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(

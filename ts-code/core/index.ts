@@ -23,7 +23,7 @@ import { ASMail } from './asmail';
 import { errWithCause } from '../lib-common/exceptions/error';
 import { copy as jsonCopy } from '../lib-common/json-utils';
 import { makeCryptor } from '../lib-client/cryptor/cryptor';
-import { Subject, merge } from 'rxjs';
+import { Subject, merge, lastValueFrom } from 'rxjs';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { mergeMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
@@ -109,12 +109,13 @@ export class Core {
 
 		const initFromSignIn$ = signIn.existingUser$;
 
-		const coreInit = merge(initFromSignIn$, initFromSignUp$)
-		.pipe(
-			take(1),
-			mergeMap(idManager => this.initCore(idManager), 1)
-		)
-		.toPromise();
+		const coreInit = lastValueFrom(
+			merge(initFromSignIn$, initFromSignUp$)
+			.pipe(
+				take(1),
+				mergeMap(idManager => this.initCore(idManager), 1)
+			)
+		);
 
 		return { coreInit, capsForStartup };
 	};

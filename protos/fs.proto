@@ -527,10 +527,13 @@ message FolderDiff {
 // ==== WritableFSSyncAPI referable object ====
 
 // --- WritableFSSyncAPI.upload ---
-// Reply has only status and body is empty
+// Reply body is common.UInt64Value
 message FSSyncUploadRequestBody {
 	string path = 1;
 	file.OptionsToUploadLocal opts = 2;
+}
+message FSSyncUploadReplyBody {
+	common.UInt64Value uploaded_version = 1;
 }
 
 // --- WritableFSSyncAPI.adoptRemoteFolderItem ---

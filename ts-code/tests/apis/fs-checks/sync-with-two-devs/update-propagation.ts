@@ -15,8 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { utf8 } from '../../../../lib-common/buffer-utils';
 import { stringOfB64CharsSync, bytes as randomBytes } from '../../../../lib-common/random-node';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
+import { deepEqual } from '../../../libs-for-tests/json-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { observeFileForOneEvent, observeFolderForOneEvent, SpecItWithTwoDevsFSs } from '../test-utils';
 
@@ -187,6 +189,81 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(
 		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
 	).toBe('complete');
+
+};
+specs.its.push(it);
+
+it = {
+	expectation: 'file incrementally written and uploaded, then read on a second device'
+};
+it.func = async function({ dev1FS, dev2FS }) {
+	const file = 'incremental-file';
+	let fs1 = dev1FS();
+	let fs2 = dev2FS();
+
+	const COMMA_BYTE = utf8.pack(',');
+	const SQ_BRACKET_BYTE = utf8.pack(']');
+	const completeContent = [
+		{
+			type:"addition",
+			record: {
+				msgId:"F-vo1A4zInEBGq994-e3KvrE9a8QXLcr",
+				msgType:"mail",
+				deliveryTS:1664923830399,
+				key:"0Uz7wGW4P7hdik7fuStC+avi7iXk7AZ5B1KxJCxIOQk=",keyStatus:"published_intro",
+				mainObjHeaderOfs:72,
+				"removeAfter":0
+			}
+		},
+		{
+			type:"addition",
+			record: {
+				msgId:"JYXfEEcg3-iX7UDjG3BU0Jha9DYX_Jt-",
+				msgType:"mail",
+				deliveryTS:1664923830658,
+				key:"gjArW3Mr3ACnoFds/wKFZJm+pp9De1TlNhWIkpyd4Ow=",
+				keyStatus:"published_intro",
+				mainObjHeaderOfs:72,
+				removeAfter:0
+			}
+		}
+	];
+
+	// we do this file writing and uploading, cause this pattern hit an error,
+	// hence, we add this test with this seemingly out of the blue setup
+
+	await fs1.writeTxtFile(file, `[]`);
+	await fs1.v!.sync!.upload(file);
+	await fs1.v!.sync!.upload('');
+
+	let sink = await fs1.getByteSink(file, { truncate: false });
+	await sink.splice(1, 1);
+	let bytes = utf8.pack(JSON.stringify(completeContent[0]));
+	await sink.splice(1, 0, bytes);
+	await sink.splice(1+bytes.length, 0, SQ_BRACKET_BYTE);
+	await sink.done();
+	await fs1.v!.sync!.upload(file);
+
+	sink = await fs1.getByteSink(file, { truncate: false });
+	const len = await sink.getSize();
+	await sink.splice(len-1, 1, COMMA_BYTE);
+	bytes = utf8.pack(JSON.stringify(completeContent[1]));
+	await sink.splice(len, 0, bytes);
+	await sink.splice(len+bytes.length, 0, SQ_BRACKET_BYTE);
+	await sink.done();
+
+	expect(deepEqual(completeContent, await fs1.readJSONFile(file))).toBeTrue();
+
+	await fs1.v!.sync!.upload(file);
+
+	// and on the second device
+
+	await fs2.v!.sync!.updateStatusInfo('');
+	expect((await fs2.v!.sync!.status('')).state).toBe('behind');
+	await fs2.v!.sync!.adoptRemote('');
+
+	expect((await fs2.v!.sync!.status(file)).state).toBe('synced');
+	expect(deepEqual(completeContent, await fs2.readJSONFile(file))).toBeTrue();
 
 };
 specs.its.push(it);

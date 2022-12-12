@@ -47,12 +47,21 @@ message DoneRequestBody {
 
 // ==== FileByteSource referable object ====
 
-// --- FileByteSource.read ---
-message ReadRequestBody {
-	common.UInt64Value len = 1;
-}
 message ReadReplyBody {
 	common.BytesValue bytes = 1;
+}
+
+// --- FileByteSource.readNext ---
+// Reply body is ReadReplyBody
+message ReadNextRequestBody {
+	common.UInt64Value len = 1;
+}
+
+// --- FileByteSource.readAt ---
+// Reply body is ReadReplyBody
+message ReadAtRequestBody {
+	uint64 pos = 1;
+	common.UInt64Value len = 2;
 }
 
 // --- FileByteSource.getSize ---

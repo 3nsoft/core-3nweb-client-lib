@@ -25,6 +25,7 @@ import { GC } from './obj-files-gc';
 import { ObjStatus } from './obj-status';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
+import { lastValueFrom } from 'rxjs';
 
 
 export class ObjFiles {
@@ -165,9 +166,10 @@ export class LocalObj {
 		const fPath = this.path(version);
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, undefined,
-			this.objSegsGetterFromDisk);
+			this.objSegsGetterFromDisk
+		);
 		try {
-			await write$.toPromise();
+			await lastValueFrom(write$);
 		} catch (err) {
 			if (this.verObjs.get(version) === obj) {
 				this.verObjs.delete(version);

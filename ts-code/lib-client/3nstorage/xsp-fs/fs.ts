@@ -914,11 +914,13 @@ class S implements WritableFSSyncAPI {
 		Object.freeze(this);
 	}
 
-	async upload(path: string, opts?: OptionsToUploadLocal): Promise<void> {
+	async upload(
+		path: string, opts?: OptionsToUploadLocal
+	): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.get(path);
 		try {
-			await node.upload(opts);
+			return await node.upload(opts);
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		};

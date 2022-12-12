@@ -30,18 +30,20 @@ type FileByteSink = web3n.files.FileByteSink;
  * @param bufSize is an optional parameter for buffer, used for byte transfer.
  * Default value is 64K.
  */
-export async function pipe(src: FileByteSource, sink: FileByteSink,
-		progressCB: ((bytesPiped: number) => void)|undefined = undefined,
-		closeSink = true, bufSize = 64*1024): Promise<number> {
+export async function pipe(
+	src: FileByteSource, sink: FileByteSink,
+	progressCB?: ((bytesPiped: number) => void),
+	closeSink = true, bufSize = 64*1024
+): Promise<number> {
 	const contSink = makeContinuousSink(sink);
 	try {
-		let buf = await src.read(bufSize);
+		let buf = await src.readNext(bufSize);
 		let bytesPiped = 0;
 		while (buf) {
 			await contSink(buf);
 			bytesPiped += buf.length;
 			if (progressCB) { progressCB(bytesPiped); }
-			buf = await src.read(bufSize);
+			buf = await src.readNext(bufSize);
 		}
 		if (closeSink) {
 			await contSink(null);

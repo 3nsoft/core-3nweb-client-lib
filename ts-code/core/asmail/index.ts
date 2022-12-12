@@ -78,7 +78,9 @@ export class ASMail {
 			]);
 
 			await Promise.all([
-				this.setupInbox(syncedFS, getSigner, getStorages, makeResolver),
+				this.setupInbox(
+					syncedFS, getSigner, getStorages, makeResolver
+				),
 				this.setupDelivery(localFS, getSigner, makeResolver)
 			]);
 
@@ -147,23 +149,27 @@ export class ASMail {
 		getStorages: StorageGetter, makeResolver: ServiceLocatorMaker
 	): Promise<void> {
 		const cachePath = this.inboxPathForUser(this.address);
-		const inboxFS = await getOrMakeAndUploadFolderIn(
-			syncedFS, INBOX_DATA_FOLDER);
-		this.inbox = await InboxOnServer.makeAndStart(cachePath, inboxFS, {
-			address: this.address,
-			cryptor: this.cryptor,
-			getSigner,
-			getStorages,
-			asmailResolver: makeResolver('asmail'),
-			correspondents: {
-				msgDecryptor: this.keyring.decrypt,
-				markOwnSendingParamsAsUsed: this.sendingParams.thisSide.setAsUsed,
-				saveParamsForSendingTo: this.sendingParams.otherSides.set,
-				midResolver: makeResolver('mailerid')
-			},
-			makeNet: this.makeNet,
-			logError: this.logger.logError
-		});
+		const inboxSyncedFS = await getOrMakeAndUploadFolderIn(
+			syncedFS, INBOX_DATA_FOLDER
+		);
+		this.inbox = await InboxOnServer.makeAndStart(
+			cachePath, inboxSyncedFS,
+			{
+				address: this.address,
+				cryptor: this.cryptor,
+				getSigner,
+				getStorages,
+				asmailResolver: makeResolver('asmail'),
+				correspondents: {
+					msgDecryptor: this.keyring.decrypt,
+					markOwnSendingParamsAsUsed: this.sendingParams.thisSide.setAsUsed,
+					saveParamsForSendingTo: this.sendingParams.otherSides.set,
+					midResolver: makeResolver('mailerid')
+				},
+				makeNet: this.makeNet,
+				logError: this.logger.logError
+			}
+		);
 	}
 
 	makeASMailCAP(): Service {
@@ -176,6 +182,7 @@ export class ASMail {
 	};
 
 	async close(): Promise<void> {
+		await this.inbox.close();
 		await this.keyring.close();
 	}
 
