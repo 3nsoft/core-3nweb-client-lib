@@ -23,5 +23,8 @@ export { FileMsg, makeFileCaller, exposeFileService } from "./ipc-via-protobuf/f
 export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
 export { makeLogCaller, exposeLogger } from "./ipc-via-protobuf/log-cap";
 
+// Reexport of rxjs to use with ipc implementation.
+export * as rxjs from 'rxjs';
+
 
 Object.freeze(exports);
