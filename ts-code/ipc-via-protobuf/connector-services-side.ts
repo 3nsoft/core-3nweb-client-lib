@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription } from "rxjs";
+import { Unsubscribable } from "rxjs";
 import { ObjectReference, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { stringOfB64CharsSync } from '../lib-common/random-node';
 import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ExposedServices } from "./connector";
@@ -23,7 +23,7 @@ import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, Expo
 
 interface FnCallProc {
 	prom?: Promise<void>;
-	sub?: { sub: Subscription; onCancel?: () => void; };
+	sub?: { sub: Unsubscribable; onCancel?: () => void; };
 }
 
 

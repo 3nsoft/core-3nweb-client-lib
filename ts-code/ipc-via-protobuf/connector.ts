@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observable, Observer, Subscription, Subject } from "rxjs";
+import { Observer, Subject, Subscribable, Unsubscribable } from "rxjs";
 import { ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { ipc as pb } from '../protos/ipc.proto';
@@ -81,13 +81,13 @@ function makeClientsSide(
 
 export class ObjectsConnector {
 
-	private messagingProc: Subscription|undefined = undefined;
+	private messagingProc: Unsubscribable|undefined = undefined;
 	private readonly services: ServicesSide|undefined;
 	private readonly clients: ClientsSide|undefined;
 
 	constructor(
 		private msgSink: Observer<Envelope>,
-		msgSrc: Observable<Envelope>,
+		msgSrc: Subscribable<Envelope>,
 		sides: 'clients'|'services'|'clients-and-services',
 		listObj?: Caller['listObj'],
 		listObjAsync?: Caller['listObjAsync']
@@ -227,7 +227,7 @@ export const msgProtoType = ProtoType.for<Envelope>(pb.Envelope);
 
 export type ExposedFn = (reqBody: EnvelopeBody) => ({
 	promise?: Promise<EnvelopeBody>;
-	obs?: Observable<EnvelopeBody>;
+	obs?: Subscribable<EnvelopeBody>;
 	onCancel?: () => void;
 }|void);
 
