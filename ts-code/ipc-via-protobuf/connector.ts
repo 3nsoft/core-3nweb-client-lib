@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observer, Subject, Subscribable, Unsubscribable } from "rxjs";
+import { Observer, SubjectLike, Subscribable, Unsubscribable } from "rxjs";
 import { ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valOfOpt } from "./protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { ipc as pb } from '../protos/ipc.proto';
@@ -44,7 +44,7 @@ export interface ServicesSide {
 export interface Caller {
 	startPromiseCall(path: string[], req: EnvelopeBody): Promise<EnvelopeBody>;
 	startObservableCall(
-		path: string[], req: EnvelopeBody, obs: Subject<EnvelopeBody>
+		path: string[], req: EnvelopeBody, obs: SubjectLike<EnvelopeBody>
 	): () => void;
 	registerClientDrop(o: any, srvRef: ObjectReference<any>): void;
 	srvRefOf(clientObj: any): ObjectReference<any>;
