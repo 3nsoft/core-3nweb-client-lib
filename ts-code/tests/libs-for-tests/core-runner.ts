@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core, makeNetClient, MakeNet } from "../../lib-index";
+import { Core, makeNetClient } from "../../lib-index";
 import { makeInWorkerWasmCryptor } from "../../cryptors";
 import { join, resolve } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
@@ -27,11 +27,6 @@ import { assert } from "../../lib-common/assert";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
-import { RequestOpts, NetClient } from "../../lib-client/request-utils";
-import { makeConnectionException } from "../../lib-common/exceptions/http";
-import { Subject } from "rxjs";
-import { share } from "rxjs/operators";
-import { toRxObserver } from "../../lib-common/utils-for-observables";
 
 export const testApp = {
 	appDomain: 'test.3nweb.computer',

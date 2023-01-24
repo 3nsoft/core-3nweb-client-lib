@@ -85,7 +85,7 @@ export class NodesContainer {
 		return { nodePromise: this.promises.get(objId) as Promise<T> };
 	}
 
-	setPromise(objId: string, promise: Promise<Node>): void {
+	setPromise<T extends Node>(objId: string, promise: Promise<T>): Promise<T> {
 		if (this.nodes.get(objId)) { throw new Error(
 			`Cannot set promise for an already set node, id ${objId}.`); }
 		const envelopedPromise = (async () => {
@@ -99,6 +99,7 @@ export class NodesContainer {
 		})();
 		this.promises.set(objId, envelopedPromise);
 		envelopedPromise.catch(noop);
+		return envelopedPromise;
 	}
 
 	delete(node: Node): boolean {

@@ -205,7 +205,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		objId: string|null, src: ObjSource, key: Uint8Array
 	): Promise<FolderNode> {
 		const rf = await FolderNode.readNodeFromObjBytes(
-			storage, name, objId, src, key);
+			storage, name, objId, src, key
+		);
 		rf.storage.nodes.set(rf);
 		return rf;
 	}
@@ -232,22 +233,40 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	static async rootFromLinkParams(
 		storage: Storage, params: FolderLinkParams
 	): Promise<FolderNode> {
-		const existingNode = storage.nodes.get(params.objId);
-
+		let {
+			node: existingNode, nodePromise
+		} = storage.nodes.getNodeOrPromise(params.objId);
+		if (nodePromise) {
+			try {
+				existingNode = await nodePromise;
+			} catch (err) {
+				// ignore errors from other invokation
+				return FolderNode.rootFromLinkParams(storage, params);
+			}
+		}
 		if (existingNode) {
-			if (existingNode.type !== 'folder') { throw new Error(
-				`Existing object ${params.objId} type is ${existingNode.type}, while link parameters ask for folder.`); }
+			if (existingNode.type !== 'folder') {
+				throw new Error(`Existing object ${params.objId} type is ${existingNode.type}, while link parameters ask for folder.`);
+			}
 			// Note that, although we return existing folder node, we should check
 			// if link parameters contained correct key. Only holder of a correct
 			// key may use existing object.
-			(existingNode as FolderNode).crypto.compareKey(params.fKey);
+			if (!(existingNode as FolderNode).crypto.compareKey(params.fKey)) {
+				throw new Error(`Link parameters don't contain correct key to instantiate target folder.`);
+			}
 			return (existingNode as FolderNode);
 		}
 
-		const src = await storage.getObjSrc(params.objId);
-		const key = base64.open(params.fKey);
-		return FolderNode.rootFromObjBytes(
-			storage, params.folderName, params.objId, src, key);
+		return await storage.nodes.setPromise(
+			params.objId,
+			storage.getObjSrc(params.objId)
+			.then(async src => {
+				const key = base64.open(params.fKey);
+				return FolderNode.rootFromObjBytes(
+					storage, params.folderName, params.objId, src, key
+				);
+			})
+		);
 	}
 
 	static rootFromJSON(
@@ -406,7 +425,9 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		if (node) { return node; }
 		if (nodePromise) { return nodePromise; }
 		const deferred = defer<T>();
-		this.storage.nodes.setPromise(info.objId, deferred.promise);
+		const nodeSet = this.storage.nodes.setPromise(
+			info.objId, deferred.promise
+		);
 		try {
 			let node: Node;
 			if (info.isFile) {
@@ -426,7 +447,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				throw new Error(`Unknown type of fs node`);
 			}
 			deferred.resolve(node as T);
-			return deferred.promise;
+			return nodeSet;
 		} catch (exc) {
 			if (exc.objNotFound) {
 				await this.fixMissingChildAndThrow(exc, info);
@@ -434,7 +455,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			deferred.reject(errWithCause(
 				exc, `Failed to instantiate fs node '${this.name}/${info.name}'`
 			));
-			return deferred.promise;
+			return nodeSet;
 		}
 	}
 
