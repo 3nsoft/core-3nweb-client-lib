@@ -73,7 +73,9 @@ export class NodesContainer {
 
 	set(node: Node): void {
 		const existing = this.nodes.get(node.objId);
-		if (existing) { throw new Error(`Cannot add second node for the same id ${node.objId}`); }
+		if (existing && (existing !== node)) {
+			throw new Error(`Cannot add second node for the same id ${node.objId}`);
+		}
 		this.nodes.set(node.objId, node);
 	}
 
