@@ -72,6 +72,7 @@ export class ServerEvents<N extends string, T> {
 			return () => {
 				if (detach) {
 					detach();
+					detach = undefined;
 				} else {
 					obs = undefined;
 				}

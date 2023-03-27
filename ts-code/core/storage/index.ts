@@ -527,7 +527,7 @@ export class PerAppStorage {
 		}
 		return appFS;
 	}
-	
+
 	private async getAppLocalFS(appName?: string): Promise<WritableFS> {
 		if (!appName) {
 			appName = this.revAppDomain;

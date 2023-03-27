@@ -80,7 +80,8 @@ export class Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
 		const core = new Core(
-			makeNet, makeResolver, makeCryptor, dirs, logger, conf.signUpUrl);
+			makeNet, makeResolver, makeCryptor, dirs, logger, conf.signUpUrl
+		);
 		return core;
 	}
 

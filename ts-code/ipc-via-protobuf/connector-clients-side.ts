@@ -230,6 +230,9 @@ export class ClientsSideImpl implements ClientsSide {
 		this.weakRefs.add(clientRef);
 		clientRef.addCallback(this.makeClientDropCB(clientRef, srvRef));
 		this.srvRefs.set(o, srvRef);
+		if (global['runningInIsolatedContext']) {
+			o['--srv-ref'] = srvRef;
+		}
 	}
 
 	private makeClientDropCB(
@@ -247,11 +250,20 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	srvRefOf(clientObj: any): ObjectReference<any> {
-		const srvRef = this.srvRefs.get(clientObj);
-		if (srvRef) {
-			return srvRef;
+		if (global['runningInIsolatedContext']) {
+			const srvRef = clientObj['--srv-ref'];
+			if (srvRef) {
+				return srvRef;
+			} else {
+				throw new Error(`Given object has never been registered as one referencing respective object in the core`);
+			}
 		} else {
-			throw makeIPCException({ 'objectNotFound': true });
+			const srvRef = this.srvRefs.get(clientObj);
+			if (srvRef) {
+				return srvRef;
+			} else {
+				throw makeIPCException({ 'objectNotFound': true });
+			}
 		}
 	}
 

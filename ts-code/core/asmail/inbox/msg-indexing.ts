@@ -80,11 +80,15 @@ WHERE ${column.msgId}=$${column.msgId}`;
 function listMsgInfos(db: Database, fromTS: number|undefined): MsgInfo[] {
 	let result: QueryExecResult[];
 	if (fromTS) {
-		result = db.exec(`SELECT ${
-			column.msgId}, ${column.msgType}, ${column.deliveryTS
-		} FROM ${indexTab
-		} WHERE ${column.deliveryTS}>$fromTS`,
-		{ '$fromTS': fromTS });
+		result = db.exec(
+			`SELECT ${
+				column.msgId}, ${column.msgType}, ${column.deliveryTS
+			} FROM ${indexTab
+			} WHERE ${column.deliveryTS}>$fromTS`,
+			{
+				'$fromTS': fromTS
+			}
+		);
 	} else {
 		result = db.exec(`SELECT ${
 			column.msgId}, ${column.msgType}, ${column.deliveryTS
@@ -266,8 +270,8 @@ class RecordsInSQL {
 		msgKey: Uint8Array; msgKeyRole: MsgKeyRole; mainObjHeaderOfs: number;
 	}|undefined> {
 		const db = await this.getIndexWith(deliveryTS);
-		const result = db.db.exec(`SELECT
-			${column.key}, ${column.keyStatus}, ${column.mainObjHeaderOfs}
+		const result = db.db.exec(
+			`SELECT ${column.key}, ${column.keyStatus}, ${column.mainObjHeaderOfs}
 			FROM ${indexTab}
 			WHERE ${column.msgId}=$${column.msgId}`,
 			{ [`$${column.msgId}`]: msgId }
