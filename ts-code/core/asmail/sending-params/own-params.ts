@@ -133,7 +133,7 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 		};
 		p.suggested!.timestamp = Date.now();
 		this.params.set(p.address, p);
-		await this.persist();
+		await this.changesProc.startOrChain(() => this.persist());
 
 		return p.suggested;
 	};

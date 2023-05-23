@@ -22,6 +22,7 @@ declare namespace web3n.files {
 		type: 'file';
 		code: string|undefined;
 		path: string;
+		fsEtityType?: 'file' | 'link' | 'folder';
 	}
 
 	interface FileExceptionFlag {

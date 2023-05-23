@@ -42,6 +42,9 @@ interface MsgRecord extends MsgInfo {
 	removeAfter?: number;
 }
 
+// XXX Use TableColumnsAndParams from lib-with-sql.
+//     And should we update here sqlite from that project?
+
 const indexTab = 'inbox_index';
 const column: Record<keyof MsgRecord, string> = {
 	msgId: 'msg_id',

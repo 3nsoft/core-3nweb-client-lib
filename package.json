@@ -1,13 +1,14 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.27.11",
+  "version": "0.28.0",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
   "scripts": {
     "build-only-ts": "tsc -p ts-code && bash -c 'cp -rf ts-code/lib-sqlite-on-3nstorage/sqljs.* build/lib-sqlite-on-3nstorage/' ",
     "build": "bash packing/protos-to-node-module.sh && npm run build-only-ts && bash packing/copy-api.sh && bash packing/build-wasm-cryptor.sh",
-    "test": "node build/tests/jasmine.js"
+    "test": "node build/tests/jasmine.js",
+    "postinstall": "node -e \"try{require('./postinstall')}catch(e){}\""
   },
   "repository": {
     "type": "git",

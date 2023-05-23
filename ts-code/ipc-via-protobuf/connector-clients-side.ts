@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,9 +18,18 @@
 import { Subject } from "rxjs";
 import { ObjectReference, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { Deferred, defer } from "../lib-common/processes/deferred";
-import { WeakReference, makeWeakRefFor } from "../lib-common/weakref";
 import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller } from "./connector";
 
+type WeakRef<T> = {
+	new(o: T);
+	deref(): T|undefined;
+};
+declare var WeakRef: WeakRef<any>;
+type FinalizationRegistry = {
+	new(cb: (ref: ObjectReference<any>) => void);
+	register(o: any, ref: ObjectReference<any>, unregVal: any): void;
+};
+declare var FinalizationRegistry: FinalizationRegistry;
 
 interface FnCall {
 	deferred?: Deferred<EnvelopeBody>;
@@ -32,14 +41,15 @@ interface FnCall {
 const MAX_DUPLICATE_ATTEMPTS = 100;
 
 
-// XXX can have an optimized use of WeakRef and FinalizationRegistry, when
-// these are available.
 export class ClientsSideImpl implements ClientsSide {
 
 	private readonly fnCalls = new Map<number, FnCall>();
 	private fnCallCounter = 1;
-	private readonly weakRefs = new Set<WeakReference<any>>();
 	private readonly srvRefs = new WeakMap<any, ObjectReference<any>>();
+	private readonly weakSrvByRefs = new Map<string, WeakRef<any>>();
+	private readonly srvFinalRegistry = new FinalizationRegistry(
+		this.doOnClientObjDrop.bind(this)
+	);
 	private isStopped = false;
 
 	constructor(
@@ -65,10 +75,6 @@ export class ClientsSideImpl implements ClientsSide {
 			}
 		}
 		this.fnCalls.clear();
-		for (const clientRef of this.weakRefs.values()) {
-			clientRef.removeCallbacks();
-		}
-		this.weakRefs.clear();
 	}
 
 	private sendCallCancellation(fnCallNum: number): void {
@@ -171,7 +177,8 @@ export class ClientsSideImpl implements ClientsSide {
 			registerClientDrop: this.registerClientDrop.bind(this),
 			srvRefOf: this.srvRefOf.bind(this),
 			startObservableCall: this.startObservableCall.bind(this),
-			startPromiseCall: this.startPromiseCall.bind(this)
+			startPromiseCall: this.startPromiseCall.bind(this),
+			findCallingObjByRef: this.findCallingObjByRef.bind(this)
 		};
 		return callerWrap;
 	}
@@ -226,22 +233,14 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	registerClientDrop(o: any, srvRef: ObjectReference<any>): void {
-		const clientRef = makeWeakRefFor(o);
-		this.weakRefs.add(clientRef);
-		clientRef.addCallback(this.makeClientDropCB(clientRef, srvRef));
+		this.srvFinalRegistry.register(o, srvRef);
+		this.weakSrvByRefs.set(srvRef.path[0], new WeakRef(o));
 		this.srvRefs.set(o, srvRef);
-		if (global['runningInIsolatedContext']) {
-			o['--srv-ref'] = srvRef;
-		}
 	}
 
-	private makeClientDropCB(
-		clientRef: WeakReference<any>, srvRef: ObjectReference<any>
-	): () => void {
-		return () => {
-			this.weakRefs.delete(clientRef);
-			this.sendObjDropMsg(srvRef);
-		};
+	private doOnClientObjDrop(srvRef: ObjectReference<any>): void {
+		this.weakSrvByRefs.delete(srvRef.path[0]);
+		this.sendObjDropMsg(srvRef);
 	}
 
 	private sendObjDropMsg(srvRef: ObjectReference<any>): void {
@@ -250,20 +249,23 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	srvRefOf(clientObj: any): ObjectReference<any> {
-		if (global['runningInIsolatedContext']) {
-			const srvRef = clientObj['--srv-ref'];
-			if (srvRef) {
-				return srvRef;
-			} else {
-				throw new Error(`Given object has never been registered as one referencing respective object in the core`);
-			}
+		const srvRef = this.srvRefs.get(clientObj);
+		if (srvRef) {
+			return srvRef;
 		} else {
-			const srvRef = this.srvRefs.get(clientObj);
-			if (srvRef) {
-				return srvRef;
-			} else {
-				throw makeIPCException({ 'objectNotFound': true });
-			}
+			throw makeIPCException({ 'objectNotFound': true });
+		}
+	}
+
+	findCallingObjByRef<T>(ref: ObjectReference<any>): T|undefined {
+		const weakRef = this.weakSrvByRefs.get(ref.path[0]);
+		if (!weakRef) { return; }
+		const o = weakRef.deref() as T;
+		if (o) {
+			return o;
+		} else {
+			this.weakSrvByRefs.delete(ref.path[0]);
+			return;
 		}
 	}
 

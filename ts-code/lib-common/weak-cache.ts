@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019, 2021 3NSoft Inc.
+ Copyright (C) 2016 - 2019, 2021, 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,21 +15,32 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { WeakReference, makeWeakRefFor } from './weakref';
 import { TimedCache } from './timed-cache';
 
+type WeakRef<T> = {
+	new(o: T);
+	deref(): T|undefined;
+};
+declare var WeakRef: WeakRef<any>;
+type FinalizationRegistry = {
+	new(cb: (key: any) => void);
+	register<TKey, TVal>(
+		o: TVal, finalInfo: FinalInfo<TKey, TVal>, rRm: TVal
+	): void;
+};
+declare var FinalizationRegistry: FinalizationRegistry;
 
-// XXX WeakReference shields choice between inbuilt and napi implementations of
-// weaks. But inbuilt uses FinalizationRegistry, which is better used in cache
-// directly. Take a look at following code:
-// let registry = new FinalizationRegistry(key => { ... removes WeakRef });
-// registry.register(val, key, val);
-// ... on delete do: registry.unregister(val);
-// Note that our WeakReference wrap has its own FinalizationRegistry, making it
-// heavier.
+interface FinalInfo<TKey, TVal> {
+	key: TKey;
+	wRef: WeakRef<TVal>;
+}
+
 export class WeakCache<TKey, TVal> {
 
-	private readonly wRefs = new Map<TKey, WeakReference<TVal>>();
+	private readonly wRefs = new Map<TKey, WeakRef<TVal>>();
+	private readonly valFinalRegistry = new FinalizationRegistry(
+		this.finalize.bind(this)
+	);
 
 	constructor() {
 		Object.freeze(this);
@@ -38,7 +49,7 @@ export class WeakCache<TKey, TVal> {
 	get(key: TKey): TVal|undefined {
 		const wRef = this.wRefs.get(key);
 		if (wRef) {
-			const v = wRef.get();
+			const v = wRef.deref();
 			if (v === undefined) {
 				this.wRefs.delete(key);
 			} else {
@@ -53,16 +64,14 @@ export class WeakCache<TKey, TVal> {
 	}
 
 	set(key: TKey, val: TVal): void {
-		const wRef = makeWeakRefFor(val);
-		wRef.addCallback(this.makeCB(key, wRef));
+		const wRef = new WeakRef(val);
+		this.valFinalRegistry.register(val, { key, wRef });
 		this.wRefs.set(key, wRef);
 	}
 
-	private makeCB(key: TKey, wRef: WeakReference<TVal>): Function {
-		return () => {
-			if (wRef === this.wRefs.get(key)) {
-				this.wRefs.delete(key);
-			}
+	private finalize({ key, wRef }: FinalInfo<TKey, TVal>): void {
+		if (wRef === this.wRefs.get(key)) {
+			this.wRefs.delete(key);
 		}
 	}
 

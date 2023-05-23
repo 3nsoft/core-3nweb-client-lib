@@ -25,7 +25,7 @@ import { assert } from '../../../lib-common/assert';
 import { DiffInfo, ObjStatus as RemoteObjStatus } from '../../../lib-common/service-api/3nstorage/owner';
 import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
 import { UploadStatusRecorder } from './upsyncer';
-import { makeFileException } from '../../../lib-common/exceptions/file';
+import { makeRuntimeException } from '../../../lib-common/exceptions/runtime';
 
 type FileException = web3n.files.FileException;
 type SyncStatus = web3n.files.SyncStatus;
@@ -309,8 +309,13 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 			if (upload.type === 'removal') {
 				return;
 			} else {
-				throw makeFileException(
-					'concurrentUpdate', 'obj-status', `Upload is in progress`);
+			throw makeRuntimeException<FileException>(
+				'file', {
+					path: join(this.objFolder, STATUS_FILE_NAME),
+					fsEtityType: 'file', message: `Upload is in progress`
+				},
+				{ concurrentUpdate: true }
+			);
 			}
 		}
 		if (!remote.isArchived && remote.current) {

@@ -66,6 +66,7 @@ it.func = async function(s) {
 	expect(lastInfo.allDone).toBe(true);
 	throwDeliveryErrorFrom(lastInfo);
 	await u1_w3n.mail!.delivery.rmMsg(idForSending);
+	await u1_w3n.mail!.delivery.rmMsg(idForSending);	// noop after first rm
 	expect(await u1_w3n.mail!.delivery.currentState(idForSending)).toBeFalsy();
 	const recInfo = lastInfo!.recipients[recipient];
 	expect(typeof recInfo.bytesSent).toBe('number');
@@ -89,6 +90,8 @@ it.func = async function(s) {
 	expect(inMsg.jsonBody).toBeTruthy();
 	expect((inMsg.jsonBody as typeof jsonBody).field1).toBe(jsonBody.field1);
 	expect((inMsg.jsonBody as typeof jsonBody).field2).toBe(jsonBody.field2);
+	await u2_w3n.mail!.inbox.removeMsg(msgId);
+	await u2_w3n.mail!.inbox.removeMsg(msgId);	// second call is a noop
 
 };
 specs.its.push(it);

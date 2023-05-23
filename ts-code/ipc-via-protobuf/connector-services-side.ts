@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,7 @@
 import { Unsubscribable } from "rxjs";
 import { ObjectReference, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { stringOfB64CharsSync } from '../lib-common/random-node';
-import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ExposedServices } from "./connector";
+import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ExposedServices, TransferableObj } from "./connector";
 
 
 interface FnCallProc {
@@ -157,7 +157,11 @@ export class ServicesSideImpl implements ServicesSide {
 			listObj: path => {
 				const obj = this.exposedObjs.find(path);
 				return (obj ? Object.keys(obj) : null);
-			}
+			},
+			getObjForTransfer: this.exposedObjs.getObjForTransfer.bind(
+				this.exposedObjs),
+			findRefIfAlreadyExposed: this.exposedObjs.findRefIfAlreadyExposed.bind(
+				this.exposedObjs)
 		};
 		return expSrv;
 	}
@@ -172,17 +176,23 @@ export class ExposedObjs {
 	private readonly objs = new Map<string, {
 		exp: ExposedFn|ExposedObj<any>;
 		original: any;
+		objType: string;
 	}>();
+	private readonly objToRefs = new Map<any, ObjectReference<string>>();
 
-	exposeDroppableService<T>(
+	exposeDroppableService<T extends string>(
 		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
 	): ObjectReference<T> {
 		let id: string;
 		do {
 			id = stringOfB64CharsSync(20);
 		} while (this.objs.has(id));
-		this.objs.set(id, { exp, original });
-		return { objType, path: [ id ] };
+		const ref: ObjectReference<T> = {
+			objType, path: [ id ]
+		};
+		this.objs.set(id, { exp, original, objType });
+		this.objToRefs.set(original, ref);
+		return ref;
 	}
 
 	getOriginalObj<T>(ref: ObjectReference<any>): T {
@@ -194,16 +204,39 @@ export class ExposedObjs {
 		}
 	}
 
+	getObjForTransfer<T extends string>(
+		ref: ObjectReference<T>
+	): TransferableObj<T> {
+		const o = this.objs.get(ref.path[0]);
+		if (!o) {
+			throw makeIPCException({ 'objectNotFound': true });
+		} else if (ref.objType !== o.objType) {
+			throw makeIPCException({ 'invalidReference': true });
+		} else {
+			return { o: o.original, type: o.objType as T };
+		}
+	}
+
+	findRefIfAlreadyExposed(o: any): ObjectReference<any>|undefined {
+		return this.objToRefs.get(o);
+	}
+
 	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void {
 		if (this.objs.has(W3N_NAME)) {
 			throw new Error(`${W3N_NAME} object has already been added`);
 		}
-		this.objs.set(W3N_NAME, { exp, original: undefined });
+		this.objs.set(W3N_NAME, {
+			exp, original: undefined, objType: 'non-transferable'
+		});
 	}
 
 	drop(name: string): void {
 		if (name !== W3N_NAME) {
-			this.objs.delete(name);
+			const o = this.objs.get(name);
+			if (o) {
+				this.objs.delete(name);
+				this.objToRefs.delete(o);
+			}
 		}
 	}
 
@@ -230,6 +263,7 @@ export class ExposedObjs {
 
 	dropAll(): void {
 		this.objs.clear();
+		this.objToRefs.clear();
 	}
 
 }

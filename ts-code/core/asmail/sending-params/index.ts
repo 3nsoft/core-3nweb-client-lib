@@ -30,6 +30,7 @@ type ReceptionResources = ResourcesForReceiving['correspondents'];
 const PARAMS_FROM_OTHERS_FILE = 'params-from-others.json';
 const OWN_PARAMS_FILE = 'own-params.json';
 
+
 export class SendingParamsHolder {
 
 	private paramsFromOthers: ParamsFromOthers;
@@ -78,5 +79,6 @@ export class SendingParamsHolder {
 }
 Object.freeze(SendingParamsHolder.prototype);
 Object.freeze(SendingParamsHolder);
+
 
 Object.freeze(exports);

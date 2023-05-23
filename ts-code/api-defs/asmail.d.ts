@@ -45,6 +45,8 @@ declare namespace web3n.asmail {
 				idOnDelivery?: string;
 				err?: any;
 				bytesSent: number;
+				// XXX
+				nonFstAttempt?: boolean;
 			}
 		};
 	}
@@ -60,6 +62,12 @@ declare namespace web3n.asmail {
 		 * associated with particular delivery.
 		 */
 		localMeta?: any;
+
+		retryRecipient?: {
+			numOfAttempts: number;
+			// XXX default client says "ASAP" => figgure it out
+			timeBetweenAttempts?: number;
+		};
 	}
 
 	interface DeliveryService {
@@ -232,6 +240,7 @@ declare namespace web3n.asmail {
 		sender: string;
 		establishedSenderKeyChain: boolean;
 		attachments?: files.ReadonlyFS;
+		// XXX info if not from the first attempt
 	}
 	
 	interface OutgoingMessage extends MsgStruct {

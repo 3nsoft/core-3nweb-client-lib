@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,12 +22,21 @@ import { ipc as pb } from '../protos/ipc.proto';
 
 
 export interface ExposedServices {
-	exposeDroppableService<T>(
+	exposeDroppableService<T extends string>(
 		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
 	): ObjectReference<T>;
 	getOriginalObj<T>(ref: ObjectReference<any>): T;
 	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
 	listObj(path: string[]): string[]|null;
+	getObjForTransfer<T extends string>(
+		ref: ObjectReference<T>
+	): TransferableObj<T>;
+	findRefIfAlreadyExposed(o: any): ObjectReference<any>|undefined;
+}
+
+export interface TransferableObj<T extends string> {
+	type: T;
+	o: any;
 }
 
 export interface ServicesSide {
@@ -50,6 +59,7 @@ export interface Caller {
 	srvRefOf(clientObj: any): ObjectReference<any>;
 	listObj?: (path: string[]) => string[];
 	listObjAsync?: (path: string[]) => Promise<string[]>;
+	findCallingObjByRef<T>(ref: ObjectReference<any>): T|undefined;
 }
 
 export interface ClientsSide {

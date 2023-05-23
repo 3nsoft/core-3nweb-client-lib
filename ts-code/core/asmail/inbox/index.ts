@@ -206,6 +206,7 @@ export class InboxOnServer {
 	private async removeMsgFromServerAndCache(msgId: string): Promise<void> {
 		await Promise.all([
 			this.cache.deleteMsg(msgId),
+			// XXX the following is suspicious, as it swallows other exceptions too
 			this.msgReceiver.removeMsg(msgId).catch(() => {})
 		]);
 	}

@@ -32,6 +32,7 @@ import { NodePersistance } from './node-persistence';
 import { FolderNode } from './folder-node';
 import { ObjSource } from 'xsp-files';
 import { assert } from '../../../lib-common/assert';
+import { makeRuntimeException } from '../../../lib-common/exceptions/runtime';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
@@ -247,13 +248,20 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			this.writeProc = new SingleProc();
 		}
 		if (!awaitPrevChange && this.writeProc.isProcessing()) {
-			throw makeFileException(
-				'concurrentUpdate', this.name+` type ${this.type}`);
+			throw makeRuntimeException<FileException>(
+				'file', { path: this.name, fsEtityType: this.type },
+				{ concurrentUpdate: true }
+			);
 		}
 		const res = await this.writeProc.startOrChain(async () => {
 			if (this.currentVersion < 0) {
-				throw makeFileException(
-					'notFound', this.name, `Object is marked removed`);
+				throw makeRuntimeException<FileException>(
+					'file', {
+						path: this.name, fsEtityType: this.type,
+						message: `NodeInFS is marked removed`
+					},
+					{ notFound: true }
+				);
 			}
 			try {
 				const res = await change();
