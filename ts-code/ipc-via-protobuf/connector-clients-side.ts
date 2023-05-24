@@ -18,7 +18,7 @@
 import { Subject } from "rxjs";
 import { ObjectReference, errBodyType, errFromMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { Deferred, defer } from "../lib-common/processes/deferred";
-import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller } from "./connector";
+import { ClientsSide, makeIPCException, EnvelopeBody, Envelope, IPCException, Caller, ObjectFromCore } from "./connector";
 
 type WeakRef<T> = {
 	new(o: T);
@@ -233,6 +233,7 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	registerClientDrop(o: any, srvRef: ObjectReference<any>): void {
+		(o as ObjectFromCore)._isObjectFromCore = true;
 		this.srvFinalRegistry.register(o, srvRef);
 		this.weakSrvByRefs.set(srvRef.path[0], new WeakRef(o));
 		this.srvRefs.set(o, srvRef);

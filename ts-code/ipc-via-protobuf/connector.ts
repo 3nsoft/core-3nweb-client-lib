@@ -62,6 +62,10 @@ export interface Caller {
 	findCallingObjByRef<T>(ref: ObjectReference<any>): T|undefined;
 }
 
+export interface ObjectFromCore {
+	_isObjectFromCore: true;
+}
+
 export interface ClientsSide {
 	caller(): Caller;
 	processInterimCallReply(fnCallNum: number, body: EnvelopeBody): void;
