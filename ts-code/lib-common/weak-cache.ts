@@ -35,6 +35,10 @@ interface FinalInfo<TKey, TVal> {
 	wRef: WeakRef<TVal>;
 }
 
+if (!FinalizationRegistry || !WeakRef) {
+	throw new Error(`Need both WekRef and FinalizationRegistry`);
+}
+
 export class WeakCache<TKey, TVal> {
 
 	private readonly wRefs = new Map<TKey, WeakRef<TVal>>();
