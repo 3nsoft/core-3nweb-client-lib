@@ -19,10 +19,10 @@ export * from "./core-ipc/common-caps";
 export * from "./core-ipc/startup-caps";
 
 export * from "./ipc-via-protobuf/connector";
-export { FileMsg, makeFileCaller, exposeFileService } from "./ipc-via-protobuf/file";
-export { FSMsg, makeFSCaller, exposeFSService } from "./ipc-via-protobuf/fs";
-export { makeSinkCaller, exposeSinkService, makeSrcCaller, exposeSrcService } from "./ipc-via-protobuf/bytes";
-export { makeLogCaller, exposeLogger } from "./ipc-via-protobuf/log-cap";
+export { FileMsg, makeFileCaller, exposeFileService } from "./core-ipc/file";
+export { FSMsg, makeFSCaller, exposeFSService } from "./core-ipc/fs";
+export { makeSinkCaller, exposeSinkService, makeSrcCaller, exposeSrcService } from "./core-ipc/bytes";
+export { makeLogCaller, exposeLogger } from "./core-ipc/log-cap";
 
 
 Object.freeze(exports);

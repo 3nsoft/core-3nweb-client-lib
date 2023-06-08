@@ -196,7 +196,7 @@ export class WIP {
 			throw new Error(`Unknown wip stage ${stage}`);
 		}
 		return proc.catch(async (err) => {
-			await this.updateInfo(0, true, err);
+			this.updateInfo(0, true, err);
 			this.state.stage = undefined;
 		});
 	}
@@ -352,7 +352,7 @@ export class WIP {
 			}
 			recInfo.done = true;
 			delete this.msg.wipsInfo[this.state.recipient];
-			this.msg.notifyOfChanges(true, this.doStateRecording);
+			this.msg.notifyOfChangesInProgress(true, this.doStateRecording);
 		} else {
 			this.state.bytesUploaded += bytesSent;
 			recInfo.bytesSent = this.state.bytesUploaded;
@@ -362,7 +362,7 @@ export class WIP {
 			} else {
 				saveWIPs = false;
 			}
-			this.msg.notifyOfChanges(false, saveWIPs);
+			this.msg.notifyOfChangesInProgress(false, saveWIPs);
 		}
 	}
 

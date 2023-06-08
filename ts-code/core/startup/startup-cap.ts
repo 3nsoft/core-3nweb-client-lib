@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "./connector";
-import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal, methodPathFor } from "./protobuf-msg";
+import { ExposedObj, ExposedFn, EnvelopeBody, Caller } from "../../ipc-via-protobuf/connector";
+import { strArrValType, boolValType, fixArray, toVal, Value, valOfOpt, toOptVal, methodPathFor } from "../../ipc-via-protobuf/protobuf-msg";
 import { Subject } from "rxjs";
 import { map } from "rxjs/operators";
-import { defer } from "../lib-common/processes/deferred";
-import { ProtoType } from '../lib-client/protobuf-type';
-import { startup as pb } from "../protos/startup.proto";
+import { defer } from "../../lib-common/processes/deferred";
+import { ProtoType } from '../../lib-client/protobuf-type';
+import { startup as pb } from "../../protos/startup.proto";
 
 type SignInService = web3n.startup.SignInService;
 type SignUpService = web3n.startup.SignUpService;

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,10 +16,10 @@
 */
 
 import { W3N_NAME, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
-import { exposeLogger, makeLogCaller } from "../ipc-via-protobuf/log-cap";
-import { exposeASMailCAP, makeASMailCaller } from "../ipc-via-protobuf/asmail-cap";
-import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../ipc-via-protobuf/storage-cap";
-import { exposeMailerIdCAP, makeMailerIdCaller } from "../ipc-via-protobuf/mailerid";
+import { exposeLogger, makeLogCaller } from "./log-cap";
+import { exposeASMailCAP, makeASMailCaller } from "../core/asmail/asmail-cap-ipc";
+import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../core/storage/storage-cap-ipc";
+import { exposeMailerIdCAP, makeMailerIdCaller } from "../core/id-manager/mailerid-cap-ipc";
 import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDifference, promiseClientSide } from "./generic";
 
 type W3N = web3n.caps.common.W3N;

@@ -15,10 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt, methodPathFor } from './protobuf-msg';
+import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt, methodPathFor } from '../ipc-via-protobuf/protobuf-msg';
 import { ProtoType } from '../lib-client/protobuf-type';
 import { bytes as pb } from '../protos/bytes.proto';
-import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from './connector';
+import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from '../ipc-via-protobuf/connector';
 
 type FileByteSink = web3n.files.FileByteSink;
 type FileLayout = web3n.files.FileLayout;

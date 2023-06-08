@@ -15,22 +15,22 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { checkAvailableAddressesForName, addUser } from '../lib-client/3nweb-signup';
-import { NetClient } from '../lib-client/request-utils';
+import { checkAvailableAddressesForName, addUser } from '../../lib-client/3nweb-signup';
+import { NetClient } from '../../lib-client/request-utils';
 import { parse as parseUrl } from 'url';
-import { use as keyUse, JsonKey, keyToJson } from '../lib-common/jwkeys';
-import { base64 } from '../lib-common/buffer-utils';
-import { areAddressesEqual } from '../lib-common/canonical-address';
-import * as keyDeriv from '../lib-client/key-derivation';
-import { GetUsersOnDisk } from './app-files';
-import * as random from '../lib-common/random-node';
-import { Cryptor } from '../lib-client/cryptor/cryptor';
+import { use as keyUse, JsonKey, keyToJson } from '../../lib-common/jwkeys';
+import { base64 } from '../../lib-common/buffer-utils';
+import { areAddressesEqual } from '../../lib-common/canonical-address';
+import * as keyDeriv from '../../lib-client/key-derivation';
+import type { GetUsersOnDisk } from '../app-files';
+import * as random from '../../lib-common/random-node';
+import { Cryptor } from '../../lib-client/cryptor/cryptor';
 import { box } from 'ecma-nacl';
 import { makeKeyGenProgressCB, ProgressCB } from './sign-in';
 import { Subject } from 'rxjs';
-import { LogError } from '../lib-client/logging/log-to-file';
-import { UserMidParams, UserStorageParams } from '../lib-common/user-admin-api/signup';
-import { ErrorWithCause, errWithCause } from '../lib-common/exceptions/error';
+import { LogError } from '../../lib-client/logging/log-to-file';
+import { UserMidParams, UserStorageParams } from '../../lib-common/user-admin-api/signup';
+import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
 
 export interface ScryptGenParams {
 	logN: number;

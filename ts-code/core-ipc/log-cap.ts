@@ -16,7 +16,7 @@
 */
 
 import { ExposedFn, Caller } from "../ipc-via-protobuf/connector";
-import { ErrorValue, errFromMsg, errToMsg } from "./protobuf-msg";
+import { ErrorValue, errFromMsg, errToMsg } from "../ipc-via-protobuf/protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { logger as pb } from '../protos/logger.proto';
 

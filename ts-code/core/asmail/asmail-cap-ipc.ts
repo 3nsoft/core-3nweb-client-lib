@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,14 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8, methodPathFor } from './protobuf-msg';
-import { ProtoType } from '../lib-client/protobuf-type';
-import { asmail as pb } from '../protos/asmail.proto';
-import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from './connector';
+import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8, methodPathFor } from '../../ipc-via-protobuf/protobuf-msg';
+import { ProtoType } from '../../lib-client/protobuf-type';
+import { asmail as pb } from '../../protos/asmail.proto';
+import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from '../../ipc-via-protobuf/connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { exposeFSService, FSMsg, makeFSCaller } from './fs';
-import { toRxObserver } from '../lib-common/utils-for-observables';
+import { exposeFSService, FSMsg, makeFSCaller } from '../../core-ipc/fs';
+import { toRxObserver } from '../../lib-common/utils-for-observables';
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -31,6 +31,7 @@ type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
+type DeliveryOptions = web3n.asmail.DeliveryOptions;
 
 export function exposeASMailCAP(
 	cap: ASMailService, expServices: ExposedServices
@@ -378,6 +379,7 @@ namespace addMsg {
 		id: string;
 		sendImmediately?: Value<boolean>;
 		localMeta?: AnyValue;
+		retryRecipient?: DeliveryOptions['retryRecipient'];
 	}
 
 	const requestType = ProtoType.for<Request>(pb.AddMsgRequestBody);
@@ -458,18 +460,43 @@ namespace addMsg {
 		return msg;
 	}
 
+	function retryOptToMsg(
+		opt: DeliveryOptions['retryRecipient']
+	): Request['retryRecipient'] {
+		if (!opt) { return; }
+		return {
+			numOfAttempts: opt.numOfAttempts,
+			timeBetweenAttempts: (!!opt.timeBetweenAttempts ?
+				opt.timeBetweenAttempts : 0
+			)
+		};
+	}
+
+	function retryOptFromMsg(
+		msg: Request['retryRecipient']
+	): DeliveryOptions['retryRecipient'] {
+		if (!msg) { return; }
+		return {
+			numOfAttempts: msg.numOfAttempts,
+			timeBetweenAttempts: (!!msg.timeBetweenAttempts ?
+				msg.timeBetweenAttempts : undefined
+			)
+		};
+	}
+
 	export function wrapService(
 		fn: Delivery['addMsg'], expServices: ExposedServices
 	): ExposedFn {
 		return (reqBody: Buffer) => {
 			const {
-				id, recipients, msg, localMeta, sendImmediately
+				id, recipients, msg, localMeta, sendImmediately, retryRecipient
 			} = requestType.unpack(reqBody);
 			const promise = fn(
 				fixArray(recipients), unpackMsg(msg, expServices), id,
 				{
 					localMeta: valOfOptAny(localMeta),
-					sendImmediately: valOfOpt(sendImmediately)
+					sendImmediately: valOfOpt(sendImmediately),
+					retryRecipient: retryOptFromMsg(retryRecipient)
 				});
 			return { promise };
 		};
@@ -484,6 +511,7 @@ namespace addMsg {
 			if (opts) {
 				req.sendImmediately = toOptVal(opts.sendImmediately);
 				req.localMeta = toOptAny(opts.localMeta);
+				req.retryRecipient = retryOptToMsg(opts.retryRecipient);
 			}
 			await caller.startPromiseCall(path, requestType.pack(req));
 		}
@@ -532,7 +560,7 @@ Object.freeze(delivListMsgs);
 
 interface DeliveryProgressMsg {
 	notConnected?: Value<boolean>;
-	allDone: boolean;
+	allDone?: Value<string>;
 	msgSize: number;
 	localMeta?: AnyValue;
 	recipients: {
@@ -552,7 +580,7 @@ const deliveryProgressMsgType = ProtoType.for<DeliveryProgressMsg>(
 function packDeliveryProgress(p: DeliveryProgress): DeliveryProgressMsg {
 	const m: DeliveryProgressMsg = {
 		notConnected: toOptVal(p.notConnected),
-		allDone: p.allDone,
+		allDone: toOptVal(p.allDone),
 		msgSize: p.msgSize,
 		localMeta: toOptAny(p.localMeta),
 		recipients: []
@@ -573,7 +601,7 @@ function packDeliveryProgress(p: DeliveryProgress): DeliveryProgressMsg {
 
 function unpackDeliveryProgress(m: DeliveryProgressMsg): DeliveryProgress {
 	const p: DeliveryProgress = {
-		allDone: m.allDone,
+		allDone: valOfOpt(m.allDone) as DeliveryProgress['allDone'],
 		msgSize: fixInt(m.msgSize),
 		notConnected: valOfOpt(m.notConnected) as true|undefined,
 		localMeta: valOfOptAny(m.localMeta),

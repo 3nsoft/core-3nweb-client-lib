@@ -48,7 +48,7 @@ export async function sendTxtMsg(
 		});
 	});
 	expect(typeof lastInfo).toBe('object');
-	expect(lastInfo!.allDone).toBe(true);
+	expect(lastInfo!.allDone).toBe('all-ok');
 	throwDeliveryErrorFrom(lastInfo);
 	await w3n.mail!.delivery.rmMsg(idForSending);
 	expect(await w3n.mail!.delivery.currentState(idForSending)).toBeFalsy();
@@ -62,12 +62,13 @@ export type SpecIt = GenericSpecIt<MultiUserSetup>;
 export function throwDeliveryErrorFrom(
 	lastNotif: web3n.asmail.DeliveryProgress
 ): void {
-	assert(lastNotif.allDone, `Given delivery notification is not last`);
+	assert(!!lastNotif.allDone, `Given delivery notification is not last`);
 	for (const info of Object.values(lastNotif.recipients)) {
 		if (info.err) {
 			throw errWithCause(
 				info.err,
-				`Error occured in message delivery:\n${stringifyErr(info.err)}`);
+				`Error occured in message delivery:\n${stringifyErr(info.err)}`
+			);
 		}
 	}
 }

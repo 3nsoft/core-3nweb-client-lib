@@ -15,10 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedFn, Caller, makeIPCException, ExposedObj } from "./connector";
-import { ProtoType } from '../lib-client/protobuf-type';
-import { mailerid as pb } from '../protos/mailerid.proto';
-import { decodeFromUtf8, encodeToUtf8, methodPathFor } from "./protobuf-msg";
+import { ExposedFn, Caller, makeIPCException, ExposedObj } from "../../ipc-via-protobuf/connector";
+import { ProtoType } from '../../lib-client/protobuf-type';
+import { mailerid as pb } from '../../protos/mailerid.proto';
+import { decodeFromUtf8, encodeToUtf8, methodPathFor } from "../../ipc-via-protobuf/protobuf-msg";
 
 type MailerId = web3n.mailerid.Service;
 

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -26,17 +26,30 @@ import { defer, Deferred } from '../../../lib-common/processes/deferred';
 type WritableFS = web3n.files.WritableFS;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
+type DeliveryOptions = web3n.asmail.DeliveryOptions;
 
 const MAIN_OBJ_FILE_NAME = 'msg.json';
 const PROGRESS_INFO_FILE_NAME = 'progress.json';
 const WIPS_INFO_FILE_NAME = 'wips.json';
 
 function checkIfAllRecipientsDone(progress: DeliveryProgress): boolean {
+
+// XXX this is missing info about already attempted sending, producing
+///    true, when retries are needed.
+
 	for (const recipient of Object.keys(progress.recipients)) {
 		const recInfo = progress.recipients[recipient];
 		if (!recInfo.done) { return false; }
 	}
 	return true;
+}
+
+function hasError(progress: DeliveryProgress): boolean {
+	for (const recipient of Object.keys(progress.recipients)) {
+		const recInfo = progress.recipients[recipient];
+		if (recInfo.err) { return true; }
+	}
+	return false;
 }
 
 async function estimatedPackedSize(msgToSend: OutgoingMessage,
@@ -49,6 +62,7 @@ async function estimatedPackedSize(msgToSend: OutgoingMessage,
 	return totalSize;
 }
 
+
 export class Msg {
 
 	private readonly sendingProc = new SingleProc();
@@ -57,6 +71,7 @@ export class Msg {
 	private cancelled = false;
 	private sender: string = (undefined as any);
 	private recipients: string[] = (undefined as any);
+	private retryOpts: DeliveryOptions['retryRecipient'] = undefined;
 	private msgToSend: OutgoingMessage = (undefined as any);
 	private attachments: Attachments|undefined = undefined;
 	private sequentialWIP: WIP|undefined = undefined;
@@ -79,10 +94,10 @@ export class Msg {
 	static async forNew(
 		id: string, msgFS: WritableFS, msgToSend: OutgoingMessage,
 		sender: string, recipients: string[], r: ResourcesForSending,
-		attachments: Attachments|undefined, localMeta: any|undefined
+		attachments: Attachments|undefined, localMeta: any|undefined,
+		retryOpts: DeliveryOptions['retryRecipient']
 	): Promise<Msg> {
 		const progress: DeliveryProgress = {
-			allDone: false,
 			msgSize: await estimatedPackedSize(msgToSend, attachments),
 			recipients: {}
 		};
@@ -96,6 +111,7 @@ export class Msg {
 		msg.msgToSend = msgToSend;
 		msg.sender = sender;
 		msg.recipients = recipients;
+		msg.retryOpts = retryOpts;
 		msg.attachments = attachments;
 		if (localMeta !== undefined) {
 			msg.progress.localMeta = localMeta;
@@ -108,20 +124,21 @@ export class Msg {
 		id: string, msgFS: WritableFS, r: ResourcesForSending
 	): Promise<Msg> {
 		const progress = await msgFS.readJSONFile<DeliveryProgress>(
-			PROGRESS_INFO_FILE_NAME);
+			PROGRESS_INFO_FILE_NAME
+		);
 		if (progress.allDone) {
 			return new Msg(id, (undefined as any), progress, (undefined as any));
 		}
 		const msg = new Msg(id, r, progress, msgFS);
 		const main = await msgFS.readJSONFile<SavedMsgToSend>(
-			MAIN_OBJ_FILE_NAME);
+			MAIN_OBJ_FILE_NAME
+		);
 		msg.msgToSend = main.msgToSend;
 		msg.sender = main.sender;
 		msg.recipients = main.recipients;
 		msg.attachments = await Attachments.readFrom(msgFS);
 		if (await msgFS.checkFilePresence(WIPS_INFO_FILE_NAME)) {
-			msg.wipsInfo = (await msgFS.readJSONFile<any>(
-				WIPS_INFO_FILE_NAME)).json;
+			msg.wipsInfo = (await msgFS.readJSONFile(WIPS_INFO_FILE_NAME));
 		}
 		return msg;
 	}
@@ -130,36 +147,50 @@ export class Msg {
 		const main: SavedMsgToSend = {
 			msgToSend: this.msgToSend,
 			sender: this.sender,
-			recipients: this.recipients
+			recipients: this.recipients,
+			retryOpts: this.retryOpts
 		};
 		await this.msgFS.writeJSONFile(
-			MAIN_OBJ_FILE_NAME, main, { create:true, exclusive:true });
+			MAIN_OBJ_FILE_NAME, main, { create: true, exclusive: true }
+		);
 		await this.msgFS.writeJSONFile(
-			PROGRESS_INFO_FILE_NAME, this.progress, { create:true, exclusive:true });
+			PROGRESS_INFO_FILE_NAME, this.progress,
+			{ create: true, exclusive: true }
+		);
 		if (this.attachments) {
 			await this.attachments.linkIn(this.msgFS);
 		}
 	}
 
-	notifyOfChanges(saveProgress: boolean, saveWIPs: boolean): void {
+	notifyOfChangesInProgress(saveProgress: boolean, saveWIPs: boolean): void {
 		if (this.cancelled) { return; }
 		if (this.progress.allDone) { return; }
+
+// XXX check progress differently
+//     Indicate need for restart ?
+//     In recipient's part, awaitingRestart flag ?
+//		 retryRecipients ?
+
 		if (checkIfAllRecipientsDone(this.progress)) {
-			this.progress.allDone = true;
+			this.progress.allDone = (hasError(this.progress) ?
+				'with-errors' : 'all-ok'
+			);
 			saveProgress = true;
 		}
+
 		this.r.notifyMsgProgress(this.id, jsonCopy(this.progress));
 		this.progressPublisher.next(jsonCopy(this.progress));
 		if (saveProgress) {
-			this.progressSavingProc.startOrChain(async () => {
-				await this.msgFS.writeJSONFile(
-					PROGRESS_INFO_FILE_NAME, this.progress, {});
-			});
+			this.progressSavingProc.startOrChain(
+				() => this.msgFS.writeJSONFile(
+					PROGRESS_INFO_FILE_NAME, this.progress, {}
+				)
+			);
 		}
 		if (this.isDone()) {
 			this.progressPublisher.complete();
 			this.progressSavingProc.startOrChain(async () => {
-				await this.msgFS.deleteFile(WIPS_INFO_FILE_NAME).catch(() => {});
+				await this.msgFS.deleteFile(WIPS_INFO_FILE_NAME).catch(noop);
 				if (this.attachments) {
 					await this.attachments.deleteFrom(this.msgFS);
 				}
@@ -197,7 +228,7 @@ export class Msg {
 	}
 
 	isDone(): boolean {
-		return this.progress.allDone;
+		return !!this.progress.allDone;
 	}
 
 	isSendingNow(): boolean {
@@ -276,12 +307,13 @@ export class Msg {
 				}
 			});
 			await Promise.all(wipPromises);
-		}).then(() => {
+
+// XXX ???
 			if (this.completionPromise && this.isDone()) {
 				this.completionPromise.resolve(this.progress);
 				this.completionPromise = undefined;
 			}
-		}, (err) => {
+		}).catch(err => {
 			if (this.completionPromise) {
 				this.completionPromise.reject(err);
 				this.completionPromise = undefined;
@@ -317,7 +349,8 @@ export class Msg {
 				const state = this.wipsInfo[recipient];
 				this.sequentialWIP = (state ?
 					(await WIP.resume(this, state, this.r.cryptor)) :
-					WIP.fresh(this, recipient, this.r.cryptor));
+					WIP.fresh(this, recipient, this.r.cryptor)
+				);
 			}
 
 			// do next chunk of work, removing wip, if it is done
@@ -326,12 +359,12 @@ export class Msg {
 				this.sequentialWIP = undefined;
 			}
 
-		}).then(() => {
+// XXX ???
 			if (this.completionPromise && this.isDone()) {
 				this.completionPromise.resolve(this.progress);
 				this.completionPromise = undefined;
 			}
-		}, (err) => {
+		}).catch(err => {
 			if (this.completionPromise) {
 				this.completionPromise.reject(err);
 				this.completionPromise = undefined;
@@ -342,5 +375,9 @@ export class Msg {
 }
 Object.freeze(Msg.prototype);
 Object.freeze(Msg);
+
+
+function noop() {}
+
 
 Object.freeze(exports);

@@ -36,20 +36,27 @@ declare namespace web3n.asmail {
 
 	interface DeliveryProgress {
 		notConnected?: true;
-		allDone: boolean;
+		allDone?: 'all-ok' | 'with-errors';
 		msgSize: number;
 		localMeta?: any;
 		recipients: {
 			[address: string]: {
 				done: boolean;
 				idOnDelivery?: string;
-				err?: any;
+				deliveryTS?: number;
+				err?: DeliveryException | RuntimeException | Error;
 				bytesSent: number;
 				// XXX
-				nonFstAttempt?: boolean;
+				awaitingRetry?: boolean;
+				failedAttempts?: {
+					attemptTS: number;
+					err: any;
+				}[];
 			}
 		};
 	}
+
+	type DeliveryException = ASMailSendException | ServLocException | ASMailSendException;
 
 	interface DeliveryOptions {
 		/**
@@ -63,9 +70,11 @@ declare namespace web3n.asmail {
 		 */
 		localMeta?: any;
 
+		// XXX
+		
 		retryRecipient?: {
 			numOfAttempts: number;
-			// XXX default client says "ASAP" => figgure it out
+			// XXX default client says "ASAP" => core applies own sane default
 			timeBetweenAttempts?: number;
 		};
 	}
@@ -229,25 +238,25 @@ declare namespace web3n.asmail {
 		carbonCopy?: string[];
 		recipients?: string[];
 	}
-	
+
 	interface MsgInfo {
 		msgId: string;
 		msgType: string;
 		deliveryTS: number;
 	}
-	
+
 	interface IncomingMessage extends MsgInfo, MsgStruct {
 		sender: string;
 		establishedSenderKeyChain: boolean;
 		attachments?: files.ReadonlyFS;
 		// XXX info if not from the first attempt
 	}
-	
+
 	interface OutgoingMessage extends MsgStruct {
 		msgId?: string;
 		attachments?: AttachmentsContainer;
 	}
-	
+
 	/**
 	 * This container is for entities that will be present in attachments
 	 * fs/folder of recipient's incoming message.
@@ -260,7 +269,7 @@ declare namespace web3n.asmail {
 			[name: string]: files.FS;
 		};
 	}
-	
+
 	interface InboxException extends RuntimeException {
 		type: "inbox";
 		msgId: string;
@@ -269,14 +278,23 @@ declare namespace web3n.asmail {
 		objId?: string;
 		msgIsBroken?: true;
 	}
-	
+
 	interface ServLocException extends RuntimeException {
 		type: 'service-locating';
 		address: string;
+
+		/**
+		 * domainNotFound flag indicates that domain in the address doesn't exist.
+		 */
 		domainNotFound?: true;
+
+		/**
+		 * noServiceRecord flag indicates that 3NWeb services are not set at
+		 * domain in the address.
+		 */
 		noServiceRecord?: true;
 	}
-	
+
 	interface ASMailSendException extends RuntimeException {
 		type: 'asmail-delivery';
 		address?: string;
@@ -297,5 +315,5 @@ declare namespace web3n.asmail {
 		// errors that are due to this side
 		msgCancelled?: true;
 	}
-	
+
 }

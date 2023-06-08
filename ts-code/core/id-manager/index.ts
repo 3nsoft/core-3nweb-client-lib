@@ -21,7 +21,7 @@ import { user as mid } from '../../lib-common/mid-sigs-NaCl-Ed';
 import { JsonKey, keyFromJson, use as keyUse } from '../../lib-common/jwkeys';
 import { PKLoginException } from '../../lib-client/user-with-pkl-session';
 import { SingleProc } from '../../lib-common/processes/synced';
-import { GenerateKey } from '../sign-in';
+import { GenerateKey } from '../startup/sign-in';
 import { LogError, LogWarning } from '../../lib-client/logging/log-to-file';
 import { NetClient } from '../../lib-client/request-utils';
 import { startMidSession, authenticateMidSession } from '../../lib-client/mailer-id/login';

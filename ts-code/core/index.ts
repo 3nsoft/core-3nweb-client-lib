@@ -15,10 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SignUp, CreatedUser } from './sign-up';
+import { SignUp, CreatedUser } from './startup/sign-up';
 import { IdManager } from './id-manager';
 import { Storages, FactoryOfFSs, reverseDomain } from './storage';
-import { SignIn, StartInitWithoutCache, InitWithCache } from './sign-in';
+import { SignIn, StartInitWithoutCache, InitWithCache } from './startup/sign-in';
 import { ASMail } from './asmail';
 import { errWithCause } from '../lib-common/exceptions/error';
 import { copy as jsonCopy } from '../lib-common/json-utils';

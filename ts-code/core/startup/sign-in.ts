@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { IdManager } from './id-manager';
-import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey } from '../lib-client/key-derivation';
-import { GetUsersOnDisk } from './app-files';
-import { Cryptor } from '../lib-client/cryptor/cryptor';
+import type { IdManager } from '../id-manager';
+import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey } from '../../lib-client/key-derivation';
+import type { GetUsersOnDisk } from '../app-files';
+import { Cryptor } from '../../lib-client/cryptor/cryptor';
 import { Subject } from 'rxjs';
-import { LogError } from '../lib-client/logging/log-to-file';
-import { ErrorWithCause, errWithCause } from '../lib-common/exceptions/error';
+import { LogError } from '../../lib-client/logging/log-to-file';
+import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
 
 export type GenerateKey  = (
 	derivParams: ScryptGenParams

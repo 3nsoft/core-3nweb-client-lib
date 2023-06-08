@@ -372,6 +372,9 @@ class LogAndStructFiles implements LogFiles, DBsFiles {
 
 	private syncing: Unsubscribable|undefined = undefined;
 
+	// XXX synchronize file saving
+	private readonly logsFSaccessProc = new SingleProc();
+
 	private constructor(
 		private readonly logsFS: WritableFS,
 		private readonly dbsFS: WritableFS
@@ -426,38 +429,42 @@ class LogAndStructFiles implements LogFiles, DBsFiles {
 		return logNums;
 	}
 
-	async createNewLogFile(
+	createNewLogFile(
 		logNum: number, jsonStr = '[]'
 	): Promise<LogsTail> {
-		const logFile = this.logFileName(logNum);
-		const version = await this.logsFS.v!.writeTxtFile(
-			logFile, jsonStr, { create: true, exclusive: true }
-		);
-		await this.logsFS.v!.sync!.upload(logFile);
-		await this.logsFS.v!.sync!.upload('');
-		return {
-			num: logNum,
-			version,
-			writeOfs: jsonStr.length - 1
-		};
+		return this.logsFSaccessProc.startOrChain(async () => {
+			const logFile = this.logFileName(logNum);
+			const version = await this.logsFS.v!.writeTxtFile(
+				logFile, jsonStr, { create: true, exclusive: true }
+			);
+			// XXX sync disabled for now, and may be need another structure
+			// await this.logsFS.v!.sync!.upload(logFile);
+			// await this.logsFS.v!.sync!.upload('');
+			return {
+				num: logNum,
+				version,
+				writeOfs: jsonStr.length - 1
+			};
+		});
 	}
 
 	private async statLogFile(
 		logNum: number
 	): Promise<{ tail: LogsTail; syncState: SyncState; }> {
 		const logFile = this.logFileName(logNum);
-		const { state: syncState } = await this.logsFS.v!.sync!.status(logFile);
-		if (syncState === 'behind') {
-			await this.logsFS.v!.sync!.adoptRemote(logFile);
-		} else if (syncState === 'unsynced') {
-			await this.logsFS.v!.sync!.upload(logFile);
-		} else if (syncState === 'conflicting') {
-			// XXX
-			throw new Error(`conflict resolution needs implementation`);
-		}
+		// XXX sync disabled for now, and may be need another structure
+		// const { state: syncState } = await this.logsFS.v!.sync!.status(logFile);
+		// if (syncState === 'behind') {
+		// 	await this.logsFS.v!.sync!.adoptRemote(logFile);
+		// } else if (syncState === 'unsynced') {
+		// 	await this.logsFS.v!.sync!.upload(logFile);
+		// } else if (syncState === 'conflicting') {
+		// 	// XXX
+		// 	throw new Error(`conflict resolution needs implementation`);
+		// }
 		const { size, version } = await this.logsFS.stat(logFile);
 		return {
-			syncState,
+			syncState: 'unsynced',
 			tail: {
 				num: logNum,
 				version: version!,
@@ -469,30 +476,37 @@ class LogAndStructFiles implements LogFiles, DBsFiles {
 	async appendLogFile(logNum: number, bytes: Uint8Array): Promise<{
 		uploadedVersion: number; writeOfs: number;
 	}> {
-		const logFile = this.logFileName(logNum);
-		const { state } = await this.logsFS.v!.sync!.status(logFile);
-		if (state === 'behind') {
-			await this.logsFS.v!.sync!.adoptRemote(logFile);
-		} else if (state === 'conflicting') {
-			// XXX
-			throw new Error(`conflict resolution needs implementation`);
-		}
-		const sink = await this.logsFS.getByteSink(logFile, { truncate: false });
-		const len = await sink.getSize();
-		let writeOfs: number;
-		if (len === 2) {
-			await sink.splice(len-1, 1);
-			writeOfs = len-1;
-		} else {
-			await sink.splice(len-1, 1, COMMA_BYTE);
-			writeOfs = len;
-		}
-		await sink.splice(writeOfs, 0, bytes);
-		writeOfs += bytes.length
-		await sink.splice(writeOfs, 0, SQ_BRACKET_BYTE);
-		await sink.done();
-		const uploadedVersion = (await this.logsFS.v!.sync!.upload(logFile))!;
-		return { uploadedVersion, writeOfs };
+		return this.logsFSaccessProc.startOrChain(async () => {
+			const logFile = this.logFileName(logNum);
+			// XXX sync disabled for now, and may be need another structure
+			// const { state } = await this.logsFS.v!.sync!.status(logFile);
+			// if (state === 'behind') {
+			// 	await this.logsFS.v!.sync!.adoptRemote(logFile);
+			// } else if (state === 'conflicting') {
+			// 	// XXX
+			// 	throw new Error(`conflict resolution needs implementation`);
+			// }
+			const sink = await this.logsFS.getByteSink(
+				logFile, { truncate: false }
+			);
+			const len = await sink.getSize();
+			let writeOfs: number;
+			if (len === 2) {
+				await sink.splice(len-1, 1);
+				writeOfs = len-1;
+			} else {
+				await sink.splice(len-1, 1, COMMA_BYTE);
+				writeOfs = len;
+			}
+			await sink.splice(writeOfs, 0, bytes);
+			writeOfs += bytes.length
+			await sink.splice(writeOfs, 0, SQ_BRACKET_BYTE);
+			await sink.done();
+			// XXX sync disabled for now, and may be need another structure
+			// const uploadedVersion = (await this.logsFS.v!.sync!.upload(logFile))!;
+			const uploadedVersion = logNum;
+			return { uploadedVersion, writeOfs };
+		});
 	}
 
 	private dbFileName(fileTS: number): string {

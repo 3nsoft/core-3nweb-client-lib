@@ -28,6 +28,7 @@ import { ServiceLocator } from '../../../lib-client/service-locator';
 
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
+type DeliveryOptions = web3n.asmail.DeliveryOptions;
 type AttachmentsContainer = web3n.asmail.AttachmentsContainer;
 type FS = web3n.files.FS;
 type WritableFS = web3n.files.WritableFS;
@@ -221,6 +222,7 @@ export interface SavedMsgToSend {
 	msgToSend: OutgoingMessage;
 	sender: string;
 	recipients: string[];
+	retryOpts: DeliveryOptions['retryRecipient'];
 }
 
 /**

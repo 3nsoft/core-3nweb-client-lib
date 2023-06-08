@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -60,8 +60,10 @@ export class Delivery {
 	private readonly queuedDelivery: Msg[] = [];
 
 	private readonly allDeliveries = new Subject<{
-		id: string; progress: DeliveryProgress; }>();
-	private readonly allDeliveries$ = this.allDeliveries.asObservable().pipe(
+		id: string; progress: DeliveryProgress;
+	}>();
+	private readonly allDeliveries$ = this.allDeliveries.asObservable()
+	.pipe(
 		share()
 	);
 
@@ -70,8 +72,9 @@ export class Delivery {
 		private readonly r: ResourcesForSending
 	) {
 		ensureCorrectFS(fs, 'local', true);
-		this.r.notifyMsgProgress =
-			(id, progress) => this.allDeliveries.next({ id, progress });
+		this.r.notifyMsgProgress = (
+			id, progress
+		) => this.allDeliveries.next({ id, progress });
 		Object.freeze(this.r);
 		Object.freeze(this);
 	}
@@ -177,21 +180,22 @@ export class Delivery {
 			throw new Error(`Given invalid recipients: ${recipients} for message ${id}`); }
 		if (this.msgs.has(id)) { throw new Error(
 			`Message with id ${id} has already been added for delivery`); }
-		
+
 		const attachments = Attachments.fromMsg(msgToSend);
-		const localMeta = (opts ? opts.localMeta : undefined);
+		const localMeta = opts?.localMeta;
 
 		// save msg, in case delivery should be restarted
 		const msgFS = await this.makeFSForNewMsg(id);
 		const msg = await Msg.forNew(
 			id, msgFS, msgToSend, sender, recipients, this.r,
-			attachments, localMeta);
-		
+			attachments, localMeta, opts?.retryRecipient
+		);
+
 		// add and schedule
-		const sendImmediately = (opts ? !!opts.sendImmediately : false);
+		const sendImmediately = !!opts?.sendImmediately;
 		this.addMsgAndSchedule(msg, sendImmediately);
 	}
-	
+
 	private async makeFSForNewMsg(id: string): Promise<WritableFS> {
 		const msgFolderPath = idToMsgFolder(id);
 		await this.fs.makeFolder(msgFolderPath, true)
@@ -219,6 +223,7 @@ export class Delivery {
 					this.performQueuedDelivery();
 				}
 			}, async (err) => {
+// XXX add to retries queue with some timestamp
 				await this.r.logWarning('Got error when sending a message', err);
 				this.immediateDelivery.delete(msg);
 				this.performQueuedDelivery();				
@@ -245,6 +250,7 @@ export class Delivery {
 				}
 			}
 		}, async (err) => {
+// XXX add to retries queue with some timestamp
 			await this.r.logWarning('Got error when sending a message', err);
 			if (msg === this.queuedDelivery[0]) {
 				this.queuedDelivery.shift();

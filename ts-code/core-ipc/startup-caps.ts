@@ -16,7 +16,7 @@
 */
 
 import { W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
-import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../ipc-via-protobuf/startup-cap";
+import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../core/startup/startup-cap";
 import { ClientCAPsWraps, exposeCAPs, makeClientSide, CAPsExposures, TypeDifference } from "./generic";
 
 type W3N = web3n.startup.W3N;

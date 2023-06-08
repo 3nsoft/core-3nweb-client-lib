@@ -15,11 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Value, valOfOpt, toOptVal, methodPathFor } from './protobuf-msg';
-import { ExposedObj, ExposedFn, Caller, ExposedServices } from './connector';
-import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from './fs';
-import { ProtoType } from '../lib-client/protobuf-type';
-import { storage as pb } from '../protos/storage.proto';
+import { Value, valOfOpt, toOptVal, methodPathFor } from '../../ipc-via-protobuf/protobuf-msg';
+import { ExposedObj, ExposedFn, Caller, ExposedServices } from '../../ipc-via-protobuf/connector';
+import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from '../../core-ipc/fs';
+import { ProtoType } from '../../lib-client/protobuf-type';
+import { storage as pb } from '../../protos/storage.proto';
 
 type Storage = web3n.storage.Service;
 type StorageType = web3n.storage.StorageType;

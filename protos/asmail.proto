@@ -74,11 +74,16 @@ message PreFlightRequestBody {
 // --- delivery.addMsg ---
 // Reply has only status and body is empty
 message AddMsgRequestBody {
+	message RetryOpt {
+		uint32 num_of_attempts = 1;
+		uint32 time_between_attempts = 2;
+	}
 	repeated string recipients = 1;
 	OutgoingMessageMsg msg = 2;
 	string id = 3;
 	common.BooleanValue send_immediately = 4;
 	common.AnyValue local_meta = 5;
+	RetryOpt retry_recipient = 6;
 }
 
 message OutgoingMessageMsg {
@@ -125,7 +130,7 @@ message DeliveryProgressMsg {
 		DeliveryInfo info = 2;
 	}
 	common.BooleanValue not_connected = 1;
-	bool all_done = 2;
+	common.StringValue all_done = 2;
 	uint64 msg_size = 3;
 	common.AnyValue local_meta = 4;
 	repeated AddrAndDeliveryInfo recipients = 5;
