@@ -17,7 +17,7 @@
 
 import { makeIPCException, EnvelopeBody } from './connector';
 import { recursiveErrJSONify, stringifyErr } from '../lib-common/exceptions/error';
-import { toBuffer } from '../lib-common/buffer-utils';
+import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { common as pb } from '../protos/common.proto';
 import { ProtoType } from '../lib-client/protobuf-type';
 
@@ -170,13 +170,21 @@ export function valOfOptAny(valObj: AnyValue|undefined): any|undefined {
 }
 
 export function encodeToUtf8(str: string): Uint8Array {
-	const enc = new TextEncoder();
-	return enc.encode(str);
+	try {
+		const enc = new TextEncoder();
+		return enc.encode(str);
+	} catch (err) {
+		return utf8.pack(str);
+	}
 }
 
 export function decodeFromUtf8(bytes: Uint8Array): string {
-	const dec = new TextDecoder();
-	return dec.decode(bytes);
+	try {
+		const dec = new TextDecoder();
+		return dec.decode(bytes);
+	} catch (err) {
+		return utf8.open(bytes);
+	}
 }
 
 export function methodPathFor<T>(objPath: string[], method: keyof T): string[] {
