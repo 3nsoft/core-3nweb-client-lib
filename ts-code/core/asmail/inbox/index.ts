@@ -249,7 +249,8 @@ export class InboxOnServer {
 					Promise<{ pkey: JsonKey; address: string; }> => {
 				return checkAndExtractPKeyWithAddress(
 					this.msgReceiver.getNet(), this.r.midResolver, certs,
-					Math.round(msgOnDisk.deliveryTS / 1000));
+					Math.round(msgOnDisk.deliveryTS / 1000)
+				);
 			};
 
 			const decrOut = await this.r.msgDecryptor(
