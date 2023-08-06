@@ -249,7 +249,7 @@ namespace extAttrs {
 	function parseTypeByte(
 		b: number
 	): { type: 1|2|3; nameLen: number; contentLen: number; } {
-		const type =      ((b & 0b11111000) >> 5) as 1|2|3;
+		const type =      ((b & 0b11111000) >> 3) as 1|2|3;
 		const nameLen =   ((b & 0b00000100) >> 2) + 1;
 		const contentLen = (b & 0b00000011) + 1;
 		return { type, contentLen, nameLen };
