@@ -1487,7 +1487,8 @@ export namespace fsItem {
 			if (item.item) {
 				msg.item = {
 					collection: fsCollection.exposeCollectionService(
-						item.item as FSCollection, expServices)
+						item.item as FSCollection, expServices
+					)
 				};
 			}
 		} else {
@@ -1524,7 +1525,8 @@ export namespace fsItem {
 			item.isCollection = true;
 			if (msg.item) {
 				item.item = fsCollection.makeCollectionCaller(
-					msg.item.collection!, caller);
+					msg.item.collection!, caller
+				);
 			}
 		} else {
 			throw new TypeError(`Missing type flag in FSItem`);

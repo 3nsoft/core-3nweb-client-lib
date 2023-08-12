@@ -23,7 +23,6 @@ import { makeSetupWithTwoDevsFSs } from "../test-utils";
 import { base64 } from '../../../lib-common/buffer-utils';
 import { bytesEqual } from "../../libs-for-tests/bytes-equal";
 import { sleep } from "../../../lib-common/processes/sleep";
-import { getRemoteFolderChanges } from "../../../lib-client/fs-sync-utils";
 
 type MsgInfo = web3n.asmail.MsgInfo;
 

@@ -20,7 +20,7 @@ import { makeTimedCache } from "../../../../lib-common/timed-cache";
 import { TableColumnsAndParams, SQLiteOn3NStorage } from '../../../../lib-sqlite-on-3nstorage';
 import { Database, QueryExecResult } from '../../../../lib-sqlite-on-3nstorage/sqljs';
 import { ensureCorrectFS } from '../../../../lib-common/exceptions/file';
-import { observableFromTreeEvents } from '../../../../lib-client/fs-sync-utils';
+import { observableFromTreeEvents } from '../../../../lib-client/fs-utils/fs-sync-utils';
 import { Unsubscribable } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { IndexedRecords, MsgKey } from './logs-n-entries';

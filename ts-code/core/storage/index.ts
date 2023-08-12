@@ -26,7 +26,7 @@ import { ServiceLocator } from '../../lib-client/service-locator';
 import { ScryptGenParams } from '../../lib-client/key-derivation';
 import { FileException, makeFileException } from '../../lib-common/exceptions/file';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-collection';
+import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-utils/fs-collection';
 import { asyncFind } from '../../lib-common/async-iter';
 import { join } from 'path';
 import * as fs from '../../lib-common/async-fs-node';
@@ -594,13 +594,14 @@ async function applyPolicyToFSItem(
 	fsi: FSItem, policy: 'w'|'r', path?: string
 ): Promise<FSItem> {
 	if (fsi.isFolder) {
-		const item = await applyPolicyToFS(
-			fsi.item as WritableFS, policy, path);
-		return { isFolder: true, item };
+		return {
+			isFolder: true,
+			item: await applyPolicyToFS(fsi.item as WritableFS, policy, path)
+		};
 	} else if (fsi.isCollection) {
-		const item = await applyPolicyToFSCollection(
-			fsi.item as FSCollection, policy, path);
-		return { isCollection: true, item };
+		return await applyPolicyToFSCollection(
+			fsi.item as FSCollection, policy, path
+		);
 	} else {
 		throw new Error(`Given fs item is neither folder, nor fs collection`);
 	}
@@ -621,43 +622,80 @@ async function applyPolicyToFS(
 
 async function applyPolicyToFSCollection(
 	c: FSCollection, policy: 'w'|'r', path?: string
-): Promise<FSCollection|FS> {
+): Promise<FSItem> {
 	if (path === undefined) {
 		if (policy === 'w') {
-			return readonlyWrapFSCollection(c);
+			return { isCollection: true, item: readonlyWrapFSCollection(c) };
 		} else {
 			const roFSs = makeFSCollection();
 			for (const v of (await c.getAll())) {
 				const fs = (v[1].item as WritableFS);
-				if (!v[1].isFolder || !fs || !fs.listFolder) { throw new Error(
-					'Expected item to be a folder object'); }
+				if (!v[1].isFolder || !fs || !fs.listFolder) {
+					throw new Error('Expected item to be a folder object');
+				}
 				v[1].item = await (v[1].item! as FS).readonlySubRoot('/');
 				await roFSs.set!(v[0], v[1]);
 			}
-			return readonlyWrapFSCollection(roFSs);
+			return { isCollection: true, item: readonlyWrapFSCollection(roFSs) };
 		}
 	}
 
 	if (path.startsWith('/')) {
 		path = path.substring(1);
 	}
-	const nameAndItem = await asyncFind(await c.entries(),
-		async v => path!.startsWith(v[0]));
+	const nameAndItem = await asyncFind(
+		await c.entries(), v => path!.startsWith(v[0])
+	);
 	if (!nameAndItem) { throw makeFileException('notFound', path); }
 	const [ name, item ] = nameAndItem;
 	path = path.substring(name.length);
 
 	const fs = (item.item as WritableFS);
-	if (!item.isFolder || !fs || !fs.listFolder) { throw new Error(
-		'Expected item to be a folder object'); }
+	if (!item.isFolder || !fs || !fs.listFolder) {
+		throw new Error('Expected item to be a folder object');
+	}
 
-	if (policy === 'w') {
-		return ((path === undefined) ? fs : fs.writableSubRoot(path));
-	} else {
-		if (path === undefined) {
-			path = '/';
+	if (typeof path !== 'string') {
+		return {
+			isFolder: true,
+			item: await ((policy === 'w') ? fs : fs.readonlySubRoot('/'))
+		};
+	}
+
+	const atPath = await fs.stat(path);
+	if (atPath.isFolder) {
+		return {
+			isFolder: true,
+			item: await ((policy === 'w') ?
+				fs.writableSubRoot(path) : fs.readonlySubRoot(path)
+			)
 		}
-		return fs.readonlySubRoot(path);
+	} else if (atPath.isFile) {
+		return {
+			isFile: true,
+			item: await ((policy === 'w') ?
+				fs.writableFile(path) : fs.readonlyFile(path)
+			)
+		};
+	} else if (atPath.isLink) {
+		const link = await fs.readLink(path);
+		if (link.isFolder) {
+			return {
+				isFolder: true,
+				item: await link.target()
+			};
+		} else if (link.isFile) {
+			return {
+				isFile: true,
+				item: await link.target()
+			};
+		} else {
+			throw makeFileException(
+				'ioError', path, `Unknown type of linked fs item`
+			);
+		}
+	} else {
+		throw makeFileException('ioError', path, `Unknown type of fs item`);
 	}
 }
 

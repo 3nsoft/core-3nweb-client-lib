@@ -42,7 +42,7 @@ import { MsgMeta } from '../../../lib-common/service-api/asmail/retrieval';
 import { MsgOnDisk } from './msg-on-disk';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { NetClient } from '../../../lib-client/request-utils';
-import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../../lib-client/fs-sync-utils';
+import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../../lib-client/fs-utils/fs-sync-utils';
 
 type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;

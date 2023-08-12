@@ -27,7 +27,7 @@ import { Storage, Node, NodeType, setPathInExc, FSChangeSrc, ObjId } from './com
 import { FSEvent, NodeInFS } from './node-in-fs';
 import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
-import { LinkParameters } from '../../files';
+import { LinkParameters } from '../../fs-utils/files';
 import { makeFSSyncException, StorageException } from '../exceptions';
 import { defer } from '../../../lib-common/processes/deferred';
 import { copy, deepEqual } from '../../../lib-common/json-utils';

@@ -16,7 +16,7 @@
 */
 
 import { Observable } from "rxjs";
-import { makeFSSyncException } from "./3nstorage/exceptions";
+import { makeFSSyncException } from "../3nstorage/exceptions";
 
 type WritableFS = web3n.files.WritableFS;
 type ReadonlyFS = web3n.files.ReadonlyFS;

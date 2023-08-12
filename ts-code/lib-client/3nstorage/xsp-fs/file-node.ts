@@ -21,7 +21,7 @@
  */
 
 import { NodeInFS } from './node-in-fs';
-import { LinkParameters } from '../../files';
+import { LinkParameters } from '../../fs-utils/files';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { base64, byteLengthIn } from '../../../lib-common/buffer-utils';
 import { defer } from '../../../lib-common/processes/deferred';

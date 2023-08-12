@@ -25,12 +25,15 @@ export async function asyncIteration<T>(iter: web3n.AsyncIterator<T>,
 }
 
 export async function asyncFind<T>(iter: web3n.AsyncIterator<T>,
-		predicate: (v: T) => Promise<boolean>): Promise<T|undefined> {
+		predicate: (v: T) => boolean|Promise<boolean>): Promise<T|undefined> {
 	let item: IteratorResult<T>;
 	do {
 		item = await iter.next();
 		if (item.done) { return; }
-		if (await predicate(item.value)) { return item.value; }
+		const check = predicate(item.value);
+		if ((typeof check === 'boolean') ? check : await check) {
+			return item.value;
+		}
 	} while (true);
 }
 

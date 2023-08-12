@@ -21,7 +21,7 @@
  */
 
 import { makeFileException } from '../../../lib-common/exceptions/file';
-import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../../files';
+import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../../fs-utils/files';
 import { FileNode, FileLinkParams } from './file-node';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { Storage } from './common';

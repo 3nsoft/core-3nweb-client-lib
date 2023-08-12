@@ -28,7 +28,7 @@ import { SendingParamsHolder } from './sending-params';
 import { Logger } from '../../lib-client/logging/log-to-file';
 import { ServiceLocator, ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
-import { getOrMakeAndUploadFolderIn, getRemoteFolderChanges, uploadFolderChangesIfAny } from '../../lib-client/fs-sync-utils';
+import { getOrMakeAndUploadFolderIn, getRemoteFolderChanges, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
 
 type WritableFS = web3n.files.WritableFS;
 type Service = web3n.asmail.Service;

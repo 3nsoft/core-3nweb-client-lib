@@ -135,6 +135,14 @@ describe('3NStorage', () => {
 			expect(sysItems.isCollection).toBe(true);
 		});
 
+		itCond('produces device item, indicated by path', async () => {
+			const semiRandomDevFolder = __dirname;
+			const devItems = await w3n.storage!.getSysFS!(
+				'device', semiRandomDevFolder
+			);
+			expect(devItems.isFolder).toBe(true);
+		});
+
 	});
 
 	describe('local FS is a web3n.files.WritableFS', () => {

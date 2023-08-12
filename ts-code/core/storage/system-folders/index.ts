@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeFSCollection } from "../../../lib-client/fs-collection";
+import { makeFSCollection } from "../../../lib-client/fs-utils/fs-collection";
 import { DeviceFS } from "../../../lib-index";
 
 type WritableFS = web3n.files.WritableFS;

@@ -22,7 +22,7 @@
 
 import { NodeInFS } from './node-in-fs';
 import { utf8 } from '../../../lib-common/buffer-utils';
-import { LinkParameters } from '../../files';
+import { LinkParameters } from '../../fs-utils/files';
 import { DeviceFS } from '../../local-files/device-fs';
 import { FileLinkParams } from './file-node';
 import { FolderLinkParams } from './folder-node';

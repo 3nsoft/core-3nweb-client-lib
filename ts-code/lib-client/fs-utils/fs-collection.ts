@@ -16,7 +16,7 @@
 */
 
 import { Subject } from 'rxjs';
-import { toRxObserver } from '../lib-common/utils-for-observables';
+import { toRxObserver } from '../../lib-common/utils-for-observables';
 
 type FSCollection = web3n.files.FSCollection;
 type FSItem = web3n.files.FSItem;
