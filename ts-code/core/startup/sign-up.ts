@@ -86,7 +86,7 @@ export class SignUp {
 		skey: Uint8Array;
 		params: UserStorageParams;
 	} = (undefined as any);
-	private serviceURL: string;
+	private serviceURL: string = (undefined as any);
 
 	private netLazyInit: NetClient|undefined = undefined;
 	private get net(): NetClient {
@@ -120,6 +120,7 @@ export class SignUp {
 
 	exposedService(): SignUpService {
 		const service: SignUpService = {
+			setSignUpServer: async srvUrl => this.setServiceURL(srvUrl),
 			addUser: this.addUser,
 			createUserParams: this.createUserParams,
 			getAvailableAddresses: this.getAvailableAddresses,

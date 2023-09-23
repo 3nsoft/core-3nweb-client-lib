@@ -52,6 +52,7 @@ export function makeSignInCaller(
 
 export function wrapSignUpCAP(cap: SignUpService): ExposedObj<SignUpService> {
 	return {
+		setSignUpServer: setSignUpServer.wrapService(cap.setSignUpServer),
 		getAvailableAddresses: getAvailableAddresses.wrapService(
 			cap.getAvailableAddresses),
 		addUser: addUser.wrapService(cap.addUser),
@@ -64,6 +65,7 @@ export function makeSignUpCaller(
 	caller: Caller, objPath: string[]
 ): SignUpService {
 	return {
+		setSignUpServer: setSignUpServer.makeCaller(caller, objPath),
 		getAvailableAddresses: getAvailableAddresses.makeCaller(
 			caller, objPath),
 		addUser: addUser.makeCaller(caller, objPath),
@@ -71,6 +73,38 @@ export function makeSignUpCaller(
 		isActivated: isActivated.makeCaller(caller, objPath)
 	};
 }
+
+
+namespace setSignUpServer {
+
+	interface Request {
+		serviceUrl: string;
+	}
+
+	const requestType = ProtoType.for<Request>(pb.SetSignUpServerRequestBody);
+
+	export function wrapService(
+		fn: SignUpService['setSignUpServer']
+	): ExposedFn {
+		return buf => {
+			const { serviceUrl } = requestType.unpack(buf);
+			const promise = fn(serviceUrl);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): SignUpService['setSignUpServer'] {
+		const path = methodPathFor<SignUpService>(objPath, 'setSignUpServer');
+		return serviceUrl => caller
+		.startPromiseCall(
+			path, requestType.pack({ serviceUrl })
+		) as Promise<void>;
+	}
+
+}
+Object.freeze(getAvailableAddresses);
 
 
 namespace getAvailableAddresses {
