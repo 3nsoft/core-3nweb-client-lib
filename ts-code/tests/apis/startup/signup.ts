@@ -41,6 +41,15 @@ describe('signUp process', () => {
 	const name = 'Mike Marlow ';
 	const pass = 'some long passphrase';
 
+	itCond('gets available domains', async () => {
+		const domains = await w3n.signUp.getAvailableDomains();
+		expect(Array.isArray(domains)).toBe(true);
+		expect(domains.length).toBe(s.signupDomains.length);
+		for (let d of s.signupDomains) {
+			expect(domains).toContain(d);
+		}
+	});
+
 	itCond('gets available addresses', async () => {
 		const addresses = await w3n.signUp.getAvailableAddresses(name);
 		expect(Array.isArray(addresses)).toBe(true);

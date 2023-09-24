@@ -53,6 +53,8 @@ export function makeSignInCaller(
 export function wrapSignUpCAP(cap: SignUpService): ExposedObj<SignUpService> {
 	return {
 		setSignUpServer: setSignUpServer.wrapService(cap.setSignUpServer),
+		getAvailableDomains: getAvailableDomains.wrapService(
+			cap.getAvailableDomains),
 		getAvailableAddresses: getAvailableAddresses.wrapService(
 			cap.getAvailableAddresses),
 		addUser: addUser.wrapService(cap.addUser),
@@ -66,6 +68,7 @@ export function makeSignUpCaller(
 ): SignUpService {
 	return {
 		setSignUpServer: setSignUpServer.makeCaller(caller, objPath),
+		getAvailableDomains: getAvailableDomains.makeCaller(caller, objPath),
 		getAvailableAddresses: getAvailableAddresses.makeCaller(
 			caller, objPath),
 		addUser: addUser.makeCaller(caller, objPath),
@@ -105,6 +108,39 @@ namespace setSignUpServer {
 
 }
 Object.freeze(getAvailableAddresses);
+
+
+namespace getAvailableDomains {
+
+	interface Request {
+		token?: Value<string>;
+	}
+
+	const requestType = ProtoType.for<Request>(
+		pb.GetAvailableDomainsRequestBody);
+
+	export function wrapService(
+		fn: SignUpService['getAvailableDomains']
+	): ExposedFn {
+		return buf => {
+			const { token } = requestType.unpack(buf);
+			const promise = fn(valOfOpt(token))
+			.then(domains => strArrValType.pack({ values: domains }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): SignUpService['getAvailableDomains'] {
+		const path = methodPathFor<SignUpService>(objPath, 'getAvailableDomains');
+		return token => caller
+		.startPromiseCall(path, requestType.pack(
+			{ token: toOptVal(token) }))
+		.then(buf => fixArray(strArrValType.unpack(buf).values));
+	}
+
+}
 
 
 namespace getAvailableAddresses {

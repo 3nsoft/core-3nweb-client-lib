@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 - 2023 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { checkAvailableAddressesForName, addUser } from '../../lib-client/3nweb-signup';
+import { checkAvailableAddressesForName, addUser, checkAvailableDomains } from '../../lib-client/3nweb-signup';
 import { NetClient } from '../../lib-client/request-utils';
 import { parse as parseUrl } from 'url';
 import { use as keyUse, JsonKey, keyToJson } from '../../lib-common/jwkeys';
@@ -121,22 +121,20 @@ export class SignUp {
 	exposedService(): SignUpService {
 		const service: SignUpService = {
 			setSignUpServer: async srvUrl => this.setServiceURL(srvUrl),
+			getAvailableDomains: signupToken => checkAvailableDomains(
+				this.net, this.serviceURL, signupToken
+			),
 			addUser: this.addUser,
 			createUserParams: this.createUserParams,
-			getAvailableAddresses: this.getAvailableAddresses,
+			getAvailableAddresses: (
+				name, signupToken
+			) => checkAvailableAddressesForName(
+				this.net, this.serviceURL, name, signupToken
+			),
 			isActivated: async () => { throw new Error(`Not implemented, yet`); }
 		};
 		return Object.freeze(service);
 	}
-
-	private getAvailableAddresses: SignUpService[
-		'getAvailableAddresses'
-	] = async (name, signupToken) => {
-		const addresses = await checkAvailableAddressesForName(
-			this.net, this.serviceURL, name, signupToken
-		);
-		return addresses;
-	};
 
 	private createUserParams: SignUpService['createUserParams'] = async (
 		pass, progressCB

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2023 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,6 +17,26 @@
 
 import { NetClient, makeException } from './request-utils';
 import * as api from '../lib-common/user-admin-api/signup';
+
+export async function checkAvailableDomains(
+	client: NetClient, serviceUrl: string, signupToken: string|undefined
+): Promise<string[]> {
+	const reqData: api.availableDomains.Request = { signupToken };
+	const rep = await client.doJsonRequest<string[]>({
+		method: api.availableDomains.method,
+		url: serviceUrl + api.availableDomains.URL_END,
+		responseType: 'json'
+	}, reqData);
+	if (rep.status === api.availableDomains.SC.ok) {
+		if (Array.isArray(rep.data)) {
+			return rep.data;
+		} else {
+			throw makeException(rep, 'Reply is malformed');
+		}
+	} else {
+		throw makeException(rep, 'Unexpected status');
+	}
+}
 
 export async function checkAvailableAddressesForName(
 	client: NetClient, serviceUrl: string, name: string,

@@ -28,7 +28,14 @@ declare namespace web3n.startup {
 		 * @param serviceUrl of 3NWeb signup service url.
 		 */
 		setSignUpServer(serviceUrl: string): Promise<void>;
-		
+
+		/**
+		 * @param signupToken
+		 * @return a promise, resolvable to an array of available domains for
+		 * creation of a new account.
+		 */
+		getAvailableDomains(signupToken?: string): Promise<string[]>;
+
 		/**
 		 * @param name is a part of address that comes before @domain
 		 * @param signupToken

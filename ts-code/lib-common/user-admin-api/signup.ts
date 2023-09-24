@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2016, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2016, 2020, 2023 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -46,6 +46,24 @@ export namespace availableAddressesForName {
 
 }
 Object.freeze(availableAddressesForName);
+
+export namespace availableDomains {
+
+	export const URL_END = 'available-domains';
+
+	export const method = 'POST';
+
+	export interface Request {
+		signupToken?: string;
+	}
+
+	export const SC = {
+		ok: 200
+	};
+	Object.freeze(SC);
+
+}
+Object.freeze(availableDomains);
 
 export interface UserMidParams {
 	defaultPKey: {
