@@ -43,7 +43,8 @@ export class ServicesRunner {
 
 	async start(): Promise<void> {
 		const { stop } = await serverMod.mock.startOnLocalhost(
-			this.dataFolder, this.port, this.domains);
+			this.dataFolder, this.port, this.domains
+		);
 		this.stopFn = stop;
 	}
 
@@ -64,7 +65,7 @@ export class ServicesRunner {
 	}
 
 	createSingleUserSignupCtx(userId: string): Promise<string> {
-		return serverMod.confs.addSingleUserSignup(this.dataFolder, userId);
+		return serverMod.addSingleUserSignup(this.dataFolder, userId);
 	}
 
 }

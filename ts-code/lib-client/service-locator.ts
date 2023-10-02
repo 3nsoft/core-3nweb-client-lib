@@ -204,19 +204,60 @@ function noServiceRecordExc(address: string): ServLocException {
  * undefined, when service record is not found.
  */
 function extractPair(
-	txtRecords: string[][], serviceLabel: string
+	txtRecords: string[][], serviceLabel: ServiceTypeDNSLabel
 ): string|undefined {
 	for (const txtRecord of txtRecords) {
-		const txt = txtRecord.join(' ');
-		const eqPos = txt.indexOf('=');
-		if (eqPos < 0) { continue; }
-		const name = txt.substring(0, eqPos).trim();
-		if (name === serviceLabel) {
-			const value = txt.substring(eqPos+1).trim();
-			return value;
+		let joinedTXTstanzas = txtRecord.join('');
+		let record = getRecordAtStartOf(joinedTXTstanzas);
+		while (record) {
+			if (record.service === serviceLabel) {
+				const value = record.value.trim();
+				if (value.length > 0) {
+					return value;
+				}
+			}
+			if (record.txtTail) {
+				record = getRecordAtStartOf(record.txtTail);
+			} else {
+				break;
+			}
 		}
 	}
 	return;
+}
+
+const recordsStarts: { [key in ServiceTypeDNSLabel]: string; } = {
+	"3nstorage": '3nstorage=',
+	asmail: 'asmail=',
+	mailerid: 'mailerid='
+}
+
+function getRecordAtStartOf(txt: string): {
+	service: ServiceTypeDNSLabel; value: string; txtTail?: string;
+}|undefined {
+	let service: ServiceTypeDNSLabel|undefined = undefined;
+	for (const [ label, startSeq ] of Object.entries(recordsStarts)) {
+		if (txt.startsWith(startSeq)) {
+			service = label as ServiceTypeDNSLabel;
+			txt = txt.substring(startSeq.length);
+			break;
+		}
+	}
+	if (!service) { return; }
+	for (const delimiter of Object.values(recordsStarts)) {
+		const endPos = txt.indexOf(delimiter);
+		if (endPos >= 0) {
+			return {
+				service,
+				value: txt.substring(0, endPos),
+				txtTail: txt.substring(endPos)
+			};
+		}
+	}
+	return {
+		service,
+		value: txt
+	};
 }
 
 interface DnsError extends Error {
