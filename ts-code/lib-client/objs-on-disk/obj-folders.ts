@@ -100,6 +100,7 @@ export class ObjFolders {
 	private readonly syncProcs = new NamedProcs();
 	private readonly accessFolder: string;
 	private readonly generationsFolder: string;
+	// XXX rotation process is disabled, till its error is fixed
 	private readonly rotationsProc: RotationsProc|undefined;
 
 	private constructor(
@@ -117,11 +118,12 @@ export class ObjFolders {
 			if (!canMove) { throw new Error(
 				`Missing a can-move predicate when generations are present`); }
 			this.generationsFolder = join(this.path, GENERATIONS_DIR);
-			this.rotationsProc = new RotationsProc(
-				this.accessFolder, this.generationsFolder,
-				this.generations, this.syncProcs, canMove, this.saveCfg,
-				this.logError);
-			this.rotationsProc.scheduleStart(10*60);
+			// XXX rotation process is disabled, till its error is fixed
+			// this.rotationsProc = new RotationsProc(
+			// 	this.accessFolder, this.generationsFolder,
+			// 	this.generations, this.syncProcs, canMove, this.saveCfg,
+			// 	this.logError);
+			// this.rotationsProc.scheduleStart(10*60);
 		}
 		Object.freeze(this);
 	}
