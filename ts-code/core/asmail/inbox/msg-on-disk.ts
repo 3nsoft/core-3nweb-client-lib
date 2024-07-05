@@ -130,12 +130,14 @@ export class MsgOnDisk {
 		return this.status.keyStatus;
 	}
 
-	updateMsgKeyStatus(newStatus: MsgKeyStatus): Promise<void> {
+	updateMsgKeyStatus(
+		newStatus: Exclude<MsgKeyStatus, 'not-checked'>
+	): Promise<void> {
 		return this.syncProc.startOrChain(async () => {
-			if (newStatus === 'not-checked') { throw new Error(
-				`New key status cannot be ${newStatus}.`); }
 			if (this.status.keyStatus === 'not-checked') {
 				this.status.keyStatus = newStatus;
+			} else if (this.status.keyStatus === newStatus) {
+				return;
 			} else {
 				throw Error(`Message has key status ${this.status.keyStatus}, and can't be updated to ${newStatus}`);
 			}

@@ -293,8 +293,10 @@ export class InboxOnServer {
 			await msgOnDisk.updateMsgKeyStatus('ok');
 			return true;
 		} catch (exc) {
-			await msgOnDisk.updateMsgKeyStatus('fail');
 			await this.logError(exc, `Problem with opening message ${msgId}`);
+			if (msgOnDisk.keyStatus !== 'ok') {
+				await msgOnDisk.updateMsgKeyStatus('fail');
+			}
 			return false;
 		}
 	}
@@ -314,9 +316,11 @@ export class InboxOnServer {
 	private checkServerAuthIfPresent(meta: MsgMeta, decrInfo: MsgKeyInfo): void {
 		// if sender authenticated to server, check that it matches address,
 		// recovered from message decryption 
-		if (meta.authSender &&
-				!areAddressesEqual(meta.authSender, decrInfo.correspondent)) {
-			throw new Error(`Sender authenticated to server as ${meta.authSender}, while decrypting key is associated with ${decrInfo.correspondent}`);
+		if (meta.authSender
+		&& !areAddressesEqual(meta.authSender, decrInfo.correspondent)) {
+			throw new Error(
+				`Sender authenticated to server as ${meta.authSender}, while decrypting key is associated with ${decrInfo.correspondent}`
+			);
 		}
 	}
 
@@ -337,7 +341,8 @@ export class InboxOnServer {
 				msgIds = await this.msgReceiver.listMsgs(fromTS);
 			} catch (exc) {
 				if ((exc as ConnectException).type !== 'http-connect') {
-					throw exc; }
+					throw exc;
+				}
 				return this.index.listMsgs(fromTS);
 			}
 			const indexedMsgs = await this.index.listMsgs(fromTS);
@@ -349,9 +354,11 @@ export class InboxOnServer {
 			}
 			if (msgIds.length === 0) { return indexedMsgs; }
 			const keying = msgIds.map(msgId =>
-				this.startCachingAndAddKeyToIndex(msgId).catch(async (exc) => {
+				this.startCachingAndAddKeyToIndex(msgId)
+				.catch(async (exc) => {
 					await this.logError(
-						exc, `Failed to start caching message ${msgId}`);
+						exc, `Failed to start caching message ${msgId}`
+					);
 				}));
 			await Promise.all(keying);
 			return this.index.listMsgs(fromTS);

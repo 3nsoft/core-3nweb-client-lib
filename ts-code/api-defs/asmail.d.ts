@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016, 2020, 2022, 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -217,18 +217,21 @@ declare namespace web3n.asmail {
 		 * from event source, or if next throws something, although it must
 		 * handle its own stuff.
 		 */
-		subscribe(event: 'message', observer: Observer<IncomingMessage>):
+		subscribe(event: InboxEventType, observer: Observer<IncomingMessage>):
 			() => void;
 		
 	}
 
+	type InboxEventType = 'message';
+
 	interface MsgStruct {
 		/**
 		 * Message type can be
-		 * (a) "mail" for messages that better be viewed in mail styly UI,
-		 * (b) "chat" for messages that better be viewed in chat style UI,
-		 * (c) "app:<app-domain>" for application messages, for example, messages
-		 * for app with domain app.com should have type "app:app.com".
+		 * - "mail" for messages that better be viewed in mail styly UI,
+		 * - "chat" for messages that better be viewed in chat style UI,
+		 * - "app:<app-domain>" for application messages, for example, messages
+		 *   with type "app:app.example.com" is for app.example.com app,
+		 * - "webrtc-signaling" for WebRTC off band signalling.
 		 */
 		msgType: string;
 		subject?: string;

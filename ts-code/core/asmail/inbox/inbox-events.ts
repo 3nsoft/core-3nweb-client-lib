@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019, 2022 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2022, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,7 @@ import { mergeMap, filter, share } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
+type InboxEventType = web3n.asmail.InboxEventType;
 type Observer<T> = web3n.Observer<T>;
 type Events = msgRecievedCompletely.Event;
 type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
@@ -67,7 +68,7 @@ export class InboxEvents {
 
 	private newMsg$: Observable<IncomingMessage>;
 
-	subscribe<T>(event: string, observer: Observer<T>): () => void {
+	subscribe<T>(event: InboxEventType, observer: Observer<T>): () => void {
 		if (event === 'message') {
 			const subscription = (this.newMsg$ as Observable<any>).subscribe(
 				toRxObserver(observer));
