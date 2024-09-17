@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,6 +20,7 @@ import { setupWithUsers } from '../../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../../libs-for-tests/startup';
 import { User, testApp } from '../../libs-for-tests/core-runner';
 import { sleep } from '../../../lib-common/processes/sleep';
+import { stringOfB64UrlSafeCharsSync } from '../../../lib-common/random-node';
 
 // NOTE: it-specs inside signIn process expect to run in a given order -- they
 //		change app's state, expected by following specs in this describe.
@@ -50,18 +51,37 @@ describe('signIn process (empty cache)', () => {
 		expect(users.length).toBe(0);
 	});
 
+	itCond(`fails for user id with wrong domain`, async () => {
+		try {
+			const unknownId = user.userId + stringOfB64UrlSafeCharsSync(20);
+			await w3n.signIn.startLoginToRemoteStorage(unknownId);
+			fail(`Case with bad domain should throw an exception`);
+		} catch (exc) {
+			expect((exc as web3n.RuntimeException).runtimeException).toBe(true);
+			expect((exc as web3n.RuntimeException).cause).toBeTruthy();
+		}
+	});
+
+	itCond(`fails MailerId provisioning with unknown user id`, async () => {
+		const unknownId = stringOfB64UrlSafeCharsSync(20) + user.userId;
+		const userExists = await w3n.signIn.startLoginToRemoteStorage(unknownId);
+		expect(userExists).toBe(false);
+	});
+
 	itCond(`won't startup with a wrong pass`, async () => {
 
 		// start MailerId provisioning
 		const userExists = await w3n.signIn.startLoginToRemoteStorage(
-			user.userId);
+			user.userId
+		);
 		expect(userExists).toBe(true);
 
 		// completing MailerId provisioning
 		const notifications: number[] = [];
 		const notifier = (p: number) => { notifications.push(p); }
 		const ok = await w3n.signIn.completeLoginAndLocalSetup(
-			'wrong password', notifier);
+			'wrong password', notifier
+		);
 		expect(ok).withContext('false should be returned for wrong pass').toBe(false);
 		checkKeyDerivNotifications(notifications);
 	}, 60000);
@@ -75,14 +95,16 @@ describe('signIn process (empty cache)', () => {
 
 		// start login
 		const userExists = await w3n.signIn.startLoginToRemoteStorage(
-			user.userId);
+			user.userId
+		);
 		expect(userExists).toBe(true);
 
 		// complete login and a local storage setup
 		const notifications: number[] = [];
 		const notifier = (p: number) => { notifications.push(p); }
 		const ok = await w3n.signIn.completeLoginAndLocalSetup(
-			user.pass, notifier);
+			user.pass, notifier
+		);
 		expect(ok).withContext('indicates completion of login and storage setup').toBe(true);
 		checkKeyDerivNotifications(notifications);
 
@@ -91,7 +113,8 @@ describe('signIn process (empty cache)', () => {
 
 		try {
 			const { caps, close } = core.makeCAPsForApp(
-				testApp.appDomain, testApp.capsRequested);
+				testApp.appDomain, testApp.capsRequested
+			);
 			expect(typeof caps).toBe('object');
 			expect(typeof close).toBe('function');
 			close();

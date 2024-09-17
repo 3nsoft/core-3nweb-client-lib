@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -172,12 +172,16 @@ function checkAndPrepareURL(value: string): string {
 
 type ServLocException = web3n.asmail.ServLocException;
 
-function domainNotFoundExc(address: string): ServLocException {
+function domainNotFoundExc(
+	address: string,
+	cause: { code: string; hostname: string; message: string; }
+): ServLocException {
 	const exc: ServLocException = {
 		runtimeException: true,
 		type: 'service-locating',
 		address,
-		domainNotFound: true
+		domainNotFound: true,
+		cause
 	};
 	return exc;
 }
@@ -293,10 +297,11 @@ export function makeServiceLocator(
 			const url = checkAndPrepareURL(recValue);
 			return url;
 		} catch (err) {
-			if ((<DnsError> err).code === DNS_ERR_CODE.NODATA) {
+			const { code, hostname, message } = (err as DnsError);
+			if (code === DNS_ERR_CODE.NODATA) {
 				throw noServiceRecordExc(address);
-			} else if ((<DnsError> err).code === DNS_ERR_CODE.NOTFOUND) {
-				throw domainNotFoundExc(address)
+			} else if (hostname) {
+				throw domainNotFoundExc(address, { code, hostname, message });
 			} else {
 				throw err;
 			}
