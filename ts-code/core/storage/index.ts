@@ -19,7 +19,6 @@ import { GetSigner } from '../id-manager';
 import { GenerateKey } from '../startup/sign-in';
 import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
 import { XspFS as xspFS } from '../../lib-client/3nstorage/xsp-fs/fs';
-import { StorageException as BaseStorageExc } from '../../lib-client/3nstorage/exceptions';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
 import { ServiceLocator } from '../../lib-client/service-locator';

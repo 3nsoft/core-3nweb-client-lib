@@ -199,10 +199,13 @@ interface TransferrableError {
 type RuntimeException = web3n.RuntimeException;
 
 function toTransferrableError(e: ErrorWithCause): TransferrableError {
+	if ((e as RuntimeException).runtimeException) {
+		return e as any;
+	}
 	const err: TransferrableError = {
-		message: e.message,
-		name: e.name,
-		stack: e.stack,
+		message: (e as Error).message,
+		name: (e as Error).name,
+		stack: (e as Error).stack,
 	};
 	if (e.cause) {
 		if ((typeof e.cause !== 'object') ||

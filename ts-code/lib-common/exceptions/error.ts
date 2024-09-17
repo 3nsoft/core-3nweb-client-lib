@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020, 2022, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,22 +14,29 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-export interface ErrorWithCause extends Error {
-	cause: any;
-}
+import { makeRuntimeException } from "./runtime";
 
 type EncryptionException = web3n.EncryptionException;
+type RuntimeException = web3n.RuntimeException;
 
-export function errWithCause(cause: any, message: string): ErrorWithCause {
-	const err = <ErrorWithCause> new Error(message);
-	err.cause = cause;
-	if ((cause as EncryptionException).failedCipherVerification) {
-		(err as any as EncryptionException).failedCipherVerification = true;
+export type ErrorWithCause = (Error & { cause: any; }) | RuntimeException;
+
+export function errWithCause(
+	cause: any, message: string
+): ErrorWithCause|RuntimeException {
+	if ((cause as RuntimeException).runtimeException) {
+		return makeRuntimeException('secondary', { message, cause }, {});
+	} else {
+		const err = <ErrorWithCause> new Error(message);
+		err.cause = cause;
+		if ((cause as EncryptionException).failedCipherVerification) {
+			(err as any as EncryptionException).failedCipherVerification = true;
+		}
+		return err;
 	}
-	return err;
 }
 
-export function recursiveErrJSONify(err: web3n.RuntimeException): any {
+export function recursiveErrJSONify(err: RuntimeException): any {
 	if (!err || (typeof err !== 'object') || Array.isArray(err)) {
 		return err;
 	} else if (err.runtimeException) {
@@ -52,7 +59,7 @@ export function recursiveErrJSONify(err: web3n.RuntimeException): any {
 export function stringifyErr(err: any): string {
 	if (!err) { return ''; }
 
-	let json = recursiveErrJSONify(err) as web3n.RuntimeException;
+	let json = recursiveErrJSONify(err) as RuntimeException;
 	let errStr: string;
 	if (!json || (typeof json !== 'object') || err.runtimeException) {
 		try {
