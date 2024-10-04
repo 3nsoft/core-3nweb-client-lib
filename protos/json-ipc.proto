@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package json_ipc;
+
+message ValuesSequence {
+	message BinaryValue {
+		bytes arr = 1;
+		repeated string obj_location = 2;
+	}
+	message TransferredObj {
+		uint32 index_in_passed = 1;
+		repeated string obj_location = 2;
+	}
+	message Value {
+		string json = 1;
+		repeated BinaryValue binary_in_json = 2;
+		repeated TransferredObj transferred_in_json = 3;
+		BinaryValue arr = 4;
+		TransferredObj transferred = 5;
+	}
+	repeated Value values = 1;
+}

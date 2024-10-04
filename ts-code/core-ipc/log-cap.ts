@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,38 +16,19 @@
 */
 
 import { ExposedFn, Caller } from "../ipc-via-protobuf/connector";
-import { ErrorValue, errFromMsg, errToMsg } from "../ipc-via-protobuf/protobuf-msg";
-import { ProtoType } from '../lib-client/protobuf-type';
-import { logger as pb } from '../protos/logger.proto';
+import { stringifyErr } from "../lib-common/exceptions/error";
+import { makeReqRepFuncCaller } from "./json-ipc-wrapping/caller-side-wrap";
+import { wrapReqReplyFunc } from "./json-ipc-wrapping/service-side-wrap";
 
 type Logger = web3n.caps.common.Logger;
 
-interface LogRequest {
-	logType: string;
-	msg: string;
-	err?: ErrorValue;
-}
-const logReqType = ProtoType.for<LogRequest>(pb.LogRequestBody);
-
 export function exposeLogger(fn: Logger): ExposedFn {
-	return buf => {
-		const { logType, msg, err } = logReqType.unpack(buf);
-		const promise = (err ?
-			fn(logType as any, msg, errFromMsg(err)) :
-			fn(logType as any, msg));
-		return { promise };
-	};
+	return wrapReqReplyFunc(undefined, fn);
 }
 
 export function makeLogCaller(caller: Caller, path: string[]): Logger {
-	return (type, msg, err) => {
-		const req: LogRequest = { logType: type, msg };
-		if (err) {
-			req.err = errToMsg(err);
-		}
-		return caller.startPromiseCall(
-			path, logReqType.pack(req)) as Promise<void>;
-	}
+	const log = makeReqRepFuncCaller<Logger>(caller, path);
+	return (type, msg, err) => log(type, msg, stringifyErr(err));
 }
 
 

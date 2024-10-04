@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,91 +15,33 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedFn, Caller, makeIPCException, ExposedObj } from "../../ipc-via-protobuf/connector";
-import { ProtoType } from '../../lib-client/protobuf-type';
-import { mailerid as pb } from '../../protos/mailerid.proto';
-import { decodeFromUtf8, encodeToUtf8, methodPathFor } from "../../ipc-via-protobuf/protobuf-msg";
+import { Caller, ExposedObj } from "../../ipc-via-protobuf/connector";
+import { makeReqRepObjCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
+import { wrapReqReplySrvMethod } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
 
 type MailerId = web3n.mailerid.Service;
 
 export function exposeMailerIdCAP(cap: MailerId): ExposedObj<MailerId> {
 	return {
-		getUserId: getUserId.wrapService(cap.getUserId),
-		login: login.wrapService(cap.login)
+		getUserId: wrapReqReplySrvMethod(cap, 'getUserId'),
+		login: wrapReqReplySrvMethod(cap, 'login')
 	};
+}
+
+function callMailerId<M extends keyof MailerId>(
+	caller: Caller, objPath: string[], method: M
+): MailerId[M] {
+	return makeReqRepObjCaller<MailerId, M>(caller, objPath, method);
 }
 
 export function makeMailerIdCaller(
 	caller: Caller, objPath: string[]
 ): MailerId {
 	return {
-		getUserId: getUserId.makeCaller(caller, objPath),
-		login: login.makeCaller(caller, objPath)
+		getUserId: callMailerId(caller, objPath, 'getUserId'),
+		login: callMailerId(caller, objPath, 'login')
 	};
 }
-
-
-namespace getUserId {
-
-	export function wrapService(fn: MailerId['getUserId']): ExposedFn {
-		return () => {
-			const promise = fn()
-			.then(userId => encodeToUtf8(userId) as Buffer);
-			return { promise };
-		};
-	}
-
-	export function makeCaller(
-		caller: Caller, objPath: string[]
-	): MailerId['getUserId'] {
-		const path = methodPathFor<MailerId>(objPath, 'getUserId');
-		return () => caller.startPromiseCall(path, undefined)
-		.then(buf => {
-			if (!buf) { throw makeIPCException({ missingBodyBytes: true }); }
-			return decodeFromUtf8(buf);
-		});
-	}
-
-}
-Object.freeze(getUserId);
-
-
-namespace login {
-
-	interface Request {
-		serviceUrl: string;
-	}
-
-	interface Reply {
-		sessionId: string;
-	}
-
-
-	const requestType = ProtoType.for<Request>(pb.LoginRequestBody);
-	const replyType = ProtoType.for<Reply>(pb.LoginReplyBody);
-
-	export function wrapService(fn: MailerId['login']): ExposedFn {
-		return bytes => {
-			const { serviceUrl } = requestType.unpack(bytes);
-			const promise = fn(serviceUrl)
-			.then(sessionId => replyType.pack({ sessionId }));
-			return { promise };
-		};
-	}
-
-	export function makeCaller(
-		caller: Caller, objPath: string[]
-	): MailerId['login'] {
-		const path = methodPathFor<MailerId>(objPath, 'login');
-		return async serviceUrl => {
-			const req = requestType.pack({ serviceUrl });
-			const buf = await caller.startPromiseCall(path, req)
-			return replyType.unpack(buf).sessionId;
-		}
-	}
-
-}
-Object.freeze(getUserId);
 
 
 Object.freeze(exports);

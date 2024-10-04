@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2024 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,8 @@ export { FileMsg, makeFileCaller, exposeFileService } from "./core-ipc/file";
 export { FSMsg, makeFSCaller, exposeFSService } from "./core-ipc/fs";
 export { makeSinkCaller, exposeSinkService, makeSrcCaller, exposeSrcService } from "./core-ipc/bytes";
 export { makeLogCaller, exposeLogger } from "./core-ipc/log-cap";
+export * as callerSideJSONWrap from "./core-ipc/json-ipc-wrapping/caller-side-wrap";
+export * as serviceSideJSONWrap from "./core-ipc/json-ipc-wrapping/service-side-wrap";
 
 
 Object.freeze(exports);
