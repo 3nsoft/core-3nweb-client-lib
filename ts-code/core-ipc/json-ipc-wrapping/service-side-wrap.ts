@@ -48,10 +48,11 @@ export function wrapReqReplyFunc(
 ): ExposedFn {
 	return buf => {
 		const args = argsFromBuffer(buf, transforms);
-		const promise = (args ?
+		let promise = (args ?
 			func.call(srv, ...args) :
 			func.call(srv)
-		).then(result => resultToBuffer(result, transforms));
+		);
+		promise = promise?.then(result => resultToBuffer(result, transforms));
 		return { promise }
 	};
 }
