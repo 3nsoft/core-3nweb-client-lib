@@ -26,7 +26,7 @@ type Observer<T> = web3n.Observer<T>;
 
 export function wrapSignInCAP(cap: SignInService): ExposedObj<SignInService> {
 	return {
-		completeLoginAndLocalSetup: wrapObservingFunc<ProgressValue>(undefined, (
+		completeLoginAndLocalSetup: wrapObservingFunc<ProgressValue>((
 			obs, pass
 		) => {
 			cap.completeLoginAndLocalSetup(pass, p => obs.next?.({ p }))
@@ -40,7 +40,7 @@ export function wrapSignInCAP(cap: SignInService): ExposedObj<SignInService> {
 		startLoginToRemoteStorage: wrapReqReplySrvMethod(
 			cap, 'startLoginToRemoteStorage'
 		),
-		useExistingStorage: wrapObservingFunc<ProgressValue>(undefined, (
+		useExistingStorage: wrapObservingFunc<ProgressValue>((
 			obs, addr, pass
 		) => {
 			cap.useExistingStorage(addr, pass, p => obs.next?.({ p }))
@@ -127,7 +127,7 @@ export function wrapSignUpCAP(cap: SignUpService): ExposedObj<SignUpService> {
 			cap, 'getAvailableAddresses'
 		),
 		addUser: wrapReqReplySrvMethod(cap, 'addUser'),
-		createUserParams: wrapObservingFunc<number>(undefined, (obs, pass) => {
+		createUserParams: wrapObservingFunc<number>((obs, pass) => {
 			cap.createUserParams(pass, p => obs.next?.(p))
 			.then(() => obs.complete?.(), err => obs.error?.(err));
 			return noop;

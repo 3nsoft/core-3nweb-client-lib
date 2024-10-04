@@ -125,9 +125,29 @@ function toPassedDatum(
 }
 
 export function wrapObservingFunc<TEvent>(
-	srv: object|undefined, func: HandleObservingCall<TEvent>,
+	func: HandleObservingCall<TEvent>,
+	transforms?: TransformOpts
+): ExposedFn;
+export function wrapObservingFunc<TEvent>(
+	srv: object,
+	func: HandleObservingCall<TEvent>,
+	transforms?: TransformOpts
+): ExposedFn;
+export function wrapObservingFunc<TEvent>(
+	srvOrFn: object|HandleObservingCall<TEvent>,
+	funcOrTransforms: HandleObservingCall<TEvent>|TransformOpts|undefined,
 	transforms?: TransformOpts
 ): ExposedFn {
+	let srv: object|undefined;
+	let func: HandleObservingCall<TEvent>;
+	if (typeof srvOrFn === 'function') {
+		srv = undefined;
+		func = srvOrFn as HandleObservingCall<TEvent>;
+		transforms = funcOrTransforms as TransformOpts|undefined;
+	} else {
+		srv = srvOrFn as object;
+		func = funcOrTransforms as HandleObservingCall<TEvent>;
+	}
 	return buf => {
 		const args = argsFromBuffer(buf, transforms);
 		const s = new Subject<TEvent>();
