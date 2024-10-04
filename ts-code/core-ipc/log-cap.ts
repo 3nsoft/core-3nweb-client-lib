@@ -23,7 +23,7 @@ import { wrapReqReplyFunc } from "./json-ipc-wrapping/service-side-wrap";
 type Logger = web3n.caps.common.Logger;
 
 export function exposeLogger(fn: Logger): ExposedFn {
-	return wrapReqReplyFunc(undefined, fn);
+	return wrapReqReplyFunc(fn);
 }
 
 export function makeLogCaller(caller: Caller, path: string[]): Logger {

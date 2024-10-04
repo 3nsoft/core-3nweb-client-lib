@@ -44,8 +44,26 @@ export function wrapReqReplySrvMethod<T extends object, M extends keyof T>(
 }
 
 export function wrapReqReplyFunc(
-	srv: object|undefined, func: HandleReqReplyCall, transforms?: TransformOpts
+	srv: object, func: HandleReqReplyCall, transforms?: TransformOpts
+): ExposedFn;
+export function wrapReqReplyFunc(
+	func: HandleReqReplyCall, transforms?: TransformOpts
+): ExposedFn;
+export function wrapReqReplyFunc(
+	srvOrFn: object|HandleReqReplyCall,
+	funcOrTransforms: HandleReqReplyCall|TransformOpts|undefined,
+	transforms?: TransformOpts
 ): ExposedFn {
+	let srv: object|undefined;
+	let func: HandleReqReplyCall;
+	if (typeof srvOrFn === 'function') {
+		srv = undefined;
+		func = srvOrFn as HandleReqReplyCall;
+		transforms = funcOrTransforms as TransformOpts|undefined;
+	} else {
+		srv = srvOrFn as object;
+		func = funcOrTransforms as HandleReqReplyCall;
+	}
 	return buf => {
 		const args = argsFromBuffer(buf, transforms);
 		let promise = (args ?
