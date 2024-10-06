@@ -28,8 +28,10 @@ export function exposeLogger(fn: Logger): ExposedFn {
 
 export function makeLogCaller(caller: Caller, path: string[]): Logger {
 	const log = makeReqRepFuncCaller<Logger>(caller, path);
-	return (type, msg, err) => log(type, msg, stringifyErr(err));
+	return (type, msg, err) => log(type, msg, stringifyErr(err)).catch(noop);
 }
+
+function noop() {}
 
 
 Object.freeze(exports);

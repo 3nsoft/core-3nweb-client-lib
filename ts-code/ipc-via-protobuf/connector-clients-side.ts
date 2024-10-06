@@ -211,11 +211,11 @@ export class ClientsSideImpl implements ClientsSide {
 		const fnCallNum = reqEnv.headers.fnCallNum!.value;
 		try {
 			this.startCall(reqEnv);
-			return deferred.promise;
 		} catch (err) {
 			this.fnCalls.delete(fnCallNum);
-			throw err;
+			deferred.reject(err);
 		}
+		return deferred.promise;
 	}
 
 	startObservableCall(
