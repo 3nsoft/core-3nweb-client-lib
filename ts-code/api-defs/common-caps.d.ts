@@ -32,7 +32,7 @@ declare namespace web3n.caps.common {
 		mail?: MailCAPSetting;
 		storage?: StorageCAPSetting;
 		mailerid?: true;
-		log?: LogCAPSetting;
+		logToPlatform?: true;
 	}
 
 	interface StorageCAPSetting {
@@ -65,12 +65,10 @@ declare namespace web3n.caps.common {
 		receivingFrom?: 'all' | { whitelist: string[]; };
 	}
 
-	type LogCAPSetting = 'all';
-
 	interface W3N {
+		log: Logger;
 		mail?: asmail.Service;
 		storage?: storage.Service;
-		log?: Logger;
 		mailerid?: mailerid.Service;
 	}
 

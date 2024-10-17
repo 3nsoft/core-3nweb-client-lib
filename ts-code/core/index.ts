@@ -217,7 +217,7 @@ export class Core {
 
 		const { storage, close } = this.makeStorageCAP(appDomain, requestedCAPs);
 		const mail = this.makeMailCAP(requestedCAPs);
-		const log = this.makeLogCAP(appDomain, requestedCAPs);
+		const log = this.makeLogCAP(appDomain, requestedCAPs)!;
 		const mailerid = this.makeMailerIdCAP(requestedCAPs);
 
 		const caps: W3N = { mail, log, mailerid, storage };
@@ -252,8 +252,8 @@ export class Core {
 
 	private makeLogCAP(
 		appDomain: string, requestedCAPs: RequestedCAPs
-	): W3N['log'] {
-		if (requestedCAPs.log === 'all') {
+	): W3N['log']|undefined {
+		if (requestedCAPs.logToPlatform === true) {
 			return (type, msg, e) => this.logger.appLog(
 				type, appDomain, msg, e
 			);

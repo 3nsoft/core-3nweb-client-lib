@@ -50,10 +50,12 @@ export function makeW3Nclient<T extends W3N>(
 		mailerid: makeMailerIdCaller,
 		storage: makeStorageCaller,
 	};
-	return makeClientSide(clientSide, mainCAPs, extraCAPs);
+	const clientW3N = makeClientSide(clientSide, mainCAPs, extraCAPs);
+	addLogToConsoleIfNoCap(clientW3N);
+	return clientW3N;
 }
 
-export function promiseW3Nclient<T extends W3N>(
+export async function promiseW3Nclient<T extends W3N>(
 	clientSide: Caller, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
 ): Promise<T> {
 	const mainCAPs: ClientCAPsWraps<W3N> = {
@@ -62,7 +64,35 @@ export function promiseW3Nclient<T extends W3N>(
 		mailerid: makeMailerIdCaller,
 		storage: promiseStorageCaller,
 	};
-	return promiseClientSide(clientSide, mainCAPs, extraCAPs);
+	const clientW3N = await promiseClientSide(clientSide, mainCAPs, extraCAPs);
+	addLogToConsoleIfNoCap(clientW3N);
+	return clientW3N;
+}
+
+function addLogToConsoleIfNoCap(clientW3N: W3N): void {
+	if (!clientW3N.log) {
+		clientW3N.log = async (type, msg, err) => {
+			if (type === 'error') {
+				if (err === undefined) {
+					console.error(msg);
+				} else {
+					console.error(msg, err);
+				}
+			} else if (type === 'warning') {
+				if (err === undefined) {
+					console.warn(msg);
+				} else {
+					console.warn(msg, err);
+				}
+			} else {
+				if (err === undefined) {
+					console.log(msg);
+				} else {
+					console.log(msg, err);
+				}
+			}
+		}
+	}
 }
 
 
