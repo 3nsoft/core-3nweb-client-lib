@@ -55,11 +55,15 @@ export interface Caller {
 	startObservableCall(
 		path: string[], req: EnvelopeBody, obs: SubjectLike<EnvelopeBody>
 	): () => void;
-	registerClientDrop(o: any, srvRef: ObjectReference<any>): void;
+	registerClientDrop(
+		o: any, srvRef: ObjectReference<any>, reconstructData?: any
+	): void;
 	srvRefOf(clientObj: any): ObjectReference<any>;
 	listObj?: (path: string[]) => string[];
 	listObjAsync?: (path: string[]) => Promise<string[]>;
-	findCallingObjByRef<T>(ref: ObjectReference<any>): T|undefined;
+	findCallingObjByRef<T, R>(
+		ref: ObjectReference<any>
+	): { obj?: T; reconstructData?: R; }|undefined;
 }
 
 export interface ObjectFromCore {

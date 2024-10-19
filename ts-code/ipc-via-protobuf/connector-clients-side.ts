@@ -46,7 +46,9 @@ export class ClientsSideImpl implements ClientsSide {
 	private readonly fnCalls = new Map<number, FnCall>();
 	private fnCallCounter = 1;
 	private readonly srvRefs = new WeakMap<any, ObjectReference<any>>();
-	private readonly weakSrvByRefs = new Map<string, WeakRef<any>>();
+	private readonly weakSrvByRefs = new Map<string, {
+		weakRef: WeakRef<any>; reconstructData?: any;
+	}>();
 	private readonly srvFinalRegistry = new FinalizationRegistry(
 		this.doOnClientObjDrop.bind(this)
 	);
@@ -173,7 +175,8 @@ export class ClientsSideImpl implements ClientsSide {
 		const callerWrap: Caller = {
 			listObj: (this.syncReqToListObj ? this.listObj.bind(this) : undefined),
 			listObjAsync: (this.asyncReqToListObj ?
-				this.listObjAsync.bind(this) : undefined),
+				this.listObjAsync.bind(this) : undefined
+			),
 			registerClientDrop: this.registerClientDrop.bind(this),
 			srvRefOf: this.srvRefOf.bind(this),
 			startObservableCall: this.startObservableCall.bind(this),
@@ -232,10 +235,14 @@ export class ClientsSideImpl implements ClientsSide {
 		}
 	}
 
-	registerClientDrop(o: any, srvRef: ObjectReference<any>): void {
+	registerClientDrop(
+		o: any, srvRef: ObjectReference<any>, reconstructData?: any
+	): void {
 		(o as ObjectFromCore)._isObjectFromCore = true;
 		this.srvFinalRegistry.register(o, srvRef);
-		this.weakSrvByRefs.set(srvRef.path[0], new WeakRef(o));
+		this.weakSrvByRefs.set(srvRef.path[0], {
+			weakRef: new WeakRef(o), reconstructData
+		});
 		this.srvRefs.set(o, srvRef);
 	}
 
@@ -258,12 +265,16 @@ export class ClientsSideImpl implements ClientsSide {
 		}
 	}
 
-	findCallingObjByRef<T>(ref: ObjectReference<any>): T|undefined {
-		const weakRef = this.weakSrvByRefs.get(ref.path[0]);
-		if (!weakRef) { return; }
-		const o = weakRef.deref() as T;
-		if (o) {
-			return o;
+	findCallingObjByRef<T, R>(
+		ref: ObjectReference<any>
+	): { obj?: T; reconstructData?: R; }|undefined {
+		const found = this.weakSrvByRefs.get(ref.path[0]);
+		if (!found) { return; }
+		const obj = found.weakRef.deref() as T;
+		if (obj) {
+			return { obj };
+		} else if (found.reconstructData) {
+			return { reconstructData: found.reconstructData };
 		} else {
 			this.weakSrvByRefs.delete(ref.path[0]);
 			return;

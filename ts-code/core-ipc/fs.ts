@@ -138,7 +138,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 			}
 		}
 	}
-	caller.registerClientDrop(fs, fsMsg.impl);
+	caller.registerClientDrop(fs, fsMsg.impl, fsMsg);
 	return fs;
 }
 

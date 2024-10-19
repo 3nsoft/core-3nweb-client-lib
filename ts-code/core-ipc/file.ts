@@ -104,7 +104,7 @@ export function makeFileCaller(
 			}
 		}
 	}
-	caller.registerClientDrop(file, fileMsg.impl);
+	caller.registerClientDrop(file, fileMsg.impl, fileMsg);
 	return file;
 }
 
