@@ -247,8 +247,10 @@ export class ClientsSideImpl implements ClientsSide {
 	}
 
 	private doOnClientObjDrop(srvRef: ObjectReference<any>): void {
-		this.weakSrvByRefs.delete(srvRef.path[0]);
-		this.sendObjDropMsg(srvRef);
+		if (!this.weakSrvByRefs.get(srvRef.path[0])?.weakRef.deref()) {
+			this.weakSrvByRefs.delete(srvRef.path[0]);
+			this.sendObjDropMsg(srvRef);
+		}
 	}
 
 	private sendObjDropMsg(srvRef: ObjectReference<any>): void {
