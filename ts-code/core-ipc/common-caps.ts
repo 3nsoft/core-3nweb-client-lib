@@ -51,7 +51,7 @@ export function makeW3Nclient<T extends W3N>(
 		storage: makeStorageCaller,
 	};
 	const clientW3N = makeClientSide(clientSide, mainCAPs, extraCAPs);
-	addLogToConsoleIfNoCap(clientW3N);
+	addLogToConsoleToLogCap(clientW3N);
 	return clientW3N;
 }
 
@@ -65,34 +65,34 @@ export async function promiseW3Nclient<T extends W3N>(
 		storage: promiseStorageCaller,
 	};
 	const clientW3N = await promiseClientSide(clientSide, mainCAPs, extraCAPs);
-	addLogToConsoleIfNoCap(clientW3N);
+	addLogToConsoleToLogCap(clientW3N);
 	return clientW3N;
 }
 
-function addLogToConsoleIfNoCap(clientW3N: W3N): void {
-	if (!clientW3N.log) {
-		clientW3N.log = async (type, msg, err) => {
-			if (type === 'error') {
-				if (err === undefined) {
-					console.error(msg);
-				} else {
-					console.error(msg, err);
-				}
-			} else if (type === 'warning') {
-				if (err === undefined) {
-					console.warn(msg);
-				} else {
-					console.warn(msg, err);
-				}
+function addLogToConsoleToLogCap(clientW3N: W3N): void {
+	const logCap = clientW3N.log as  W3N['log']|undefined;
+	clientW3N.log = async (type, msg, err) => {
+		if (type === 'error') {
+			if (err === undefined) {
+				console.error(msg);
 			} else {
-				if (err === undefined) {
-					console.log(msg);
-				} else {
-					console.log(msg, err);
-				}
+				console.error(msg, err);
+			}
+		} else if (type === 'warning') {
+			if (err === undefined) {
+				console.warn(msg);
+			} else {
+				console.warn(msg, err);
+			}
+		} else {
+			if (err === undefined) {
+				console.log(msg);
+			} else {
+				console.log(msg, err);
 			}
 		}
-	}
+		await logCap?.(type, msg, err);
+	};
 }
 
 
