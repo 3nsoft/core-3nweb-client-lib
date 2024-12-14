@@ -176,7 +176,7 @@ export class ObjectsConnector {
 				findRefIfAlreadyExposed, getObjForTransfer,
 				getOriginalObj, listObj
 			},
-			close: () => connector.close()
+			close: err => connector.close(err)
 		};
 	}
 
@@ -190,7 +190,7 @@ export class ObjectsConnector {
 		);
 		return {
 			caller: connector.clients!.caller(),
-			close: () => connector.close()
+			close: err => connector.close(err)
 		};
 	}
 
