@@ -15,11 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ExposedObj, ExposedFn, W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
+import { ExposedObj, ExposedFn, W3N_NAME, CoreSideServices, Caller } from "../ipc-via-protobuf/connector";
 import { assert } from "../lib-common/assert";
 
 export type CAPsExposures<T> = { [cap in keyof Required<T>]: (
-	cap: any, coreSide: ExposedServices
+	cap: any, coreSide: CoreSideServices
 ) => ExposedObj<any>|ExposedFn; }
 
 export type TypeDifference<T extends TExc, TExc extends object> = {
@@ -27,7 +27,7 @@ export type TypeDifference<T extends TExc, TExc extends object> = {
 };
 
 export function exposeCAPs<T extends W3N, W3N extends object>(
-	coreSide: ExposedServices, w3n: T,
+	coreSide: CoreSideServices, w3n: T,
 	mainCAPs: CAPsExposures<W3N>,
 	extraCAPs: CAPsExposures<TypeDifference<T, W3N>>|undefined
 ): void {
@@ -40,7 +40,7 @@ export function exposeCAPs<T extends W3N, W3N extends object>(
 }
 
 function addCAPsInExposure<T extends object>(
-	expW3N: ExposedObj<T>, coreSide: ExposedServices, w3n: T,
+	expW3N: ExposedObj<T>, coreSide: CoreSideServices, w3n: T,
 	capExposures: CAPsExposures<T>
 ): void {
 	for (const capName in capExposures) {

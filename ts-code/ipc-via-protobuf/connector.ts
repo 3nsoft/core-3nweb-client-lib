@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2023 3NSoft Inc.
+ Copyright (C) 2020 - 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,13 +20,12 @@ import { ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valO
 import { ProtoType } from '../lib-client/protobuf-type';
 import { ipc as pb } from '../protos/ipc.proto';
 
-
-export interface ExposedServices {
+export interface ServicesImpl {
 	exposeDroppableService<T extends string>(
 		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
 	): ObjectReference<T>;
 	getOriginalObj<T>(ref: ObjectReference<any>): T;
-	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
+	exposeStaticService(name: string, exp: ExposedFn|ExposedObj<any>): void;
 	listObj(path: string[]): string[]|null;
 	getObjForTransfer<T extends string>(
 		ref: ObjectReference<T>
@@ -40,7 +39,7 @@ export interface TransferableObj<T extends string> {
 }
 
 export interface ServicesSide {
-	exposedServices(): ExposedServices;
+	exposedServices(): ServicesImpl;
 	processCallStart(
 		fnCallNum: number, path: string[]|undefined, body: EnvelopeBody,
 	): void;
@@ -48,6 +47,25 @@ export interface ServicesSide {
 	processListObj(fnCallNum: number, path: string[]|undefined): void;
 	processObjectDrop(path: string[]|undefined): void;
 	stop(): void;
+}
+
+export interface CoreSideServices {
+	exposeDroppableService: ServicesImpl['exposeDroppableService'];
+	getOriginalObj: ServicesImpl['getOriginalObj'];
+	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
+	listObj: ServicesImpl['listObj'];
+	getObjForTransfer: ServicesImpl['getObjForTransfer'];
+	findRefIfAlreadyExposed: ServicesImpl['findRefIfAlreadyExposed'];
+}
+
+export interface CoreSide {
+	exposedServices: CoreSideServices;
+	close: (err?: any) => void;
+}
+
+export interface ClientSide {
+	caller: Caller;
+	close: (err?: any) => void;
 }
 
 export interface Caller {
@@ -79,8 +97,8 @@ export interface ClientsSide {
 }
 
 // Note that make_?_Side functions could've been imported normally, but client
-// side uses weakrefs, while services side doesn't, and services side is used
-// in embedding without weakrefs, needing to hide require points.
+// side uses weakrefs, while services side doesn't, and services side can be
+// used in embedding without weakrefs, needing to hide require points.
 
 function makeServicesSide(sendMsg: (msg: Envelope) => void): ServicesSide {
 	const srvClassFn = require('./connector-services-side').ServicesSideImpl;
@@ -103,10 +121,10 @@ export class ObjectsConnector {
 	private readonly services: ServicesSide|undefined;
 	private readonly clients: ClientsSide|undefined;
 
-	constructor(
+	private constructor(
+		side: 'client'|'core',
 		private msgSink: Observer<Envelope>,
 		msgSrc: Subscribable<Envelope>,
-		sides: 'clients'|'services'|'clients-and-services',
 		listObj?: Caller['listObj'],
 		listObjAsync?: Caller['listObjAsync']
 	) {
@@ -119,30 +137,61 @@ export class ObjectsConnector {
 			if (!this.messagingProc) { return; }
 			this.msgSink.next(msg);
 		};
-		this.services = (
-			((sides === 'services') || (sides === 'clients-and-services')) ?
-			makeServicesSide(sendMsg) : undefined);
-		if ((sides === 'clients') || (sides === 'clients-and-services')) {
-			if ((!listObj && !listObjAsync)
-			|| (listObj && listObjAsync)) { throw new Error(
-				`Client side needs either listObj, or listObjAsync argument`); }
-			this.clients = makeClientsSide(sendMsg, listObj, listObjAsync);
-		} else {
-			this.clients = undefined;
+		switch (side) {
+			case 'core':
+				this.services = makeServicesSide(sendMsg);
+				this.clients = undefined;
+				break;
+			case "client":
+				if ((!listObj && !listObjAsync)
+				|| (listObj && listObjAsync)) { throw new Error(
+					`Client side needs either listObj, or listObjAsync argument`);
+				}
+				this.clients = makeClientsSide(sendMsg, listObj, listObjAsync);
+				this.services = undefined;
+				break;
 		}
 		Object.seal(this);
 	}
 
-	get caller(): Caller {
-		if (!this.clients) { throw new Error(
-			`Clients side is not set in this connector`); }
-		return this.clients.caller();
+	static makeCoreSide(
+		fromCore: Observer<Envelope>, toCore: Subscribable<Envelope>
+	): CoreSide {
+		const connector = new ObjectsConnector('core', fromCore, toCore);
+		const {
+			exposeDroppableService, exposeStaticService, findRefIfAlreadyExposed,
+			getObjForTransfer, getOriginalObj, listObj
+		} = connector.services!.exposedServices();
+		let w3nIsSet = false;
+		return {
+			exposedServices: {
+				exposeDroppableService,
+				exposeW3NService: exp => {
+					if (w3nIsSet) {
+						throw new Error(`${W3N_NAME} object has already been added`);
+					}
+					exposeStaticService(W3N_NAME, exp);
+					w3nIsSet = true;
+				},
+				findRefIfAlreadyExposed, getObjForTransfer,
+				getOriginalObj, listObj
+			},
+			close: () => connector.close()
+		};
 	}
 
-	get exposedServices(): ExposedServices {
-		if (!this.services) { throw new Error(
-			`Services side is not set in this connector`); }
-		return this.services.exposedServices();
+	static makeClientSide(
+		fromClient: Observer<Envelope>, toClient: Subscribable<Envelope>,
+		listObj?: Caller['listObj'],
+		listObjAsync?: Caller['listObjAsync']
+	): ClientSide {
+		const connector = new ObjectsConnector(
+			'client', fromClient, toClient, listObj, listObjAsync
+		);
+		return {
+			caller: connector.clients!.caller(),
+			close: () => connector.close()
+		};
 	}
 
 	private stop(fromRemote: boolean, err?: any): void {

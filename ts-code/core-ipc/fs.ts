@@ -18,7 +18,7 @@
 import { ObjectReference, boolValType, strArrValType, objRefType, fixInt, fixArray, Value, valOfOpt, toOptVal, toVal, valOfOptInt, valOf, packInt, unpackInt, decodeFromUtf8, encodeToUtf8, intValOf, methodPathFor } from "../ipc-via-protobuf/protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { fs as pb } from '../protos/fs.proto';
-import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
+import { checkRefObjTypeIs, ExposedFn, ExposedObj, EnvelopeBody, makeIPCException, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
 import { packStats, unpackStats, packXAttrValue, unpackXAttrValue, exposeFileService, FileMsg, makeFileCaller, packJSON, unpackJSON, fileMsgType, unpackFileEvent, packFileEvent } from "./file";
 import * as file from "./file";
 import { assert } from "../lib-common/assert";
@@ -142,7 +142,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	return fs;
 }
 
-export function exposeFSService(fs: FS, expServices: ExposedServices): FSMsg {
+export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 	const implExp = {
 		checkFilePresence: checkPresence.wrapService(fs.checkFilePresence),
 		checkFolderPresence: checkPresence.wrapService(fs.checkFolderPresence),
@@ -421,7 +421,7 @@ const symLinkTargetType = ProtoType.for<SymLinkTarget>(
 	pb.SymLinkTargetReplyBody);
 
 function exposeSymLink(
-	link: SymLink, expServices: ExposedServices
+	link: SymLink, expServices: CoreSideServices
 ): SymLinkMsg {
 	const exp: ExposedFn = () => {
 		if (link.isFile) {
@@ -481,7 +481,7 @@ function makeSymLinkCaller(
 namespace readLink {
 
 	export function wrapService(
-		fn: ReadonlyFS['readLink'], expServices: ExposedServices
+		fn: ReadonlyFS['readLink'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
@@ -803,7 +803,7 @@ Object.freeze(close);
 namespace readonlySubRoot {
 
 	export function wrapService(
-		fn: ReadonlyFS['readonlySubRoot'], expServices: ExposedServices
+		fn: ReadonlyFS['readonlySubRoot'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
@@ -948,7 +948,7 @@ Object.freeze(readBytes);
 namespace getByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFS['getByteSource'], expServices: ExposedServices
+		fn: ReadonlyFS['getByteSource'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
@@ -980,7 +980,7 @@ Object.freeze(getByteSource);
 namespace readonlyFile {
 
 	export function wrapService(
-		fn: ReadonlyFS['readonlyFile'], expServices: ExposedServices
+		fn: ReadonlyFS['readonlyFile'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
@@ -1069,7 +1069,7 @@ namespace select {
 	}
 
 	export function wrapService(
-		fn: ReadonlyFS['select'], expServices: ExposedServices
+		fn: ReadonlyFS['select'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, criteria } = requestType.unpack(buf);
@@ -1133,7 +1133,7 @@ namespace fsCollection {
 
 
 	export function exposeCollectionService(
-		collection: FSCollection, expServices: ExposedServices
+		collection: FSCollection, expServices: CoreSideServices
 	): ObjectReference<'FSCollection'> {
 		const exp: ExposedObj<FSCollection> = {
 			get: get.wrapService(collection.get, expServices),
@@ -1177,7 +1177,7 @@ namespace fsCollection {
 		const replyType = ProtoType.for<Reply>(pb.FSCGetReplyBody);
 
 		export function wrapService(
-			fn: FSCollection['get'], expServices: ExposedServices
+			fn: FSCollection['get'], expServices: CoreSideServices
 		): ExposedFn {
 			return buf => {
 				const { name } = requestType.unpack(buf);
@@ -1222,7 +1222,7 @@ namespace fsCollection {
 		const replyType = ProtoType.for<Reply>(pb.FSCGetAllReplyBody);
 
 		export function wrapService(
-			fn: FSCollection['getAll'], expServices: ExposedServices
+			fn: FSCollection['getAll'], expServices: CoreSideServices
 		): ExposedFn {
 			return buf => {
 				const promise = fn()
@@ -1264,7 +1264,7 @@ namespace fsCollection {
 		type Iter = web3n.AsyncIterator<[ string, FSItem ]>;
 
 		function exposeIter(
-			iter: Iter, expServices: ExposedServices
+			iter: Iter, expServices: CoreSideServices
 		): ObjectReference<'FSItemsIter'> {
 			const exp: ExposedObj<Iter> = {
 				next: wrapIterNext(iter.next, expServices)
@@ -1293,7 +1293,7 @@ namespace fsCollection {
 		const iterResMsgType = ProtoType.for<IterResMsg>(pb.IterResMsg);
 
 		function packIterRes(
-			res: IteratorResult<[string, FSItem]>, expServices: ExposedServices
+			res: IteratorResult<[string, FSItem]>, expServices: CoreSideServices
 		): Buffer {
 			let msg: IterResMsg;
 			if (res.done) {
@@ -1319,7 +1319,7 @@ namespace fsCollection {
 		}
 
 		function wrapIterNext(
-			fn: Iter['next'], expServices: ExposedServices
+			fn: Iter['next'], expServices: CoreSideServices
 		): ExposedFn {
 			return () => {
 				const promise = fn()
@@ -1338,7 +1338,7 @@ namespace fsCollection {
 		}
 
 		export function wrapService(
-			fn: FSCollection['entries'], expServices: ExposedServices
+			fn: FSCollection['entries'], expServices: CoreSideServices
 		): ExposedFn {
 			return () => {
 				const promise = fn()
@@ -1377,7 +1377,7 @@ namespace fsCollection {
 		const eventType = ProtoType.for<CollectionEventMsg>(pb.CollectionEvent);
 
 		export function wrapService(
-			fn: FSCollection['watch'], expServices: ExposedServices
+			fn: FSCollection['watch'], expServices: CoreSideServices
 		): ExposedFn {
 			return () => {
 				const s = new Subject<CollectionEvent>();
@@ -1390,7 +1390,7 @@ namespace fsCollection {
 		}
 
 		function packEvent(
-			event: CollectionEvent, expServices: ExposedServices
+			event: CollectionEvent, expServices: CoreSideServices
 		): Buffer {
 			const msg: CollectionEventMsg = {
 				type: event.type,
@@ -1463,7 +1463,7 @@ export namespace fsItem {
 	export const msgType = ProtoType.for<FSItemMsg>(pb.FSItem);
 
 	export function exposeFSItem(
-		expServices: ExposedServices, item: FSItem
+		expServices: CoreSideServices, item: FSItem
 	): FSItemMsg {
 		const msg: FSItemMsg = {
 			isLink: toOptVal(item.isLink)
@@ -1780,7 +1780,7 @@ Object.freeze(vReadBytes);
 namespace vGetByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFSVersionedAPI['getByteSource'], expServices: ExposedServices
+		fn: ReadonlyFSVersionedAPI['getByteSource'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
@@ -2067,7 +2067,7 @@ namespace saveFile {
 	const requestType = ProtoType.for<Request>(pb.SaveFileRequestBody);
 
 	export function wrapService(
-		fn: WritableFS['saveFile'], expServices: ExposedServices
+		fn: WritableFS['saveFile'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { dst, file, overwrite } = requestType.unpack(buf);
@@ -2102,7 +2102,7 @@ namespace saveFolder {
 	const requestType = ProtoType.for<Request>(pb.SaveFolderRequestBody);
 
 	export function wrapService(
-		fn: WritableFS['saveFolder'], expServices: ExposedServices
+		fn: WritableFS['saveFolder'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { dst, folder: file, overwrite } = requestType.unpack(buf);
@@ -2136,7 +2136,7 @@ namespace link {
 	const requestType = ProtoType.for<Request>(pb.LinkRequestBody);
 
 	export function wrapService(
-		fn: WritableFS['link'], expServices: ExposedServices
+		fn: WritableFS['link'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, target } = requestType.unpack(buf);
@@ -2203,7 +2203,7 @@ function optFlagsFromMsg(m: FileFlagsMsg|undefined): FileFlags|undefined {
 namespace writableSubRoot {
 
 	export function wrapService(
-		fn: WritableFS['writableSubRoot'], expServices: ExposedServices
+		fn: WritableFS['writableSubRoot'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
@@ -2235,7 +2235,7 @@ Object.freeze(writableSubRoot);
 namespace writableFile {
 
 	export function wrapService(
-		fn: WritableFS['writableFile'], expServices: ExposedServices
+		fn: WritableFS['writableFile'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
@@ -2363,7 +2363,7 @@ Object.freeze(writeBytes);
 namespace getByteSink {
 
 	export function wrapService(
-		fn: WritableFS['getByteSink'], expServices: ExposedServices
+		fn: WritableFS['getByteSink'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = unpackPathAndFlags(buf);
@@ -2569,7 +2569,7 @@ namespace vGetByteSink {
 		pb.VersionedGetByteSinkRequestBody);
 
 	export function wrapService(
-		fn: WritableFSVersionedAPI['getByteSink'], expServices: ExposedServices
+		fn: WritableFSVersionedAPI['getByteSink'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { path, flags } = requestType.unpack(buf);

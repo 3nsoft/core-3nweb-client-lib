@@ -18,7 +18,7 @@
 import { fixInt, fixArray, valOfOpt, Value, toVal, valOfOptJson, toOptVal, toOptAny, toOptJson, packInt, unpackInt, valOfOptInt, valOfOptAny, errToMsg, ErrorValue, errFromMsg, ObjectReference, AnyValue, decodeFromUtf8, encodeToUtf8, methodPathFor } from '../../ipc-via-protobuf/protobuf-msg';
 import { ProtoType } from '../../lib-client/protobuf-type';
 import { asmail as pb } from '../../protos/asmail.proto';
-import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, ExposedServices } from '../../ipc-via-protobuf/connector';
+import { ExposedObj, ExposedFn, makeIPCException, EnvelopeBody, Caller, CoreSideServices } from '../../ipc-via-protobuf/connector';
 import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from '../../core-ipc/fs';
@@ -34,7 +34,7 @@ type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type DeliveryOptions = web3n.asmail.DeliveryOptions;
 
 export function exposeASMailCAP(
-	cap: ASMailService, expServices: ExposedServices
+	cap: ASMailService, expServices: CoreSideServices
 ): ExposedObj<ASMailService> {
 	const out = cap.delivery;
 	const box = cap.inbox;
@@ -194,7 +194,7 @@ namespace getMsg {
 	const requestType = ProtoType.for<Request>(pb.GetMsgRequestBody);
 
 	export function wrapService(
-		fn: Inbox['getMsg'], expServices: ExposedServices
+		fn: Inbox['getMsg'], expServices: CoreSideServices
 	): ExposedFn {
 		return (reqBody: Buffer) => {
 			const { msgId } = requestType.unpack(reqBody);
@@ -234,7 +234,7 @@ const incomingMessageType = ProtoType.for<IncomingMessageMsg>(
 	pb.IncomingMessageMsg);
 
 function packIncomingMessage(
-	m: IncomingMessage, expServices: ExposedServices
+	m: IncomingMessage, expServices: CoreSideServices
 ): EnvelopeBody {
 	const ipcMsg: IncomingMessageMsg = {
 		msgType: m.msgType,
@@ -286,7 +286,7 @@ namespace inboxSubscribe {
 	const requestType = ProtoType.for<Request>(pb.SubscribeStartCallBody);
 
 	export function wrapService(
-		fn: Inbox['subscribe'], expServices: ExposedServices
+		fn: Inbox['subscribe'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { event } = requestType.unpack(buf);
@@ -425,7 +425,7 @@ namespace addMsg {
 	}
 
 	function unpackMsg(
-		ipcMsg: OutgoingMessageMsg, expServices: ExposedServices
+		ipcMsg: OutgoingMessageMsg, expServices: CoreSideServices
 	): OutgoingMessage {
 		const msg: OutgoingMessage = {
 			msgType: ipcMsg.msgType,
@@ -485,7 +485,7 @@ namespace addMsg {
 	}
 
 	export function wrapService(
-		fn: Delivery['addMsg'], expServices: ExposedServices
+		fn: Delivery['addMsg'], expServices: CoreSideServices
 	): ExposedFn {
 		return (reqBody: Buffer) => {
 			const {

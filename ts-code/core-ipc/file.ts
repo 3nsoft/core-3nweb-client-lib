@@ -18,7 +18,7 @@
 import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf, methodPathFor } from "../ipc-via-protobuf/protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
-import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
+import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
 import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
 import { Subject } from "rxjs";
@@ -109,7 +109,7 @@ export function makeFileCaller(
 }
 
 export function exposeFileService(
-	file: File, expServices: ExposedServices
+	file: File, expServices: CoreSideServices
 ): FileMsg {
 	const implExp = {
 		getByteSource: getByteSource.wrapService(file.getByteSource, expServices),
@@ -534,7 +534,7 @@ Object.freeze(readJSON);
 namespace getByteSource {
 
 	export function wrapService(
-		fn: ReadonlyFile['getByteSource'], expServices: ExposedServices
+		fn: ReadonlyFile['getByteSource'], expServices: CoreSideServices
 	): ExposedFn {
 		return () => {
 			const promise = fn()
@@ -978,7 +978,7 @@ export namespace vGetByteSource {
 
 	export function wrapService(
 		fn: ReadonlyFileVersionedAPI['getByteSource'],
-		expServices: ExposedServices
+		expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const promise = fn(unpackVersionedReadFlagsRequest(buf!))
@@ -1205,7 +1205,7 @@ namespace getByteSink {
 	const requestType = ProtoType.for<Request>(pb.GetByteSinkRequestBody);
 
 	export function wrapService(
-		fn: WritableFile['getByteSink'], expServices: ExposedServices
+		fn: WritableFile['getByteSink'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { truncateFile } = requestType.unpack(buf);
@@ -1245,7 +1245,7 @@ namespace copy {
 	export const requestType = ProtoType.for<Request>(pb.CopyRequestBody);
 
 	export function wrapService(
-		fn: WritableFile['copy'], expServices: ExposedServices
+		fn: WritableFile['copy'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { file: fRef } = requestType.unpack(buf);
@@ -1272,7 +1272,7 @@ Object.freeze(copy);
 namespace vCopy {
 
 	export function wrapService(
-		fn: WritableFileVersionedAPI['copy'], expServices: ExposedServices
+		fn: WritableFileVersionedAPI['copy'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { file: fRef } = copy.requestType.unpack(buf);
@@ -1450,7 +1450,7 @@ export namespace vGetByteSink {
 		pb.VersionedGetByteSinkReplyBody);
 
 	export function wrapService(
-		fn: WritableFileVersionedAPI['getByteSink'], expServices: ExposedServices
+		fn: WritableFileVersionedAPI['getByteSink'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { truncateFile, currentVersion } = requestType.unpack(buf);

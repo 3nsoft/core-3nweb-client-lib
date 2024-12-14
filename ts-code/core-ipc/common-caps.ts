@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { W3N_NAME, Caller, ExposedServices } from "../ipc-via-protobuf/connector";
+import { W3N_NAME, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "./log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../core/asmail/asmail-cap-ipc";
 import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../core/storage/storage-cap-ipc";
@@ -25,7 +25,7 @@ import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDiffere
 type W3N = web3n.caps.common.W3N;
 
 export function exposeW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T,
+	coreSide: CoreSideServices, w3n: T,
 	extraCAPs?: CAPsExposures<TypeDifference<T, W3N>>
 ): void {
 	const commonCAPsExposures: CAPsExposures<W3N> = {

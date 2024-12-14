@@ -16,7 +16,7 @@
 */
 
 import { Value, valOfOpt, toOptVal, methodPathFor } from '../../ipc-via-protobuf/protobuf-msg';
-import { ExposedObj, ExposedFn, Caller, ExposedServices } from '../../ipc-via-protobuf/connector';
+import { ExposedObj, ExposedFn, Caller, CoreSideServices } from '../../ipc-via-protobuf/connector';
 import { exposeFSService, fsMsgType, makeFSCaller, fsItem } from '../../core-ipc/fs';
 import { ProtoType } from '../../lib-client/protobuf-type';
 import { storage as pb } from '../../protos/storage.proto';
@@ -26,7 +26,7 @@ type StorageType = web3n.storage.StorageType;
 type WritableFS = web3n.files.WritableFS;
 
 export function exposeStorageCAP(
-	cap: Storage, expServices: ExposedServices
+	cap: Storage, expServices: CoreSideServices
 ): ExposedObj<Storage> {
 	const wrap: ExposedObj<Storage> = {
 		getAppLocalFS: getAppLocalFS.wrapService(cap.getAppLocalFS, expServices),
@@ -83,7 +83,7 @@ namespace getAppLocalFS {
 	const requestType = ProtoType.for<Request>(pb.GetAppLocalFSRequestBody);
 
 	export function wrapService(
-		fn: Storage['getAppLocalFS'], expServices: ExposedServices
+		fn: Storage['getAppLocalFS'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
@@ -121,7 +121,7 @@ namespace getAppSyncedFS {
 	const requestType = ProtoType.for<Request>(pb.GetAppSyncedFSRequestBody);
 
 	export function wrapService(
-		fn: Storage['getAppSyncedFS'], expServices: ExposedServices
+		fn: Storage['getAppSyncedFS'], expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { appName } = requestType.unpack(buf);
@@ -160,7 +160,7 @@ namespace getSysFS {
 	const requestType = ProtoType.for<Request>(pb.GetSysFSRequestBody);
 
 	export function wrapService(
-		fn: NonNullable<Storage['getSysFS']>, expServices: ExposedServices
+		fn: NonNullable<Storage['getSysFS']>, expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { type, path } = requestType.unpack(buf);
@@ -201,7 +201,7 @@ namespace getUserFS {
 	const requestType = ProtoType.for<Request>(pb.GetUserFSRequestBody);
 
 	export function wrapService(
-		fn: NonNullable<Storage['getUserFS']>, expServices: ExposedServices
+		fn: NonNullable<Storage['getUserFS']>, expServices: CoreSideServices
 	): ExposedFn {
 		return buf => {
 			const { type, path } = requestType.unpack(buf);

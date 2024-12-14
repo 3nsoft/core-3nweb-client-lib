@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021, 2023 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2023 - 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,7 @@
 import { Unsubscribable } from "rxjs";
 import { ObjectReference, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
 import { stringOfB64CharsSync } from '../lib-common/random-node';
-import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ExposedServices, TransferableObj } from "./connector";
+import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ServicesImpl, TransferableObj } from "./connector";
 
 
 interface FnCallProc {
@@ -147,21 +147,25 @@ export class ServicesSideImpl implements ServicesSide {
 		}
 	}
 
-	exposedServices(): ExposedServices {
-		const expSrv: ExposedServices = {
+	exposedServices(): ServicesImpl {
+		const expSrv: ServicesImpl = {
 			exposeDroppableService: this.exposedObjs.exposeDroppableService.bind(
-				this.exposedObjs),
-			exposeW3NService: this.exposedObjs.exposeW3NService.bind(
-				this.exposedObjs),
+				this.exposedObjs
+			),
+			exposeStaticService: this.exposedObjs.exposeStaticService.bind(
+				this.exposedObjs
+			),
 			getOriginalObj: this.exposedObjs.getOriginalObj.bind(this.exposedObjs),
 			listObj: path => {
 				const obj = this.exposedObjs.find(path);
 				return (obj ? Object.keys(obj) : null);
 			},
 			getObjForTransfer: this.exposedObjs.getObjForTransfer.bind(
-				this.exposedObjs),
+				this.exposedObjs
+			),
 			findRefIfAlreadyExposed: this.exposedObjs.findRefIfAlreadyExposed.bind(
-				this.exposedObjs)
+				this.exposedObjs
+			)
 		};
 		return expSrv;
 	}
@@ -221,11 +225,8 @@ export class ExposedObjs {
 		return this.objToRefs.get(o);
 	}
 
-	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void {
-		if (this.objs.has(W3N_NAME)) {
-			throw new Error(`${W3N_NAME} object has already been added`);
-		}
-		this.objs.set(W3N_NAME, {
+	exposeStaticService(name: string, exp: ExposedFn|ExposedObj<any>): void {
+		this.objs.set(name, {
 			exp, original: undefined, objType: 'non-transferable'
 		});
 	}

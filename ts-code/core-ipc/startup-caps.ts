@@ -15,14 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { W3N_NAME, ExposedServices, Caller } from "../ipc-via-protobuf/connector";
+import { W3N_NAME, CoreSideServices, Caller } from "../ipc-via-protobuf/connector";
 import { wrapSignInCAP, wrapSignUpCAP, makeSignInCaller, makeSignUpCaller } from "../core/startup/startup-cap";
 import { ClientCAPsWraps, exposeCAPs, makeClientSide, CAPsExposures, TypeDifference } from "./generic";
 
 type W3N = web3n.startup.W3N;
 
 export function exposeStartupW3N<T extends W3N>(
-	coreSide: ExposedServices, w3n: T,
+	coreSide: CoreSideServices, w3n: T,
 	extraCAPs?: CAPsExposures<TypeDifference<T, W3N>>
 ): void {
 	const startupCAPsExposures: CAPsExposures<W3N> = {

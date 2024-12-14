@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -35,14 +35,15 @@ function makePipe() {
 		delay(1),
 		map(buf => msgProtoType.unpack(buf))
 	);
-	const coreSide = new ObjectsConnector(fromCore, toCore, 'services');
+	const coreSide = ObjectsConnector.makeCoreSide(fromCore, toCore);
 	const listObjInCore: Caller['listObj'] = path => {
 		const lst = coreSide.exposedServices.listObj(path);
 		if (lst) { return lst; }
 		else { throw makeIPCException({ objectNotFound: true }); }
 	};
-	const clientSide = new ObjectsConnector(
-		fromClient, toClient, 'clients', listObjInCore);
+	const clientSide = ObjectsConnector.makeClientSide(
+		fromClient, toClient, listObjInCore
+	);
 	return { coreSide, clientSide };
 }
 

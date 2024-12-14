@@ -18,7 +18,7 @@
 import { ObjectReference, fixInt, errFromMsg, ErrorValue, errToMsg, Value, valOfOpt, toOptVal, fixArray, valOfOptInt, packInt, unpackInt, methodPathFor } from '../ipc-via-protobuf/protobuf-msg';
 import { ProtoType } from '../lib-client/protobuf-type';
 import { bytes as pb } from '../protos/bytes.proto';
-import { ExposedFn, ExposedObj, checkRefObjTypeIs, ExposedServices, Caller } from '../ipc-via-protobuf/connector';
+import { ExposedFn, ExposedObj, checkRefObjTypeIs, CoreSideServices, Caller } from '../ipc-via-protobuf/connector';
 
 type FileByteSink = web3n.files.FileByteSink;
 type FileLayout = web3n.files.FileLayout;
@@ -42,7 +42,7 @@ export function makeSinkCaller(
 }
 
 export function exposeSinkService(
-	sink: FileByteSink, expServices: ExposedServices
+	sink: FileByteSink, expServices: CoreSideServices
 ): ObjectReference<'FileByteSink'> {
 	const wrap: ExposedObj<FileByteSink> = {
 		done: sinkDone.wrapService(sink.done),
@@ -73,7 +73,7 @@ export function makeSrcCaller(
 }
 
 export function exposeSrcService(
-	src: FileByteSource, expServices: ExposedServices
+	src: FileByteSource, expServices: CoreSideServices
 ): ObjectReference<'FileByteSource'> {
 	const wrap: ExposedObj<FileByteSource> = {
 		getPosition: srcGetPosition.wrapService(src.getPosition),
