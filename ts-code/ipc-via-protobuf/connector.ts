@@ -20,12 +20,27 @@ import { ObjectReference, errBodyType, errToMsg, Value, valOfOptInt, toVal, valO
 import { ProtoType } from '../lib-client/protobuf-type';
 import { ipc as pb } from '../protos/ipc.proto';
 
+export interface ClientSide {
+	caller: Caller;
+	exposedServices: ClientSideServices;
+	close: (err?: any) => void;
+}
+
+export interface CoreSide {
+	caller: CallerToClient;
+	exposedServices: CoreSideServices;
+	close: (err?: any) => void;
+}
+
 export interface ServicesImpl {
 	exposeDroppableService<T extends string>(
 		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
 	): ObjectReference<T>;
+	exposeStaticService<T extends string>(
+		objType: T, exp: ExposedFn|ExposedObj<any>
+	): ObjectReference<T>;
 	getOriginalObj<T>(ref: ObjectReference<any>): T;
-	exposeStaticService(name: string, exp: ExposedFn|ExposedObj<any>): void;
+	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
 	listObj(path: string[]): string[]|null;
 	getObjForTransfer<T extends string>(
 		ref: ObjectReference<T>
@@ -38,34 +53,28 @@ export interface TransferableObj<T extends string> {
 	o: any;
 }
 
-export interface ServicesSide {
-	exposedServices(): ServicesImpl;
-	processCallStart(
-		fnCallNum: number, path: string[]|undefined, body: EnvelopeBody,
-	): void;
-	processCallCancelation(fnCallNum: number): void;
-	processListObj(fnCallNum: number, path: string[]|undefined): void;
-	processObjectDrop(path: string[]|undefined): void;
-	stop(): void;
-}
-
 export interface CoreSideServices {
 	exposeDroppableService: ServicesImpl['exposeDroppableService'];
 	getOriginalObj: ServicesImpl['getOriginalObj'];
-	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void;
+	exposeW3NService: ServicesImpl['exposeW3NService'];
 	listObj: ServicesImpl['listObj'];
 	getObjForTransfer: ServicesImpl['getObjForTransfer'];
 	findRefIfAlreadyExposed: ServicesImpl['findRefIfAlreadyExposed'];
 }
 
-export interface CoreSide {
-	exposedServices: CoreSideServices;
-	close: (err?: any) => void;
+export interface ClientSideServices {
+	exposeDroppableService: ServicesImpl['exposeDroppableService'];
+	getOriginalObj: ServicesImpl['getOriginalObj'];
+	exposeStaticService: ServicesImpl['exposeStaticService'];
+	getObjForTransfer: ServicesImpl['getObjForTransfer'];
+	findRefIfAlreadyExposed: ServicesImpl['findRefIfAlreadyExposed'];
 }
 
-export interface ClientSide {
-	caller: Caller;
-	close: (err?: any) => void;
+export interface CallerToClient {
+	startPromiseCall: Caller['startPromiseCall'],
+	startObservableCall: Caller['startObservableCall'],
+	registerClientDrop: Caller['registerClientDrop'];
+	srvRefOf: Caller['srvRefOf'];
 }
 
 export interface Caller {
@@ -86,6 +95,17 @@ export interface Caller {
 
 export interface ObjectFromCore {
 	_isObjectFromCore: true;
+}
+
+export interface ServicesSide {
+	exposedServices(): ServicesImpl;
+	processCallStart(
+		fnCallNum: number, path: string[]|undefined, body: EnvelopeBody,
+	): void;
+	processCallCancelation(fnCallNum: number): void;
+	processListObj(fnCallNum: number, path: string[]|undefined): void;
+	processObjectDrop(path: string[]|undefined): void;
+	stop(): void;
 }
 
 export interface ClientsSide {
@@ -118,8 +138,8 @@ function makeClientsSide(
 export class ObjectsConnector {
 
 	private messagingProc: Unsubscribable|undefined = undefined;
-	private readonly services: ServicesSide|undefined;
-	private readonly clients: ClientsSide|undefined;
+	private readonly services: ServicesSide;
+	private readonly clients: ClientsSide;
 
 	private constructor(
 		side: 'client'|'core',
@@ -140,7 +160,7 @@ export class ObjectsConnector {
 		switch (side) {
 			case 'core':
 				this.services = makeServicesSide(sendMsg);
-				this.clients = undefined;
+				this.clients = makeClientsSide(sendMsg, undefined, undefined);
 				break;
 			case "client":
 				if ((!listObj && !listObjAsync)
@@ -148,7 +168,7 @@ export class ObjectsConnector {
 					`Client side needs either listObj, or listObjAsync argument`);
 				}
 				this.clients = makeClientsSide(sendMsg, listObj, listObjAsync);
-				this.services = undefined;
+				this.services = makeServicesSide(sendMsg);
 				break;
 		}
 		Object.seal(this);
@@ -159,22 +179,19 @@ export class ObjectsConnector {
 	): CoreSide {
 		const connector = new ObjectsConnector('core', fromCore, toCore);
 		const {
-			exposeDroppableService, exposeStaticService, findRefIfAlreadyExposed,
+			exposeDroppableService, exposeW3NService, findRefIfAlreadyExposed,
 			getObjForTransfer, getOriginalObj, listObj
-		} = connector.services!.exposedServices();
-		let w3nIsSet = false;
+		} = connector.services.exposedServices();
+		const {
+			registerClientDrop, srvRefOf, startObservableCall, startPromiseCall
+		} = connector.clients.caller();
 		return {
 			exposedServices: {
-				exposeDroppableService,
-				exposeW3NService: exp => {
-					if (w3nIsSet) {
-						throw new Error(`${W3N_NAME} object has already been added`);
-					}
-					exposeStaticService(W3N_NAME, exp);
-					w3nIsSet = true;
-				},
-				findRefIfAlreadyExposed, getObjForTransfer,
-				getOriginalObj, listObj
+				exposeDroppableService, exposeW3NService, findRefIfAlreadyExposed,
+				getObjForTransfer, getOriginalObj, listObj
+			},
+			caller: {
+				registerClientDrop, srvRefOf, startObservableCall, startPromiseCall
 			},
 			close: err => connector.close(err)
 		};
@@ -188,8 +205,16 @@ export class ObjectsConnector {
 		const connector = new ObjectsConnector(
 			'client', fromClient, toClient, listObj, listObjAsync
 		);
+		const {
+			exposeDroppableService, findRefIfAlreadyExposed,
+			getObjForTransfer, getOriginalObj, exposeStaticService
+		} = connector.services.exposedServices();
 		return {
-			caller: connector.clients!.caller(),
+			caller: connector.clients.caller(),
+			exposedServices: {
+				exposeDroppableService, findRefIfAlreadyExposed, getObjForTransfer,
+				getOriginalObj, exposeStaticService
+			},
 			close: err => connector.close(err)
 		};
 	}

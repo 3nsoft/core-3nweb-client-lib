@@ -155,6 +155,9 @@ export class ServicesSideImpl implements ServicesSide {
 			exposeStaticService: this.exposedObjs.exposeStaticService.bind(
 				this.exposedObjs
 			),
+			exposeW3NService: this.exposedObjs.exposeW3NService.bind(
+				this.exposedObjs
+			),
 			getOriginalObj: this.exposedObjs.getOriginalObj.bind(this.exposedObjs),
 			listObj: path => {
 				const obj = this.exposedObjs.find(path);
@@ -187,16 +190,20 @@ export class ExposedObjs {
 	exposeDroppableService<T extends string>(
 		objType: T, exp: ExposedFn|ExposedObj<any>, original: any
 	): ObjectReference<T> {
+		const ref = this.newRef(objType);
+		this.objs.set(ref.path[0], { exp, original, objType });
+		this.objToRefs.set(original, ref);
+		return ref;
+	}
+
+	private newRef<T extends string>(objType: T): ObjectReference<T> {
 		let id: string;
 		do {
 			id = stringOfB64CharsSync(20);
 		} while (this.objs.has(id));
-		const ref: ObjectReference<T> = {
+		return {
 			objType, path: [ id ]
 		};
-		this.objs.set(id, { exp, original, objType });
-		this.objToRefs.set(original, ref);
-		return ref;
 	}
 
 	getOriginalObj<T>(ref: ObjectReference<any>): T {
@@ -225,10 +232,23 @@ export class ExposedObjs {
 		return this.objToRefs.get(o);
 	}
 
-	exposeStaticService(name: string, exp: ExposedFn|ExposedObj<any>): void {
-		this.objs.set(name, {
+	exposeW3NService(exp: ExposedFn|ExposedObj<any>): void {
+		if (this.objs.has(W3N_NAME)) {
+			throw new Error(`${W3N_NAME} object has already been added`);
+		}
+		this.objs.set(W3N_NAME, {
 			exp, original: undefined, objType: 'non-transferable'
 		});
+	}
+
+	exposeStaticService<T extends string>(
+		objType: T, exp: ExposedFn|ExposedObj<any>
+	): ObjectReference<T> {
+		const ref = this.newRef(objType);
+		this.objs.set(ref.path[0], {
+			exp, original: undefined, objType
+		});
+		return ref;
 	}
 
 	drop(name: string): void {
