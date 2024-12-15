@@ -70,7 +70,13 @@ export function wrapReqReplyFunc(
 			func.call(srv, ...args) :
 			func.call(srv)
 		);
-		promise = promise?.then(result => resultToBuffer(result, transforms));
+		if (promise === undefined) {
+			promise = Promise.resolve();
+		} else if ((promise === null) || !promise.then) {
+			promise = Promise.resolve(resultToBuffer(promise, transforms));
+		} else {
+			promise = promise.then(result => resultToBuffer(result, transforms));
+		}
 		return { promise }
 	};
 }
