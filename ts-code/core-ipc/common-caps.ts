@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021, 2023 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2023 - 2024 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { W3N_NAME, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
+import { W3N_NAME, CoreSide, ClientSide } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "./log-cap";
 import { exposeASMailCAP, makeASMailCaller } from "../core/asmail/asmail-cap-ipc";
 import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../core/storage/storage-cap-ipc";
@@ -25,7 +25,7 @@ import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDiffere
 type W3N = web3n.caps.common.W3N;
 
 export function exposeW3N<T extends W3N>(
-	coreSide: CoreSideServices, w3n: T,
+	coreSide: CoreSide, w3n: T,
 	extraCAPs?: CAPsExposures<TypeDifference<T, W3N>>
 ): void {
 	const commonCAPsExposures: CAPsExposures<W3N> = {
@@ -42,7 +42,7 @@ export function exposeW3N<T extends W3N>(
 const unused = W3N_NAME;
 
 export function makeW3Nclient<T extends W3N>(
-	clientSide: Caller, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
+	clientSide: ClientSide, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
 ): T {
 	const mainCAPs: ClientCAPsWraps<W3N> = {
 		log: makeLogCaller,
@@ -56,7 +56,7 @@ export function makeW3Nclient<T extends W3N>(
 }
 
 export async function promiseW3Nclient<T extends W3N>(
-	clientSide: Caller, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
+	clientSide: ClientSide, extraCAPs?: ClientCAPsWraps<TypeDifference<T, W3N>>
 ): Promise<T> {
 	const mainCAPs: ClientCAPsWraps<W3N> = {
 		log: makeLogCaller,

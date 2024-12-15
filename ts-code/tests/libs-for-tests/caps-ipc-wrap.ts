@@ -51,8 +51,8 @@ export function wrapStartupW3N(
 	coreW3N: StartupW3N
 ): { clientW3N: StartupW3N; close: () => void; } {
 	const { clientSide, coreSide } = makePipe();
-	exposeStartupW3N(coreSide.exposedServices, coreW3N);
-	const clientW3N = makeStartupW3Nclient(clientSide.caller);
+	exposeStartupW3N(coreSide, coreW3N);
+	const clientW3N = makeStartupW3Nclient(clientSide);
 	const close = () => coreSide.close();
 	return { clientW3N, close };
 }
@@ -61,8 +61,8 @@ export function wrapCommonW3N(
 	coreW3N: CommonW3N
 ): { clientW3N: CommonW3N; close: () => void; } {
 	const { clientSide, coreSide } = makePipe();
-	exposeW3N(coreSide.exposedServices, coreW3N);
-	const clientW3N = makeW3Nclient(clientSide.caller);
+	exposeW3N(coreSide, coreW3N);
+	const clientW3N = makeW3Nclient(clientSide);
 	const close = () => coreSide.close();
 	return { clientW3N, close };
 }
