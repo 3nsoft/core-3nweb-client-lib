@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 /**
  * This module defines json form of keys and signed objects.
@@ -59,11 +60,13 @@ export interface JsonKey extends JsonKeyShort {
 }
 
 export function isLikeJsonKey(jkey: JsonKey): boolean {
-	return (('object' === typeof jkey) && !!jkey &&
+	return (
+		('object' === typeof jkey) && !!jkey &&
 		('string' === typeof jkey.alg) && !!jkey.alg &&
 		('string' === typeof jkey.kid) && !!jkey.kid &&
 		('string' === typeof jkey.k) && !!jkey.k &&
-		('string' === typeof jkey.kid && !!jkey.kid));
+		('string' === typeof jkey.kid && !!jkey.kid)
+	);
 }
 
 export interface Key {
@@ -103,11 +106,11 @@ export interface Key {
 
 export interface SignedLoad {
 	/**
-	 * This is an id of a key that did the signature.
+	 * This is a function/algorithm, used to make signature.
 	 */
 	alg: string;
 	/**
-	 * This is a function, used to make signature.
+	 * This is an id of a key that did the signature.
 	 */
 	kid: string;
 	/**
@@ -121,11 +124,13 @@ export interface SignedLoad {
 }
 
 export function isLikeSignedLoad(load: SignedLoad): boolean {
-	return (('object' === typeof load) && !!load &&
-			('string' === typeof load.alg) && !!load.alg &&
-			('string' === typeof load.kid) && !!load.kid &&
-			('string' === typeof load.sig) && !!load.sig &&
-			('string' === typeof load.load && !!load.load));
+	return (
+		('object' === typeof load) && !!load &&
+		('string' === typeof load.alg) && !!load.alg &&
+		('string' === typeof load.kid) && !!load.kid &&
+		('string' === typeof load.sig) && !!load.sig &&
+		('string' === typeof load.load && !!load.load)
+	);
 }
 
 export interface KeyCert {
@@ -139,17 +144,19 @@ export interface KeyCert {
 }
 
 export function isLikeKeyCert(cert: KeyCert): boolean {
-	return (('object' === typeof cert) && !!cert &&
-			('number' === typeof cert.expiresAt) &&
-			('number' === typeof cert.issuedAt) &&
-			(cert.expiresAt > cert.issuedAt) &&
-			('string' === typeof cert.issuer) && !!cert.issuer &&
-			('object' === typeof cert.cert) && !!cert.cert &&
-			('object' === typeof cert.cert.principal) &&
-			!!cert.cert.principal &&
-			('string' === typeof cert.cert.principal.address) &&
-			!!cert.cert.principal.address &&
-			isLikeJsonKey(cert.cert.publicKey));
+	return (
+		('object' === typeof cert) && !!cert &&
+		('number' === typeof cert.expiresAt) &&
+		('number' === typeof cert.issuedAt) &&
+		(cert.expiresAt > cert.issuedAt) &&
+		('string' === typeof cert.issuer) && !!cert.issuer &&
+		('object' === typeof cert.cert) && !!cert.cert &&
+		('object' === typeof cert.cert.principal) &&
+		!!cert.cert.principal &&
+		('string' === typeof cert.cert.principal.address) &&
+		!!cert.cert.principal.address &&
+		isLikeJsonKey(cert.cert.publicKey)
+	);
 }
 
 export function isLikeSignedKeyCert(load: SignedLoad): boolean {
@@ -166,8 +173,9 @@ export function keyFromJson(key: JsonKey,
 	if (key.use === use) {
 		if (key.alg === alg) {
 			const bytes = base64.open(key.k);
-			if (bytes.length !== klen) { throw new Error(
-					"Key "+key.kid+" has a wrong number of bytes"); }
+			if (bytes.length !== klen) {
+				throw new Error("Key "+key.kid+" has a wrong number of bytes");
+			}
 			return {
 				use: key.use,
 				alg: key.alg,
@@ -175,13 +183,14 @@ export function keyFromJson(key: JsonKey,
 				k: bytes
 			};
 		} else {
-			throw new Error("Key "+key.kid+
-					", should be used with unsupported algorithm '"+
-					key.alg+"'");
+			throw new Error(
+				"Key "+key.kid+", should be used with unsupported algorithm '"+key.alg+"'"
+			);
 		}
 	} else {
-		throw new Error("Key "+key.kid+" has incorrect use '"+key.use+
-				"', instead of '"+use+"'");
+		throw new Error(
+			"Key "+key.kid+" has incorrect use '"+key.use+"', instead of '"+use+"'"
+		);
 	}
 }
 
@@ -223,20 +232,23 @@ export interface MailerIdAssertionLoad {
 
 export function isLikeMailerIdAssertion(
 		assertLoad: MailerIdAssertionLoad): boolean {
-	return (('object' === typeof assertLoad) && !!assertLoad &&
+	return (
+		('object' === typeof assertLoad) && !!assertLoad &&
 		('string' === typeof assertLoad.user) && !!assertLoad.user &&
 		('string' === typeof assertLoad.rpDomain) && !!assertLoad.rpDomain &&
 		('string' === typeof assertLoad.sessionId) && !!assertLoad.sessionId &&
 		('number' === typeof assertLoad.expiresAt) &&
 		('number' === typeof assertLoad.issuedAt) &&
-		(assertLoad.expiresAt > assertLoad.issuedAt));
+		(assertLoad.expiresAt > assertLoad.issuedAt)
+	);
 }
 
 export function isLikeSignedMailerIdAssertion(load: SignedLoad): boolean {
 	if (!isLikeSignedLoad(load)) { return false; }
 	try {
 		return isLikeMailerIdAssertion(
-			JSON.parse(utf8.open(base64.open(load.load))));
+			JSON.parse(utf8.open(base64.open(load.load)))
+		);
 	} catch (e) {
 		return false;
 	}

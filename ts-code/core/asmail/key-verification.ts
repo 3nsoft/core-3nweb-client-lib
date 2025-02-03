@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,7 @@
 
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import { relyingParty as mid, makeMalformedCertsException } from '../../lib-common/mid-sigs-NaCl-Ed';
-import { JsonKey, getKeyCert } from '../../lib-common/jwkeys';
+import { JsonKey, SignedLoad, getKeyCert } from '../../lib-common/jwkeys';
 import * as confApi from '../../lib-common/service-api/asmail/config';
 import { getMailerIdInfoFor, ServiceLocator } from '../../lib-client/service-locator';
 import { NetClient } from '../../lib-client/request-utils';
@@ -38,16 +38,36 @@ export async function checkAndExtractPKey(
 	const validAt = Math.round(Date.now() / 1000);
 
 	// get MailerId provider's info with a root certificate(s)
-	const data = await getMailerIdInfoFor(resolver, client, address);
+	const {
+		domain: rootAddr, rootCert
+	} = await getRootCertForKey(certs.provCert.kid, resolver, client, address);
 
-	// TODO choose proper root certificate, as it may not be current one
-
-	const rootAddr = data.domain;
-	const rootCert = data.info.currentCert;
 	const pkey = mid.verifyPubKey(certs.pkeyCert, address,
 		{ user: certs.userCert, prov: certs.provCert, root: rootCert },
 		rootAddr, validAt);
 	return pkey;
+}
+
+async function getRootCertForKey(
+	kid: string, resolver: ServiceLocator, client: NetClient, address: string
+): Promise<{ domain: string; rootCert: SignedLoad; }> {
+	const {
+		domain,
+		info: { currentCert, previousCerts }
+	} = await getMailerIdInfoFor(resolver, client, address);
+	let rootCert: SignedLoad;
+	if (currentCert.kid === kid) {
+		rootCert = currentCert ;
+	} else {
+		const pastCert = previousCerts.find((cert) => (cert.kid === kid));
+		if (!pastCert) {
+			throw new Error(
+				`Root cert for given key id is not found in server's reply.`
+			);
+		}
+		rootCert = pastCert;
+	}
+	return { domain, rootCert };
 }
 
 /**
@@ -73,12 +93,10 @@ export async function checkAndExtractPKeyWithAddress(
 	}
 
 	// get MailerId provider's info with a root certificate(s)
-	const data = await getMailerIdInfoFor(resolver, client, address);
+	const {
+		domain: rootAddr, rootCert
+	} = await getRootCertForKey(certs.provCert.kid, resolver, client, address);
 
-	// TODO choose proper root certificate, as it may not be current one
-
-	const rootAddr = data.domain;
-	const rootCert = data.info.currentCert;
 	const pkey = mid.verifyPubKey(certs.pkeyCert, address,
 		{ user: certs.userCert, prov: certs.provCert, root: rootCert },
 		rootAddr, validAt);
