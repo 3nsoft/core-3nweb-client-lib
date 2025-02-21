@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,11 +12,10 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { JsonFileProc }
-	from '../../../lib-client/3nstorage/util/file-based-json';
-import { SingleProc } from '../../../lib-common/processes/synced';
+import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
 import { SendingParams } from '../msg/common';
 import { SendingParamsHolder } from '../sending-params';
 
@@ -31,34 +30,46 @@ interface ParamsForSending extends SendingParams {
 	address: string;
 }
 
-export class ParamsFromOthers extends JsonFileProc<ParamsForSending[]> {
+export class ParamsFromOthers {
 
-	private params = new Map<string, ParamsForSending>();
-	private changesProc = new SingleProc();
+	private readonly params = new Map<string, ParamsForSending>();
+	private readonly fileProc: JsonFileProc<ParamsForSending[]>;
 
-	constructor() {
-		super();
+	private constructor() {
+		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
 		Object.seal(this);
 	}
 
-	async start(file: WritableFile): Promise<void> {
-		await super.start(file, []);
-		await this.absorbChangesFromFile();
+	static async makeAndInit(file: WritableFile): Promise<ParamsFromOthers> {
+		const paramsFromOthers = new ParamsFromOthers();
+		await paramsFromOthers.fileProc.start(file, []);
+		await paramsFromOthers.absorbRemoteChanges();
+		return paramsFromOthers;
 	}
 
-	private async absorbChangesFromFile(): Promise<void> {
-		const { json } = await this.get();
-		// we may add checks to json data
-		this.params.clear();
-		json.forEach(p => this.params.set(p.address, p));
+	private async absorbRemoteChanges(): Promise<void> {
+		// XXX
+		//  - check for changes: what is needed here from fileProc, and what is
+		//    generic in absorbing remote changes to refactor it into JsonFileProc
+		//  - absorb and sync, if needed: what can be in JsonFileProc
+		// Code from pre-v.sync:
+		// const { json } = await this.fileProc.get();
+		// this.setFromJSON(json);
 	}
 
 	protected async onFileEvent(ev: FileEvent): Promise<void> {
 		if (ev.src === 'local') { return; }
-		if (ev.type === 'removed') { throw new Error(
-			`Unexpected removal of file with invites info`); }
-		if (ev.type !== 'file-change') { return; }
-		await this.changesProc.startOrChain(() => this.absorbChangesFromFile());
+		switch (ev.type) {
+			case 'file-change':
+				await this.fileProc.order.startOrChain(
+					() => this.absorbRemoteChanges()
+				);
+				break;
+			case 'removed':
+				throw new Error(`Unexpected removal of file with invites info`);
+			default:
+				return;
+		}
 	}
 
 	getFor: ExposedFuncs['get'] = (address) => {
@@ -68,7 +79,7 @@ export class ParamsFromOthers extends JsonFileProc<ParamsForSending[]> {
 	};
 
 	setFor: ExposedFuncs['set'] = (address, params) => {
-		return this.changesProc.startOrChain(async () => {
+		return this.fileProc.order.startOrChain(async () => {
 			const existing = this.params.get(address);
 			if (existing && (existing.timestamp >= params.timestamp)) { return; }
 
@@ -82,7 +93,11 @@ export class ParamsFromOthers extends JsonFileProc<ParamsForSending[]> {
 
 	private async persist(): Promise<void> {
 		const json = Array.from(this.params.values());
-		await this.save(json);
+		await this.fileProc.save(json, false);
+	}
+
+	async close(): Promise<void> {
+		await this.fileProc.close();
 	}
 
 }

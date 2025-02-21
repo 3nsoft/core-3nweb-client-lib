@@ -14,10 +14,12 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { JsonKey, keyToJson } from '../lib-common/jwkeys';
+import { keyToJson } from '../lib-common/jwkeys';
 import { utf8, base64 } from '../lib-common/buffer-utils';
 import { box, secret_box as sbox } from 'ecma-nacl';
 import { Cryptor } from './cryptor/cryptor';
+
+type JsonKey = web3n.keys.JsonKey;
 
 export interface ScryptGenParams {
 	logN: number;

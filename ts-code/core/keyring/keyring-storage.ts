@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SingleProc } from "../../../lib-common/processes/synced";
+import { SingleProc } from "../../lib-common/processes/synced";
 
 type WritableFS = web3n.files.WritableFS;
 type FileException = web3n.files.FileException;

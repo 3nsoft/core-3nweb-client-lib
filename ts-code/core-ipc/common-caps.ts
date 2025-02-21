@@ -21,6 +21,7 @@ import { exposeASMailCAP, makeASMailCaller } from "../core/asmail/asmail-cap-ipc
 import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../core/storage/storage-cap-ipc";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../core/id-manager/mailerid-cap-ipc";
 import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDifference, promiseClientSide } from "./generic";
+import { exposeKeyringsCAP, makeKeyringsCaller } from "../core/keyring/keyrings-cap-ipc";
 
 type W3N = web3n.caps.common.W3N;
 
@@ -33,6 +34,7 @@ export function exposeW3N<T extends W3N>(
 		mail: exposeASMailCAP,
 		mailerid: exposeMailerIdCAP,
 		storage: exposeStorageCAP,
+		keyrings: exposeKeyringsCAP,
 	};
 	exposeCAPs(coreSide, w3n, commonCAPsExposures, extraCAPs);
 }
@@ -49,6 +51,7 @@ export function makeW3Nclient<T extends W3N>(
 		mail: makeASMailCaller,
 		mailerid: makeMailerIdCaller,
 		storage: makeStorageCaller,
+		keyrings: makeKeyringsCaller,
 	};
 	const clientW3N = makeClientSide(clientSide, mainCAPs, extraCAPs);
 	addLogToConsoleToLogCap(clientW3N);
@@ -63,6 +66,7 @@ export async function promiseW3Nclient<T extends W3N>(
 		mail: makeASMailCaller,
 		mailerid: makeMailerIdCaller,
 		storage: promiseStorageCaller,
+		keyrings: makeKeyringsCaller,
 	};
 	const clientW3N = await promiseClientSide(clientSide, mainCAPs, extraCAPs);
 	addLogToConsoleToLogCap(clientW3N);

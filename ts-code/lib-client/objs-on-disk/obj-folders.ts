@@ -23,7 +23,7 @@ import { NONCE_LENGTH } from 'xsp-files';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { join } from 'path';
-import { ObjId } from '../3nstorage/xsp-fs/common';
+import { ObjId } from '../xsp-fs/common';
 
 export interface Exception extends web3n.RuntimeException {
 	type: 'cache';

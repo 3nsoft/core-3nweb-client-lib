@@ -15,21 +15,19 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StorageGetter } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { StorageGetter } from '../../../lib-client/xsp-fs/common';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { errWithCause } from '../../../lib-common/exceptions/error';
 import { NamedProcs } from '../../../lib-common/processes/synced';
 import { MailRecipient, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
 import { ServiceLocator } from '../../../lib-client/service-locator';
 import { OpenedMsg, openMsg } from '../msg/opener';
-import { MsgKeyInfo } from '../keyring';
+import { MsgKeyInfo } from '../../keyring';
 import { MsgIndex } from './msg-indexing';
 import { fsForAttachments } from './attachments/fs';
 import { areAddressesEqual } from '../../../lib-common/canonical-address';
 import { checkAndExtractPKeyWithAddress } from '../key-verification';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
-import { JsonKey } from '../../../lib-common/jwkeys';
 import { InboxEvents } from './inbox-events';
 import { GetSigner } from '../../id-manager';
 import { LogError } from '../../../lib-client/logging/log-to-file';
@@ -48,6 +46,8 @@ type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type WritableFS = web3n.files.WritableFS;
 type InboxService = web3n.asmail.InboxService;
+type JsonKey = web3n.keys.JsonKey;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 export interface ResourcesForReceiving {
 	address: string;
@@ -77,13 +77,14 @@ export interface ResourcesForReceiving {
 		 * object.
 		 * @param checkMidKeyCerts is a certifying function for MailerId certs.
 		 */
-		msgDecryptor: (msgMeta: delivApi.msgMeta.CryptoInfo,
+		msgDecryptor: (
+			msgMeta: delivApi.msgMeta.CryptoInfo,
 			getMainObjHeader: () => Promise<Uint8Array>,
 			getOpenedMsg: (
 				mainObjFileKey: Uint8Array, msgKeyPackLen: number
 			) => Promise<OpenedMsg>,
 			checkMidKeyCerts: (
-				certs: confApi.p.initPubKey.Certs
+				certs: PKeyCertChain
 			) => Promise<{ pkey: JsonKey; address: string; }>
 		) => Promise<{ decrInfo: MsgKeyInfo; openedMsg: OpenedMsg }|undefined>;
 
@@ -179,7 +180,7 @@ export class InboxOnServer {
 		this.index.stopSyncing();
 	}
 
-	wrap(): InboxService {
+	makeCAP(): InboxService {
 		const service: InboxService = {
 			getMsg: this.getMsg.bind(this),
 			listMsgs: this.listMsgs.bind(this),
@@ -245,8 +246,9 @@ export class InboxOnServer {
 				);
 				return openedMsg;
 			};
-			const checkMidKeyCerts = (certs: confApi.p.initPubKey.Certs):
-					Promise<{ pkey: JsonKey; address: string; }> => {
+			const checkMidKeyCerts = (
+				certs: PKeyCertChain
+			): Promise<{ pkey: JsonKey; address: string; }> => {
 				return checkAndExtractPKeyWithAddress(
 					this.msgReceiver.getNet(), this.r.midResolver, certs,
 					Math.round(msgOnDisk.deliveryTS / 1000)

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2020 3NSoft Inc.
+ Copyright (C) 2017, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,28 +17,50 @@
 
 import { Observable, Subscription } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
+import { SingleProc } from '../../../lib-common/processes/synced';
 
 type WritableFile = web3n.files.WritableFile;
 type FileEvent = web3n.files.FileEvent;
 type RemoteEvent = web3n.files.RemoteEvent;
 
-export abstract class JsonFileProc<T> {
-	
+export type FileEventHandler = (
+	ev: FileEvent|RemoteEvent
+) => Promise<void>;
+
+
+// XXX File proc can have general flow for sync
+
+export class JsonFileProc<T> {
+
 	private proc: Subscription|undefined = undefined;
 	private file: WritableFile = undefined as any;
-	
-	async start(file: WritableFile, initVal: T|(() => T)|(() => Promise<T>)):
-			Promise<void> {
-		if (this.proc) { throw new Error(
-			`Json file process is already started`); }
-		if (!file.writable || !file.v) { throw new Error(
-			`Given file is expected to be both writable and versioned.`); }
+
+	constructor(
+		private readonly onFileEvent: FileEventHandler,
+		public readonly order = new SingleProc()
+	) {
+		Object.seal(this);
+	}
+
+	async start(
+		file: WritableFile,
+		initVal: T|(() => T)|(() => Promise<T>)
+	): Promise<void> {
+		if (this.proc) {
+			throw new Error(`Json file process is already started`);
+		}
+		if (!file.writable || !file.v || !file.v.sync) {
+			throw new Error(
+				`Given file is expected to be both writable and versioned from a synchronized storage.`
+			);
+		}
 		this.file = file;
 
 		if (this.file.isNew) {
 			const fstVal = ((typeof initVal === 'function') ?
 				await (initVal as (() => Promise<T>))() :
-				initVal);
+				initVal
+			);
 			await this.file.writeJSON(fstVal);
 		}
 
@@ -51,18 +73,27 @@ export abstract class JsonFileProc<T> {
 		.subscribe();
 	}
 
-	protected abstract onFileEvent(ev: FileEvent|RemoteEvent): Promise<void>;
-
-	async close(): Promise<void> {
-		if (!this.proc) { return; }
-		this.proc.unsubscribe();
-		this.proc = undefined;
-		this.file = undefined as any;
+	close(): Promise<void> {
+		return this.order.startOrChain(async () => {
+			if (!this.proc) { return; }
+			this.proc.unsubscribe();
+			this.proc = undefined;
+			this.file = undefined as any;
+		});
 	}
 
 	private ensureActive(): void {
-		if (!this.proc) { throw new Error(
-			`Json file process is either not yet initialized, or already closed.`); }
+		if (!this.proc) {
+			throw new Error(
+				`Json file process is either not yet initialized, or already closed.`
+			);
+		}
+	}
+
+	writeFile(val: T): Promise<number> {
+		this.ensureActive();
+		// XXX should we also add v.sync operation(s) ?
+		return this.file.v!.writeJSON(val);
 	}
 
 	/**
@@ -70,14 +101,23 @@ export abstract class JsonFileProc<T> {
 	 * file version.
 	 * @param val is a json to be saved to file
 	 */
-	protected save(val: T): Promise<number> {
-		this.ensureActive();
-		return this.file.v!.writeJSON(val);
+	save(val: T, orderOperation = true): Promise<number> {
+		return (orderOperation ?
+			this.order.startOrChain(() => this.writeFile(val)) :
+			this.writeFile(val)
+		);
 	}
 
-	protected get(): Promise<{ json: T; version: number; }> {
+	private readFile(): ReturnType<JsonFileProc<T>['get']> {
 		this.ensureActive();
 		return this.file.v!.readJSON<T>();
+	}
+
+	get(orderOperation = true): Promise<{ json: T; version: number; }> {
+		return (orderOperation ?
+			this.order.startOrChain(() => this.readFile()) :
+			this.readFile()
+		);
 	}
 
 }

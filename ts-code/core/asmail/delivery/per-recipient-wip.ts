@@ -13,19 +13,20 @@
  
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
- */
+*/
 
-import { JsonKey } from '../../../lib-common/jwkeys';
 import { base64 } from '../../../lib-common/buffer-utils';
 import { MailSender, SessionInfo, FirstSaveReqOpts, FollowingSaveReqOpts }
 	from '../../../lib-client/asmail/sender';
 import { MsgPacker, PackJSON } from '../msg/packer';
 import { SingleProc } from '../../../lib-common/processes/synced';
 import { checkAndExtractPKey } from '../key-verification';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
 import { Msg } from './msg';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
+
+type JsonKey = web3n.keys.JsonKey;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 /**
  * This contains WIP's state in a serializable (json) form. It is used by WIP
@@ -267,7 +268,7 @@ export class WIP {
 			this.packer.setEstablishedKeyPairInfo(currentPair.pid, msgCount);
 		} else {
 			const signer = await this.msg.r.getSigner();
-			const pkCerts: confApi.p.initPubKey.Certs = {
+			const pkCerts: PKeyCertChain = {
 				pkeyCert: signer.certifyPublicKey(
 					currentPair.senderPKey!, 30*24*60*60),
 				userCert: signer.userCert,

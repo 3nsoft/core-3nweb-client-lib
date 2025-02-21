@@ -21,8 +21,13 @@
  */
 
 import { signing, GetRandom, arrays, compareVectors } from "ecma-nacl";
-import { JsonKey, Key, SignedLoad, keyToJson, keyFromJson, KeyCert, getKeyCert } from "./jwkeys";
+import { keyToJson, keyFromJson, getKeyCert } from "./jwkeys";
 import { utf8, base64 } from "./buffer-utils";
+
+type JsonKey = web3n.keys.JsonKey;
+type Key = web3n.keys.Key;
+type KeyCert = web3n.keys.KeyCert;
+type SignedLoad = web3n.keys.SignedLoad;
 
 /**
  * This enumerates MailerId's different use-roles of keys, involved in

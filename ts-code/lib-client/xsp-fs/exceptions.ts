@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjId } from "./xsp-fs/common";
+import { ObjId } from "./common";
 
 type FSSyncException = web3n.files.FSSyncException;
 

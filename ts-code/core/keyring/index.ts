@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,27 +15,26 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { CorrespondentKeys, ReceptionPair, msgMasterDecryptor }
-	from './correspondent-keys';
+import { CorrespondentKeys, ReceptionPair, msgMasterDecryptor } from './correspondent-keys';
 import { IdToEmailMap } from './id-to-email-map';
 import { MsgKeyRole, msgKeyPackSizeFor } from './common';
-import { makeEncryptor, makeDecryptor }
-	from '../../../lib-common/async-cryptor-wrap';
+import { makeEncryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { NONCE_LENGTH, AsyncSBoxCryptor } from 'xsp-files';
-import { SuggestedNextKeyPair, OpenedMsg } from '../msg/opener';
-import * as random from '../../../lib-common/random-node';
-import { base64 } from '../../../lib-common/buffer-utils';
-import { areAddressesEqual, toCanonicalAddress }
-	from '../../../lib-common/canonical-address';
-import { ConfigOfASMailServer } from '../config/index';
-import { ResourcesForSending, addToNumberLineSegments } from '../delivery/common';
-import { ResourcesForReceiving } from '../inbox';
+import { SuggestedNextKeyPair, OpenedMsg } from '../asmail/msg/opener';
+import * as random from '../../lib-common/random-node';
+import { base64 } from '../../lib-common/buffer-utils';
+import { areAddressesEqual, toCanonicalAddress } from '../../lib-common/canonical-address';
+import { ResourcesForSending, addToNumberLineSegments } from '../asmail/delivery/common';
+import { ResourcesForReceiving } from '../asmail/inbox';
 import { makeKeyringStorage, KeyringStorage } from './keyring-storage';
-import { assert } from '../../../lib-common/assert';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
-import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
-import { JsonKey } from '../../../lib-common/jwkeys';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
+import * as delivApi from '../../lib-common/service-api/asmail/delivery';
+import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
+import { PublishedIntroKey } from './published-intro-key';
+import { GetSigner } from '../id-manager';
+import { ParamOnServer } from '../../lib-client/asmail/service-config';
+
+type JsonKey = web3n.keys.JsonKey;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 export { KEY_USE, MsgKeyRole } from './common';
 
@@ -65,11 +64,12 @@ interface RingJSON {
 }
 
 type WritableFS = web3n.files.WritableFS;
+type Service = web3n.keys.Keyrings;
 
 type SendingResources = ResourcesForSending['correspondents'];
 type ReceptionResources = ResourcesForReceiving['correspondents'];
 
-export interface KeyRing {
+export interface KeyringForASMail {
 	needIntroKeyFor: SendingResources['needIntroKeyFor'];
 	generateKeysToSend: SendingResources['generateKeysToSend'];
 	nextCrypto: SendingResources['nextCrypto'];
@@ -77,20 +77,17 @@ export interface KeyRing {
 	close(): Promise<void>;
 }
 
-export function makeAndKeyRing(
-	cryptor: AsyncSBoxCryptor, fs: WritableFS,
-	publishedKeys: ConfigOfASMailServer['publishedKeys']
-): Promise<KeyRing> {
-	return KRing.makeAndStart(cryptor, fs, publishedKeys);
-}
-
 export interface KeyPairsStorage {
 	pairIdToEmailMap: IdToEmailMap;
 	saveChanges: () => void;
 }
 
+const FILE_FOR_INTRO_KEY_ON_SERVER = 'introductory-keys/published-on-server.json';
 
-class KRing implements KeyRing, KeyPairsStorage {
+// XXX Keyring is just a storage and crypto functionality around keys
+
+
+export class Keyrings {
 	
 	/**
 	 * This is a map from correspondents' canonical addresses to key objects.
@@ -102,10 +99,10 @@ class KRing implements KeyRing, KeyPairsStorage {
 	private readonly workLabel = cryptoWorkLabels.makeRandom('asmail');
 
 	private storage: KeyringStorage = (undefined as any);
+	private publishedKeys: PublishedIntroKey = (undefined as any);
 
 	constructor(
-		private readonly cryptor: AsyncSBoxCryptor,
-		private readonly publishedKeys: ConfigOfASMailServer['publishedKeys']
+		private readonly cryptor: AsyncSBoxCryptor
 	) {
 		Object.seal(this);
 	}
@@ -132,8 +129,14 @@ class KRing implements KeyRing, KeyPairsStorage {
 		return ck;
 	}
 
-	private async init(fs: WritableFS): Promise<void> {
-		assert(!this.storage);
+	async init(
+		fs: WritableFS, getSigner: GetSigner,
+		pkeyOnServer: ParamOnServer<'init-pub-key'>
+	): Promise<void> {
+		this.publishedKeys = await PublishedIntroKey.makeAndInit(
+			await fs.writableFile(FILE_FOR_INTRO_KEY_ON_SERVER),
+			getSigner, pkeyOnServer
+		);
 		this.storage = makeKeyringStorage(fs);
 		await this.storage.start();
 		const serialForm = await this.storage.load();
@@ -151,22 +154,17 @@ class KRing implements KeyRing, KeyPairsStorage {
 		}
 	}
 
-	static async makeAndStart(
-		cryptor: AsyncSBoxCryptor, fs: WritableFS,
-		publishedKeys: ConfigOfASMailServer['publishedKeys']
-	): Promise<KeyRing> {
-		const kr = new KRing(cryptor, publishedKeys);
-		await kr.init(fs);
+	forASMail(): KeyringForASMail {
 		return {
-			close: kr.close.bind(kr),
-			decrypt: kr.decrypt.bind(kr),
-			generateKeysToSend: kr.generateKeysToSend.bind(kr),
-			needIntroKeyFor: kr.needIntroKeyFor.bind(kr),
-			nextCrypto: kr.nextCrypto.bind(kr)
+			close: this.close.bind(this),
+			decrypt: this.decrypt.bind(this),
+			generateKeysToSend: this.generateKeysToSend.bind(this),
+			needIntroKeyFor: this.needIntroKeyFor.bind(this),
+			nextCrypto: this.nextCrypto.bind(this),
 		};
 	}
 
-	saveChanges(): void {
+	private saveChanges(): void {
 		// pack bytes that need to be encrypted and saved
 		const dataToSave: RingJSON = {
 			corrKeys: []
@@ -178,13 +176,16 @@ class KRing implements KeyRing, KeyPairsStorage {
 		this.storage.save(JSON.stringify(dataToSave));
 	}
 
-	readonly needIntroKeyFor: SendingResources['needIntroKeyFor'] = address => {
+	private needIntroKeyFor(
+		address: string
+	): ReturnType<SendingResources['needIntroKeyFor']> {
 		address = toCanonicalAddress(address);
 		return !this.corrKeys.has(address);
 	};
 
-	readonly generateKeysToSend: SendingResources['generateKeysToSend'] =
-	async (address, introPKeyFromServer) => {
+	private async generateKeysToSend(
+		address: string, introPKeyFromServer?: JsonKey
+	): ReturnType<SendingResources['generateKeysToSend']> {
 		address = toCanonicalAddress(address);
 
 		let ck = this.corrKeys.get(address);
@@ -207,9 +208,11 @@ class KRing implements KeyRing, KeyPairsStorage {
 		msgMasterKey.fill(0);
 
 		return { encryptor, currentPair, msgCount };
-	};
+	}
 
-	readonly nextCrypto: SendingResources['nextCrypto'] = async address => {
+	private async nextCrypto(
+		address: string
+	): ReturnType<SendingResources['nextCrypto']> {
 		address = toCanonicalAddress(address);
 		let ck = this.corrKeys.get(address);
 		if (!ck) {
@@ -217,7 +220,7 @@ class KRing implements KeyRing, KeyPairsStorage {
 		}
 		const suggestPair = await ck.suggestPair();
 		return suggestPair;
-	};
+	}
 
 	private async decryptMsgKeyWithIntroPair(
 		recipientKid: string, senderPKey: string,
@@ -366,15 +369,16 @@ class KRing implements KeyRing, KeyPairsStorage {
 		this.saveChanges();
 	}
 
-	async decrypt(msgMeta: delivApi.msgMeta.CryptoInfo,
+	private async decrypt(
+		msgMeta: delivApi.msgMeta.CryptoInfo,
 		getMainObjHeader: () => Promise<Uint8Array>,
 		getOpenedMsg: (
 			mainObjFileKey: Uint8Array, msgKeyPackLen: number
 		) => Promise<OpenedMsg>,
 		checkMidKeyCerts: (
-			certs: confApi.p.initPubKey.Certs
+			certs: PKeyCertChain
 		) => Promise<{ pkey: JsonKey; address: string; }>
-	): Promise<{ decrInfo: MsgKeyInfo; openedMsg: OpenedMsg }|undefined> {
+	): ReturnType<ReceptionResources['msgDecryptor']> {
 
 		let decrInfo: MsgKeyInfo|undefined;
 		let incrMsgCount: ((msgCount: number) => void)|undefined;
@@ -429,13 +433,25 @@ class KRing implements KeyRing, KeyPairsStorage {
 		return { decrInfo, openedMsg };
 	};
 
-	close(): Promise<void> {
-		return this.storage.close();
+	async close(): Promise<void> {
+		await this.publishedKeys.close();
+		await this.storage.close();
 	}
-	
+
+	makeKeyringsCAP(): Service {
+		const w: Service = {
+			introKeyToPublishOnASMailServer: {
+				getCurrent: async () => { throw new Error(`not implemented, yet`) },
+				makeNew: async () => { throw new Error(`not implemented, yet`) },
+				remove: async () => { throw new Error(`not implemented, yet`) }
+			}
+		};
+		return Object.freeze(w);
+	}
+
 }
-Object.freeze(KRing.prototype);
-Object.freeze(KRing);
+Object.freeze(Keyrings.prototype);
+Object.freeze(Keyrings);
 
 
 function msgKeyPackLenForPair(p: ReceptionPair): number {

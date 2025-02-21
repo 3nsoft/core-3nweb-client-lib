@@ -20,20 +20,20 @@
  * reliance set, exposing to outside only file system's wrap.
  */
 
-import { makeFileException, FileException } from '../../../lib-common/exceptions/file';
+import { makeFileException, FileException } from '../../lib-common/exceptions/file';
 import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject } from './file';
 import { Storage, NodeType, ObjId, NodeEvent, setPathInExc, isSyncedStorage } from './common';
-import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../../fs-utils/files';
-import { selectInFS } from '../../fs-utils/files-select';
+import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../fs-utils/files';
+import { selectInFS } from '../fs-utils/files-select';
 import { posix } from 'path';
-import { pipe } from '../../../lib-common/byte-streaming/pipe';
-import { utf8 } from '../../../lib-common/buffer-utils';
+import { pipe } from '../../lib-common/byte-streaming/pipe';
+import { utf8 } from '../../lib-common/buffer-utils';
 import { from, Observable } from 'rxjs';
 import { filter, map, mergeMap, takeUntil } from 'rxjs/operators';
 import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
-import { Broadcast, toRxObserver } from '../../../lib-common/utils-for-observables';
+import { Broadcast, toRxObserver } from '../../lib-common/utils-for-observables';
 
 function splitPathIntoParts(path: string): string[] {
 	return posix.resolve('/', path).split('/').filter(part => !!part);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,23 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+export const CORE_APPS_PREFIX = 'computer.3nweb.core';
+export const ASMAIL_APP_NAME = `${CORE_APPS_PREFIX}.asmail`;
+export const KEYRINGS_APP_NAME = `${CORE_APPS_PREFIX}.keyrings`;
+export const MAILERID_APP_NAME = `${CORE_APPS_PREFIX}.mailerid`;
 
-declare namespace web3n.mailerid {
 
-	interface Service {
-
-		getUserId(): Promise<string>;
-
-		login(serviceUrl: string): Promise<string>;
-
-	}
-
-	interface MailerIdAssertionLoad {
-		user: string;
-		rpDomain: string;
-		sessionId: string;
-		issuedAt: number;
-		expiresAt: number;
-	}
-
-}
+Object.freeze(exports);

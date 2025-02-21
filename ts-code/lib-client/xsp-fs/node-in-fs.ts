@@ -20,19 +20,19 @@
  * reliance set.
  */
 
-import { SingleProc } from '../../../lib-common/processes/synced';
+import { SingleProc } from '../../lib-common/processes/synced';
 import { FSChangeSrc, isSyncedStorage, Node, NodeType, setPathInExc, Storage, SyncedStorage, UploadHeaderChange } from './common';
-import { makeFileException } from '../../../lib-common/exceptions/file';
-import { errWithCause } from '../../../lib-common/exceptions/error';
-import { makeFSSyncException, StorageException } from '../exceptions';
+import { makeFileException } from '../../lib-common/exceptions/file';
+import { errWithCause } from '../../lib-common/exceptions/error';
+import { makeFSSyncException, StorageException } from './exceptions';
 import { Observable, Subject, Subscription } from 'rxjs';
 import { filter, map, share } from 'rxjs/operators';
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
 import { FolderNode } from './folder-node';
 import { ObjSource } from 'xsp-files';
-import { assert } from '../../../lib-common/assert';
-import { makeRuntimeException } from '../../../lib-common/exceptions/runtime';
+import { assert } from '../../lib-common/assert';
+import { makeRuntimeException } from '../../lib-common/exceptions/runtime';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;

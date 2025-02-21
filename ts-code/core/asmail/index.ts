@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,25 +17,23 @@
 
 import { InboxOnServer } from './inbox';
 import { errWithCause } from '../../lib-common/exceptions/error';
-import { KeyRing, makeAndKeyRing } from './keyring';
+import { KeyringForASMail } from '../keyring';
 import { ConfigOfASMailServer } from './config';
 import { InboxPathForUser } from '../app-files';
 import { Delivery } from './delivery';
-import { StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
+import { StorageGetter } from '../../lib-client/xsp-fs/common';
 import { GetSigner } from '../id-manager';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { SendingParamsHolder } from './sending-params';
 import { Logger } from '../../lib-client/logging/log-to-file';
-import { ServiceLocator, ServiceLocatorMaker } from '../../lib-client/service-locator';
+import { ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
 import { getOrMakeAndUploadFolderIn, getRemoteFolderChanges, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
 
 type WritableFS = web3n.files.WritableFS;
 type Service = web3n.asmail.Service;
 
-const KEYRING_DATA_FOLDER = 'keyring';
 const INBOX_DATA_FOLDER = 'inbox';
-const CONFIG_DATA_FOLDER = 'config';
 const DELIVERY_DATA_FOLDER = 'delivery';
 const SEND_PARAMS_DATA_FOLDER = 'sending-params';
 
@@ -44,7 +42,7 @@ export type MailCAPMaker = () => Service;
 
 export class ASMail {
 
-	private keyring: KeyRing = (undefined as any);
+	private keyring: KeyringForASMail = (undefined as any);
 	private address: string = (undefined as any);
 	private inbox: InboxOnServer = (undefined as any);
 	private delivery: Delivery = (undefined as any);
@@ -63,19 +61,19 @@ export class ASMail {
 	async init(
 		address: string, getSigner: GetSigner,
 		syncedFS: WritableFS, localFS: WritableFS,
-		getStorages: StorageGetter, makeResolver: ServiceLocatorMaker
+		getStorages: StorageGetter, makeResolver: ServiceLocatorMaker,
+		config: ConfigOfASMailServer, keyring: KeyringForASMail
 	): Promise<void> {
 		try {
 			this.address = address;
 
 			await getRemoteFolderChanges(syncedFS);
 
-			await this.setupConfig(getSigner, syncedFS, makeResolver('asmail'));
+			this.config = config;
 
-			await Promise.all([
-				this.setupKeyring(syncedFS),
-				this.setupSendingParams(syncedFS)
-			]);
+			this.keyring = keyring;
+
+			await this.setupSendingParams(syncedFS);
 
 			await Promise.all([
 				this.setupInbox(
@@ -92,30 +90,12 @@ export class ASMail {
 		}
 	}
 
-	private async setupConfig(
-		getSigner: GetSigner, syncedFS: WritableFS, resolver: ServiceLocator
-	): Promise<void> {
-		const fs = await getOrMakeAndUploadFolderIn(syncedFS, CONFIG_DATA_FOLDER);
-		this.config = await ConfigOfASMailServer.makeAndStart(
-			this.address, getSigner, resolver, this.makeNet(), fs
-		);
-	}
-
-	private async setupKeyring(syncedFS: WritableFS): Promise<void> {
-		const fs = await getOrMakeAndUploadFolderIn(
-			syncedFS, KEYRING_DATA_FOLDER
-		);
-		this.keyring = await makeAndKeyRing(
-			this.cryptor, fs, this.config.publishedKeys
-		);
-	}
-
 	private async setupSendingParams(syncedFS: WritableFS): Promise<void> {
 		const fs = await getOrMakeAndUploadFolderIn(
 			syncedFS, SEND_PARAMS_DATA_FOLDER
 		);
-		this.sendingParams = await SendingParamsHolder.makeAndStart(
-			fs, this.config.anonSenderInvites
+		this.sendingParams = await SendingParamsHolder.makeAndInit(
+			fs, this.config.makeParamSetterAndGetter('anon-sender/invites')
 		);
 	}
 
@@ -175,15 +155,18 @@ export class ASMail {
 	makeASMailCAP(): Service {
 		const w: Service = {
 			getUserId: async () => this.address,
-			delivery: this.delivery.wrap(),
-			inbox: this.inbox.wrap(),
+			delivery: this.delivery.makeCAP(),
+			inbox: this.inbox.makeCAP(),
+			config: this.config.makeCAP()
 		};
 		return Object.freeze(w);
 	};
 
 	async close(): Promise<void> {
 		await this.inbox.close();
+		await this.delivery.close();
 		await this.keyring.close();
+		await this.sendingParams.close();
 	}
 
 }

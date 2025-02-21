@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { GetSigner } from '../../id-manager';
 import { iterFilesIn, iterFoldersIn, isContainerEmpty, addFileTo, addFolderTo } from '../msg/attachments-container';
@@ -20,8 +21,7 @@ import { utf8 } from '../../../lib-common/buffer-utils';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { SendingParams, SuggestedNextKeyPair } from '../msg/common';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
-import { JsonKey } from '../../../lib-common/jwkeys';
-import { ASMailKeyPair } from '../keyring/common';
+import { ASMailKeyPair } from '../../keyring/common';
 import { NetClient } from '../../../lib-client/request-utils';
 import { LogWarning, LogError } from '../../../lib-client/logging/log-to-file';
 import { ServiceLocator } from '../../../lib-client/service-locator';
@@ -33,6 +33,7 @@ type AttachmentsContainer = web3n.asmail.AttachmentsContainer;
 type FS = web3n.files.FS;
 type WritableFS = web3n.files.WritableFS;
 type File = web3n.files.File;
+type JsonKey = web3n.keys.JsonKey;
 
 const ATTACHMENTS_NAME = 'attachments';
 

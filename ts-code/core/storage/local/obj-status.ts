@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { LocalObjStatus, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { LocalObjStatus, ObjId } from '../../../lib-client/xsp-fs/common';
 import { join } from 'path';
-import { makeStorageException } from '../../../lib-client/3nstorage/exceptions';
+import { makeStorageException } from '../../../lib-client/xsp-fs/exceptions';
 import { addArchived } from '../common/obj-info-file';
 import { JSONSavingProc } from '../common/json-saving';
 import { nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionFrom, rmCurrentVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';

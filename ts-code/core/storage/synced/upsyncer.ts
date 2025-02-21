@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StorageOwner } from "../../../lib-client/3nstorage/service";
+import { StorageOwner } from "../../../lib-client/3nstorage/storage-owner";
 import { SyncedObj } from "./obj-files";
 import { MonoTypeOperatorFunction } from "rxjs";
 import { FileWrite } from "../../../lib-client/objs-on-disk/file-writing-proc";
 import { LabelledExecPools, Task } from "../../../lib-common/processes/labelled-exec-pools";
 import { LogError } from "../../../lib-client/logging/log-to-file";
-import { makeFSSyncException } from "../../../lib-client/3nstorage/exceptions";
+import { makeFSSyncException } from "../../../lib-client/xsp-fs/exceptions";
 import { assert } from "../../../lib-common/assert";
 import { DiffVerOrderedUpload, NewVersionUpload, WholeVerOrderedUpload } from "./obj-status";
 import { ObjSource } from "xsp-files";
@@ -29,7 +29,7 @@ import { defer } from "../../../lib-common/processes/deferred";
 import { DiffInfo } from "../../../lib-common/service-api/3nstorage/owner";
 import { utf8 } from "../../../lib-common/buffer-utils";
 import { FiniteChunk } from "../../../lib-common/objs-on-disk/file-layout";
-import { ObjId } from "../../../lib-client/3nstorage/xsp-fs/common";
+import { ObjId } from "../../../lib-client/xsp-fs/common";
 
 const MAX_CHUNK_SIZE = 512*1024;
 

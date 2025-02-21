@@ -17,7 +17,7 @@
 
 import { FileException } from '../../../../lib-common/exceptions/file';
 import { SingleProc } from '../../../../lib-common/processes/synced';
-import { MsgKeyInfo, MsgKeyRole } from '../../keyring';
+import { MsgKeyInfo, MsgKeyRole } from '../../../keyring';
 import { base64 } from '../../../../lib-common/buffer-utils';
 import { makeTimedCache } from "../../../../lib-common/timed-cache";
 import { errWithCause } from '../../../../lib-common/exceptions/error';

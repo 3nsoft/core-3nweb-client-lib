@@ -20,7 +20,7 @@ import { ObjDownloader, InitDownloadParts } from "../../../lib-client/objs-on-di
 import { MsgMeta } from "../../../lib-common/service-api/asmail/retrieval";
 import { Layout } from "xsp-files";
 import { joinByteArrs } from "../../../lib-common/buffer-utils";
-import { ObjId } from "../../../lib-client/3nstorage/xsp-fs/common";
+import { ObjId } from "../../../lib-client/xsp-fs/common";
 
 const MAX_GETTING_CHUNK = 512*1024;
 const DOWNLOAD_START_CHUNK = 128*1024;

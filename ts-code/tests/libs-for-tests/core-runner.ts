@@ -166,25 +166,38 @@ export class CoreRunner {
 				this.user.userId, this.user.pass, () => {});
 		} else {
 			const userExists = await caps.signIn.startLoginToRemoteStorage(
-				this.user.userId);
-			if (!userExists) { throw new Error(
-				`Attempt to login ${this.user.userId} fails, cause server doesn't recongize this user.`); }
+				this.user.userId
+			);
+			if (!userExists) {
+				throw new Error(
+					`Attempt to login ${this.user.userId} fails, cause server doesn't recongize this user.`
+				);
+			}
 			isLogged = await caps.signIn.completeLoginAndLocalSetup(
-				this.user.pass, () => {});
+				this.user.pass, () => {}
+			);
 		}
-		if (!isLogged) { throw new Error(
-			`Cannot create user ${this.user.userId}. It may already exists.`); }
+		if (!isLogged) {
+			throw new Error(
+				`Cannot create user ${this.user.userId}. It may already exists.`
+			);
+		}
 		await coreInit;
 	}
 
 	async createUser(userId: string): Promise<User> {
-		if (this.user) { throw new Error('App already has associated user.'); }
+		if (this.user) {
+			throw new Error('App already has associated user.');
+		}
 		const { capsForStartup: caps, coreInit } = this.core.start();
 		const pass = await stringOfB64Chars(16);
 		await caps.signUp.createUserParams(pass, () => {});
 		const isCreated = await caps.signUp.addUser(userId);
-		if (!isCreated) { throw new Error(
-			`Cannot create user ${userId}. It may already exists.`); }
+		if (!isCreated) {
+			throw new Error(
+				`Cannot create user ${userId}. It may already exists.`
+			);
+		}
 		await coreInit;
 		this.user = { userId, pass };
 		return this.user;
@@ -207,7 +220,8 @@ export class CoreRunner {
 	setupTestAppCaps(): void {
 		assert(!this.appCaps, `Expect that app CAPs not to be set.`);
 		const { caps, close: closeCAPs } = this.core.makeCAPsForApp(
-			testApp.appDomain, testApp.capsRequested);
+			testApp.appDomain, testApp.capsRequested
+		);
 		const { clientW3N, close } = wrapCommonW3N(caps);
 		this.appCaps = {
 			raw: caps,

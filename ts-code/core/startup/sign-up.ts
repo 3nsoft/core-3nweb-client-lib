@@ -18,7 +18,7 @@
 import { checkAvailableAddressesForName, addUser, checkAvailableDomains } from '../../lib-client/3nweb-signup';
 import { NetClient } from '../../lib-client/request-utils';
 import { parse as parseUrl } from 'url';
-import { use as keyUse, JsonKey, keyToJson } from '../../lib-common/jwkeys';
+import { use as keyUse, keyToJson } from '../../lib-common/jwkeys';
 import { base64 } from '../../lib-common/buffer-utils';
 import { areAddressesEqual } from '../../lib-common/canonical-address';
 import * as keyDeriv from '../../lib-client/key-derivation';
@@ -31,6 +31,8 @@ import { Subject } from 'rxjs';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { UserMidParams, UserStorageParams } from '../../lib-common/user-admin-api/signup';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
+
+type JsonKey = web3n.keys.JsonKey;
 
 export interface ScryptGenParams {
 	logN: number;

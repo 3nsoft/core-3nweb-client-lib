@@ -21,14 +21,14 @@
  */
 
 import { NodeInFS } from './node-in-fs';
-import { LinkParameters } from '../../fs-utils/files';
+import { LinkParameters } from '../fs-utils/files';
 import { Storage, AsyncSBoxCryptor } from './common';
-import { base64, byteLengthIn } from '../../../lib-common/buffer-utils';
-import { defer } from '../../../lib-common/processes/deferred';
+import { base64, byteLengthIn } from '../../lib-common/buffer-utils';
+import { defer } from '../../lib-common/processes/deferred';
 import { idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
-import { assert } from '../../../lib-common/assert';
+import { assert } from '../../lib-common/assert';
 import { CommonAttrs, XAttrs } from './attrs';
-import { makeVersionMismatchExc } from '../../../lib-common/exceptions/file';
+import { makeVersionMismatchExc } from '../../lib-common/exceptions/file';
 import { NodePersistance, ReadonlyPayload } from './node-persistence';
 
 type FileByteSource = web3n.files.FileByteSource;

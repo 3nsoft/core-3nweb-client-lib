@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 3NSoft Inc.
+ Copyright (C) 2015, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,8 +18,9 @@
  * This defines interfaces for mail configuration requests.
  */
 
-import * as jwk from '../../jwkeys';
 import * as midApi from '../mailer-id/login';
+
+type ASMailConfigParams = web3n.asmail.ASMailConfigParams;
 
 export const ERR_SC = {
 	malformed: 400,
@@ -34,7 +35,7 @@ export const PARAM_SC = {
 Object.freeze(PARAM_SC);
 
 export namespace midLogin {
-	
+
 	export const MID_URL_PART = 'login/mailerid/';
 	export const START_URL_END = MID_URL_PART + midApi.startSession.URL_END;
 	export const AUTH_URL_END = MID_URL_PART + midApi.authSession.URL_END;
@@ -43,9 +44,9 @@ export namespace midLogin {
 Object.freeze(midLogin);
 
 export namespace closeSession {
-	
+
 	export const URL_END = 'close-session';
-	
+
 }
 Object.freeze(closeSession);
 	
@@ -54,87 +55,70 @@ export interface InvitesList {
 }
 
 export namespace p {
-	
+
 	export namespace initPubKey {
-		
+
 		export const URL_END = 'param/init-pub-key';
-		
-		export interface Certs {
-			pkeyCert: jwk.SignedLoad;
-			userCert: jwk.SignedLoad;
-			provCert: jwk.SignedLoad;
-		}
-		
+
+		export type Certs = ASMailConfigParams['init-pub-key'];
+
 	}
 	Object.freeze(initPubKey);
 	
 	export namespace authSenderPolicy {
-		
+
 		export const URL_END = 'param/auth-sender/policy';
-		
-		export interface Policy {
-			acceptWithInvitesOnly: boolean;
-			acceptFromWhiteListOnly: boolean;
-			applyBlackList: boolean;
-			defaultMsgSize: number;
-		}
-		
+
+		export type Policy = ASMailConfigParams['auth-sender/policy'];
+
 	}
 	Object.freeze(authSenderPolicy);
-	
+
 	export namespace authSenderWhitelist {
-		
+
 		export const URL_END = 'param/auth-sender/whitelist';
-		
-		export interface List {
-			[address: string]: number;
-		}
-		
+
+		export type List = ASMailConfigParams['auth-sender/whitelist'];
+
 	}
 	Object.freeze(authSenderWhitelist);
-	
+
 	export namespace authSenderBlacklist {
-		
+
 		export const URL_END = 'param/auth-sender/blacklist';
-		
-		export interface List {
-			[address: string]: number;
-		}
-		
+
+		export type List = ASMailConfigParams['auth-sender/blacklist'];
+
 	}
 	Object.freeze(authSenderBlacklist);
 	
 	export namespace authSenderInvites {
-		
+
 		export const URL_END = 'param/auth-sender/invites';
-		
-		export interface List extends InvitesList { }
-		
+
+		export type List = ASMailConfigParams['auth-sender/invites'];
+
 	}
 	Object.freeze(authSenderInvites);
-	
+
 	export namespace anonSenderPolicy {
-		
+
 		export const URL_END = 'param/anon-sender/policy';
-		
-		export interface Policy {
-			accept: boolean;
-			acceptWithInvitesOnly: boolean;
-			defaultMsgSize: number;
-		}
-		
+
+		export type Policy = ASMailConfigParams['anon-sender/policy'];
+
 	}
 	Object.freeze(anonSenderPolicy);
-	
+
 	export namespace anonSenderInvites {
-		
+
 		export const URL_END = 'param/anon-sender/invites';
-		
-		export interface List extends InvitesList { }
-		
+
+		export type List = ASMailConfigParams['anon-sender/invites'];
+
 	}
 	Object.freeze(anonSenderInvites);
-	
+
 }
 Object.freeze(p);
 

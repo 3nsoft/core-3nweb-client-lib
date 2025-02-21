@@ -29,6 +29,7 @@ declare namespace web3n.caps.common {
 	type DevPathChecker = (path: string) => 'w'|'r'|false;
 
 	interface RequestedCAPs {
+		keyrings?: 'all';
 		mail?: MailCAPSetting;
 		storage?: StorageCAPSetting;
 		mailerid?: true;
@@ -63,6 +64,7 @@ declare namespace web3n.caps.common {
 	interface MailCAPSetting {
 		sendingTo?: 'all' | { whitelist: string[]; };
 		receivingFrom?: 'all' | { whitelist: string[]; };
+		config?: 'all';
 	}
 
 	interface W3N {
@@ -70,6 +72,7 @@ declare namespace web3n.caps.common {
 		mail?: asmail.Service;
 		storage?: storage.Service;
 		mailerid?: mailerid.Service;
+		keyrings?: keys.Keyrings;
 	}
 
 	type Logger = (

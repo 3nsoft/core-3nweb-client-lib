@@ -18,10 +18,10 @@
 import { LogError, LogWarning } from "../../lib-client/logging/log-to-file";
 import { assert } from "../../lib-common/assert";
 import { errWithCause } from "../../lib-common/exceptions/error";
-import { JsonKey } from "../../lib-common/jwkeys";
 
 type WritableFS = web3n.files.WritableFS;
 type FileException = web3n.files.FileException;
+type JsonKey = web3n.keys.JsonKey;
 
 const LOGIN_KEY_FILE_NAME = 'login-keys';
 

@@ -17,7 +17,7 @@
 
 import * as fs from '../../../lib-common/async-fs-node';
 import { join } from 'path';
-import { makeStorageException } from '../../../lib-client/3nstorage/exceptions';
+import { makeStorageException } from '../../../lib-client/xsp-fs/exceptions';
 
 export async function readJSONInfoFileIn<T>(
 	objFolder: string, fileName: string

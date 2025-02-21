@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Storage, NodesContainer, StorageGetter, FolderInJSON, LocalObjStatus, ObjId } from '../../../../lib-client/3nstorage/xsp-fs/common';
-import { XspFS } from '../../../../lib-client/3nstorage/xsp-fs/fs';
+import { Storage, NodesContainer, StorageGetter, FolderInJSON, LocalObjStatus, ObjId } from '../../../../lib-client/xsp-fs/common';
+import { XspFS } from '../../../../lib-client/xsp-fs/fs';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { MsgOnDisk } from '../msg-on-disk';
 import { LogError } from '../../../../lib-client/logging/log-to-file';

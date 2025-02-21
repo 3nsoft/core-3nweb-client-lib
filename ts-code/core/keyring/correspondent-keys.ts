@@ -20,16 +20,18 @@
  */
 
 import { JWKeyPair, PID_LENGTH, generateKeyPair, extractKeyBytes, MsgKeyRole, extractSKeyBytes, ASMailKeyPair} from './common';
-import { JsonKey, JsonKeyShort } from '../../../lib-common/jwkeys';
-import { SuggestedNextKeyPair } from '../msg/opener';
+import { SuggestedNextKeyPair } from '../asmail/msg/opener';
 import { KeyPairsStorage } from './index';
-import * as random from '../../../lib-common/random-node';
+import * as random from '../../lib-common/random-node';
 import { box } from 'ecma-nacl';
-import { base64 } from '../../../lib-common/buffer-utils';
-import { errWithCause } from '../../../lib-common/exceptions/error';
-import { Decryptor, makeDecryptor } from '../../../lib-common/async-cryptor-wrap';
+import { base64 } from '../../lib-common/buffer-utils';
+import { errWithCause } from '../../lib-common/exceptions/error';
+import { Decryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
+
+type JsonKey = web3n.keys.JsonKey;
+type JsonKeyShort = web3n.keys.JsonKeyShort;
 
 export interface ReceptionPair {
 	pids: string[];

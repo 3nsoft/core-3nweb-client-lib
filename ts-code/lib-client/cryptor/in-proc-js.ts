@@ -17,7 +17,7 @@
 
 import { Cryptor } from './cryptor';
 import { scrypt, box, secret_box as sbox, signing as sign, arrays } from 'ecma-nacl';
-import { InProcAsyncExecutor } from '../cryptor-work-labels';
+import { InProcAsyncExecutor } from './cryptor-work-labels';
 
 function onNextTick<T>(f: () => T): Promise<T> {
 	return new Promise((resolve, reject) => process.nextTick(() => {

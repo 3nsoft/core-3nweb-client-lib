@@ -15,11 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeUint8ArrayCopy, utf8 } from '../../../lib-common/buffer-utils';
+import { makeUint8ArrayCopy, utf8 } from '../../lib-common/buffer-utils';
 import { FolderInfo, NodeInfo } from './folder-node';
 import { KEY_LENGTH } from 'xsp-files';
-import { packUintTo4Bytes, uintFrom4Bytes } from '../../../lib-common/big-endian';
-import { assert } from '../../../lib-common/assert';
+import { packUintTo4Bytes, uintFrom4Bytes } from '../../lib-common/big-endian';
+import { assert } from '../../lib-common/assert';
 
 const ver1Serialization = new Uint8Array([ 1 ]);
 

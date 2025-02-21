@@ -16,9 +16,9 @@
 */
 
 import { Subscription, merge, Observable } from 'rxjs';
-import { StorageOwner } from '../../../lib-client/3nstorage/service';
+import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
-import { Storage } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { Storage } from '../../../lib-client/xsp-fs/common';
 import { ServerEvents } from '../../../lib-client/server-events';
 import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter } from 'rxjs/operators';

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,15 +12,15 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-import { JsonFileProc }
-	from '../../../lib-client/3nstorage/util/file-based-json';
-import { SingleProc } from '../../../lib-common/processes/synced';
+import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
 import { SendingParams } from '../msg/common';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
-import { ConfigOfASMailServer } from '../config/index';
-import { SendingParamsHolder } from '../sending-params';
+import { SendingParamsHolder } from './index';
+import { ParamOnServer } from '../../../lib-client/asmail/service-config';
+import { AnonymousInvites } from './invitations-anon';
 
 type ExposedFuncs = SendingParamsHolder['thisSide'];
 
@@ -47,29 +47,33 @@ const DEFAULT_INVITE_MAX_MSG_SIZE = 1024*1024*1024;
  * invitation tokens, and this class uses config service to register tokens on
  * a server.
  */
-export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
+export class OwnSendingParams {
 
-	private params = new Map<string, ParamsForAcceptingMsgs>();
+	private readonly params = new Map<string, ParamsForAcceptingMsgs>();
 	private defaultParams: SendingParams|undefined = undefined;
-	private changesProc = new SingleProc();
+	private readonly fileProc: JsonFileProc<PersistedJSON>;
 
-	constructor(
-		private anonInvites: ConfigOfASMailServer['anonSenderInvites']
+	private constructor(
+		private readonly anonInvites: AnonymousInvites
 	) {
-		super();
+		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
 		Object.seal(this);
 	}
 
-	async start(file: WritableFile): Promise<void> {
-		await super.start(file, () => ({ senderSpecific: [] }));
-		await this.absorbChangesFromFile();
-		if (!this.defaultParams) {
-			await this.setDefaultParams();
+	static async makeAndInit(
+		file: WritableFile, anonInvites: AnonymousInvites
+	): Promise<OwnSendingParams> {
+		const ownParams = new OwnSendingParams(anonInvites);
+		await ownParams.fileProc.start(file, () => ownParams.toFileJSON());
+		await ownParams.absorbChangesFromFile();
+		if (!ownParams.defaultParams) {
+			await ownParams.setDefaultParams();
 		}
+		return ownParams;
 	}
 
 	private async setDefaultParams(): Promise<void> {
-		await this.changesProc.startOrChain(async () => {
+		await this.fileProc.order.startOrChain(async () => {
 			const invites = this.anonInvites.getAll();
 			const defaultInvite = invites.get(DEFAULT_INVITE_LABEL);
 			if (defaultInvite) {
@@ -79,7 +83,8 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 				};
 			} else {
 				const invitation = await this.anonInvites.create(
-					DEFAULT_INVITE_LABEL, DEFAULT_INVITE_MAX_MSG_SIZE);
+					DEFAULT_INVITE_LABEL, DEFAULT_INVITE_MAX_MSG_SIZE
+				);
 				this.defaultParams = {
 					timestamp: 0,
 					invitation
@@ -89,16 +94,19 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 		});
 	}
 
-	private async persist(): Promise<void> {
-		const json: PersistedJSON = {
+	private toFileJSON(): PersistedJSON {
+		return {
 			default: this.defaultParams,
 			senderSpecific: Array.from(this.params.values())
 		};
-		await this.save(json);
+	}
+
+	private async persist(): Promise<void> {
+		await this.fileProc.save(this.toFileJSON(), false);
 	}
 
 	private async absorbChangesFromFile(): Promise<void> {
-		const { json } = await this.get();
+		const { json } = await this.fileProc.get(false);
 		// we may add checks to json data
 		this.params.clear();
 		json.senderSpecific.forEach(p => this.params.set(p.address, p));
@@ -110,7 +118,7 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 		if (ev.type === 'removed') { throw new Error(
 			`Unexpected removal of file with invites info`); }
 		if (ev.type !== 'file-change') { return; }
-		await this.changesProc.startOrChain(() => this.absorbChangesFromFile());
+		await this.fileProc.order.startOrChain(() => this.absorbChangesFromFile());
 	}
 
 	getFor: ExposedFuncs['getUpdated'] = async (address) => {
@@ -133,13 +141,13 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 		};
 		p.suggested!.timestamp = Date.now();
 		this.params.set(p.address, p);
-		await this.changesProc.startOrChain(() => this.persist());
+		await this.fileProc.order.startOrChain(() => this.persist());
 
 		return p.suggested;
 	};
 
 	setAsInUse: ExposedFuncs['setAsUsed'] = async (address, invite) => {
-		await this.changesProc.startOrChain(async () => {
+		await this.fileProc.order.startOrChain(async () => {
 			const p = this.params.get(address);
 			if (!p || !p.suggested) { return; }
 			if (p.suggested.invitation !== invite) { return; }
@@ -147,6 +155,11 @@ export class OwnSendingParams extends JsonFileProc<PersistedJSON> {
 			p.suggested = undefined;
 			await this.persist();
 		});
+	}
+
+	async close(): Promise<void> {
+		await this.anonInvites.close();
+		await this.fileProc.close();
 	}
 
 }

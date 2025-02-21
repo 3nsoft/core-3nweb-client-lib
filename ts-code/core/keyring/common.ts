@@ -20,9 +20,11 @@
  */
 
 import { box, secret_box as sbox } from 'ecma-nacl';
-import { base64 } from '../../../lib-common/buffer-utils';
-import { JsonKey, JsonKeyShort } from '../../../lib-common/jwkeys';
-import { bytes as randomBytes, stringOfB64Chars as randomB64String } from '../../../lib-common/random-node';
+import { base64 } from '../../lib-common/buffer-utils';
+import { bytes as randomBytes, stringOfB64Chars as randomB64String } from '../../lib-common/random-node';
+
+type JsonKey = web3n.keys.JsonKey;
+type JsonKeyShort = web3n.keys.JsonKeyShort;
 
 export type MsgKeyRole = 'suggested' | 'in_use' | 'old' |
 	'published_intro' | 'prev_published_intro' | 'introductory';

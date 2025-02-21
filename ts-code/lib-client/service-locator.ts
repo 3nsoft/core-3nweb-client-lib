@@ -15,10 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { SignedLoad, isLikeSignedKeyCert } from '../lib-common/jwkeys';
+import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { parse as parseUrl } from 'url';
 import { Reply, makeException, NetClient } from './request-utils';
 import { promises as dnsPromises } from 'dns';
+
+type SignedLoad = web3n.keys.SignedLoad;
 
 async function readJSONLocatedAt<T>(
 	client: NetClient, url: string

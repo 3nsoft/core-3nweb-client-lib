@@ -17,7 +17,7 @@
 
 import { ObjFolders } from '../../../lib-client/objs-on-disk/obj-folders';
 import { ObjOnDisk, GetBaseSegsOnDisk } from '../../../lib-client/objs-on-disk/obj-on-disk';
-import { LocalObjStatus, ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { LocalObjStatus, ObjId } from '../../../lib-client/xsp-fs/common';
 import { ObjSource, Subscribe } from 'xsp-files';
 import { NamedProcs } from '../../../lib-common/processes/synced';
 import { join } from 'path';

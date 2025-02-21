@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StorageOwner } from '../../../lib-client/3nstorage/service';
+import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { NamedProcs } from '../../../lib-common/processes/synced';
-import { ObjId } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { ObjId } from '../../../lib-client/xsp-fs/common';
 import { ObjDownloader, InitDownloadParts } from '../../../lib-client/objs-on-disk/obj-on-disk';
 import { Layout } from 'xsp-files';
 import { joinByteArrs } from '../../../lib-common/buffer-utils';

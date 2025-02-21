@@ -39,7 +39,7 @@ export const ERR_SC = {
 Object.freeze(ERR_SC);
 
 export namespace midLogin {
-	
+
 	export const MID_URL_PART = 'login/mailerid/';
 	export const START_URL_END = MID_URL_PART + midApi.startSession.URL_END;
 	export const AUTH_URL_END = MID_URL_PART + midApi.authSession.URL_END;
@@ -48,40 +48,40 @@ export namespace midLogin {
 Object.freeze(midLogin);
 
 export namespace closeSession {
-	
+
 	export const URL_END = 'close-session';
-	
+
 }
 Object.freeze(closeSession);
 
 export namespace listMsgs {
-	
+
 	export const URL_END = 'msg/ids';
-	
+
 	export interface Reply extends Array<string> {}
-	
+
 	export const SC = {
 		ok: 200,
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(listMsgs);
 
 export namespace rmMsg {
-	
+
 	export const EXPRESS_URL_END = 'msg/:msgId';
-	
+
 	export function genUrlEnd(msgId: string): string {
 		return 'msg/'+msgId;
 	}
-	
+
 	export const SC = {
 		ok: 200,
 		unknownMsg: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(rmMsg);
 
@@ -107,21 +107,21 @@ export interface MsgMeta  {
 }
 
 export namespace msgMetadata {
-	
+
 	export const EXPRESS_URL_END = 'msg/:msgId/meta';
-	
+
 	export function genUrlEnd(msgId: string): string {
 		return 'msg/'+msgId+'/meta';
 	}
-	
+
 	export interface Reply extends MsgMeta {}
-	
+
 	export const SC = {
 		ok: 200,
 		unknownMsg: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(msgMetadata);
 
@@ -150,7 +150,7 @@ export interface GetObjQueryOpts {
 	 * included in a reply.
 	 */
 	header?: boolean;
-	
+
 	/**
 	 * This is an offset into segments. If it is not present, zero is assumed.
 	 * This field must be zero or missing, when header is true.
@@ -164,21 +164,21 @@ export interface GetObjQueryOpts {
 }
 
 export namespace msgObj {
-	
+
 	export const EXPRESS_URL_END = 'msg/:msgId/obj/:objId';
-	
+
 	export function genUrlEnd(msgId: string, objId: string,
 			opts?: GetObjQueryOpts): string {
 		let optStr = (opts ? '?'+stringifyOpts(opts as any) : '');
 		return `msg/${msgId}/obj/${objId}${optStr}`;
 	}
-	
+
 	export const SC = {
 		ok: 200,
 		unknownMsgOrObj: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(msgObj);
 
@@ -189,7 +189,7 @@ export interface ErrorReply {
 export namespace wsEventChannel {
 
 	export const URL_END = 'events';
-	
+
 	export const SC = {
 		ok: 200,
 	};
@@ -211,13 +211,13 @@ Object.freeze(msgRecievedCompletely);
 
 // XXX this event should be triggered by big messages with more than one obj
 export namespace msgMainObjRecieved {
-	
+
 	export const EVENT_NAME = 'msg-main-obj-received';
 
 	export interface Event {
 		msgId: string;
 	}
-	
+
 }
 Object.freeze(msgMainObjRecieved);
 	

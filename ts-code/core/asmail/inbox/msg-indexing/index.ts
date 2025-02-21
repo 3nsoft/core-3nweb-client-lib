@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MsgKeyInfo, MsgKeyRole } from '../../keyring';
+import { MsgKeyInfo, MsgKeyRole } from '../../../keyring';
 import { IndexedRecords, MsgLogs, makeJsonBasedIndexedRecords } from './logs-n-entries';
 
 type WritableFS = web3n.files.WritableFS;

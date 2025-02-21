@@ -16,7 +16,7 @@
 */
 
 import { joinByteArrs } from '../../lib-common/buffer-utils';
-import { ObjId } from '../3nstorage/xsp-fs/common';
+import { ObjId } from '../xsp-fs/common';
 import { ObjSource, Subscribe, Layout, ByteSource } from 'xsp-files';
 import { wrapAndSyncSource } from '../../lib-common/byte-streaming/wrapping';
 import { assert } from '../../lib-common/assert';

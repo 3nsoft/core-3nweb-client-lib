@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,15 +12,12 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
-
-/**
- * This defines functions that implement ASMail reception protocol.
- */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { makeException, extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/retrieval';
-import { ServiceUser, IGetMailerIdSigner } from '../user-with-mid-session';
+import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 
@@ -58,6 +55,13 @@ export function makeMsgIsBrokenException(msgId: string): InboxException {
 	return exc;
 }
 
+const inboxAccessParams: ServiceAccessParams = {
+	login: api.midLogin.MID_URL_PART,
+	logout: api.closeSession.URL_END,
+	canBeRedirected: true
+};
+
+
 export class MailRecipient extends ServiceUser {
 	
 	constructor(
@@ -65,20 +69,10 @@ export class MailRecipient extends ServiceUser {
 		mainUrlGetter: () => Promise<string>,
 		net: NetClient
 	) {
-		super(user,
-			{
-				login: api.midLogin.MID_URL_PART,
-				logout: api.closeSession.URL_END,
-				canBeRedirected: true
-			},
-			getSigner,
-			async (): Promise<string> => {
-				const serviceUrl = await mainUrlGetter();
-				const info = await asmailInfoAt(this.net, serviceUrl);
-				if (!info.retrieval) { throw new Error(`Missing retrieval service url in ASMail information at ${serviceUrl}`); }
-				return info.retrieval;
-			},
-			net);
+		super(
+			user, inboxAccessParams, getSigner,
+			serviceUriGetter(net, mainUrlGetter), net
+		);
 		Object.seal(this);
 	}
 
@@ -222,5 +216,22 @@ export class MailRecipient extends ServiceUser {
 }
 Object.freeze(MailRecipient);
 Object.freeze(MailRecipient.prototype);
+
+
+function serviceUriGetter(
+	net: NetClient, mainUrlGetter: () => Promise<string>
+): () => Promise<string> {
+	return async (): Promise<string> => {
+		const serviceUrl = await mainUrlGetter();
+		const info = await asmailInfoAt(net, serviceUrl);
+		if (!info.retrieval) {
+			throw new Error(
+				`Missing retrieval service url in ASMail information at ${serviceUrl}`
+			);
+		}
+		return info.retrieval;
+	}
+}
+
 
 Object.freeze(exports);

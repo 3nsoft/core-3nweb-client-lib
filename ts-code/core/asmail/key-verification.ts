@@ -12,14 +12,18 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import { relyingParty as mid, makeMalformedCertsException } from '../../lib-common/mid-sigs-NaCl-Ed';
-import { JsonKey, SignedLoad, getKeyCert } from '../../lib-common/jwkeys';
-import * as confApi from '../../lib-common/service-api/asmail/config';
+import { getKeyCert } from '../../lib-common/jwkeys';
 import { getMailerIdInfoFor, ServiceLocator } from '../../lib-client/service-locator';
 import { NetClient } from '../../lib-client/request-utils';
+
+type JsonKey = web3n.keys.JsonKey;
+type SignedLoad = web3n.keys.SignedLoad;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 /**
  * This returns a promise, resolvable to public key, when certificates'
@@ -32,7 +36,7 @@ import { NetClient } from '../../lib-client/request-utils';
  */
 export async function checkAndExtractPKey(
 	client: NetClient, resolver: ServiceLocator,
-	address: string, certs: confApi.p.initPubKey.Certs
+	address: string, certs: PKeyCertChain
 ): Promise<JsonKey> {
 	address = toCanonicalAddress(address);
 	const validAt = Math.round(Date.now() / 1000);
@@ -80,7 +84,7 @@ async function getRootCertForKey(
  */
 export async function checkAndExtractPKeyWithAddress(
 	client: NetClient, resolver: ServiceLocator,
-	certs: confApi.p.initPubKey.Certs, validAt: number
+	certs: PKeyCertChain, validAt: number
 ): Promise<{ pkey: JsonKey; address: string; }> {
 	if (typeof validAt !== 'number') { throw new Error(`Invalid time parameter: ${validAt}`); }
 

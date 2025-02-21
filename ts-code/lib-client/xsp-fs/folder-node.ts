@@ -20,24 +20,24 @@
  * reliance set.
  */
 
-import { base64 } from '../../../lib-common/buffer-utils';
-import { makeFileException, FileException } from '../../../lib-common/exceptions/file';
-import { errWithCause } from '../../../lib-common/exceptions/error';
+import { base64 } from '../../lib-common/buffer-utils';
+import { makeFileException, FileException } from '../../lib-common/exceptions/file';
+import { errWithCause } from '../../lib-common/exceptions/error';
 import { Storage, Node, NodeType, setPathInExc, FSChangeSrc, ObjId } from './common';
 import { FSEvent, NodeInFS } from './node-in-fs';
 import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
-import { LinkParameters } from '../../fs-utils/files';
-import { makeFSSyncException, StorageException } from '../exceptions';
-import { defer } from '../../../lib-common/processes/deferred';
-import { copy, deepEqual } from '../../../lib-common/json-utils';
+import { LinkParameters } from '../fs-utils/files';
+import { makeFSSyncException, StorageException } from './exceptions';
+import { defer } from '../../lib-common/processes/deferred';
+import { copy, deepEqual } from '../../lib-common/json-utils';
 import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
-import * as random from '../../../lib-common/random-node';
+import * as random from '../../lib-common/random-node';
 import { parseFolderInfo, serializeFolderInfo } from './folder-node-serialization';
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
-import { assert } from '../../../lib-common/assert';
-import { appendArray } from '../util/for-arrays';
+import { assert } from '../../lib-common/assert';
+import { appendArray } from './util/for-arrays';
 
 type ListingEntry = web3n.files.ListingEntry;
 type EntryAdditionEvent = web3n.files.EntryAdditionEvent;

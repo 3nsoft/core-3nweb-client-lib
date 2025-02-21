@@ -16,7 +16,7 @@
 */
 
 import { join } from "path";
-import { UploadHeaderChange } from "../../../lib-client/3nstorage/xsp-fs/common";
+import { UploadHeaderChange } from "../../../lib-client/xsp-fs/common";
 import { FileException, readFile, writeFile } from "../../../lib-common/async-fs-node";
 import { Code } from "../../../lib-common/exceptions/file";
 import { packUintTo8Bytes, uintFrom8Bytes } from "../../../lib-common/big-endian";

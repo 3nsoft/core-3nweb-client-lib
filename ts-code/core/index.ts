@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,9 +29,10 @@ import { mergeMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
 import { ServiceLocatorMaker } from '../lib-client/service-locator';
+import { Keyrings } from './keyring';
+import { ASMAIL_APP_NAME, KEYRINGS_APP_NAME, MAILERID_APP_NAME } from './storage/common/constants';
+import { ConfigOfASMailServer } from './asmail/config';
 
-const ASMAIL_APP_NAME = 'computer.3nweb.core.asmail';
-const MAILERID_APP_NAME = 'computer.3nweb.core.mailerid';
 
 type RequestedCAPs = web3n.caps.common.RequestedCAPs;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
@@ -52,6 +53,7 @@ export class Core {
 	private cryptor: ReturnType<makeCryptor>;
 	private storages: Storages;
 	private asmail: ASMail;
+	private keyrings: Keyrings;
 	private idManager: IdManager|undefined = undefined;
 	private isInitialized = false;
 	private closingProc: Promise<void>|undefined = undefined;
@@ -66,10 +68,13 @@ export class Core {
 	) {
 		this.cryptor = makeCryptor(this.logger.logError, this.logger.logWarning);
 		this.storages = new Storages(
-			this.cryptor.cryptor.sbox, this.appDirs.storagePathFor);
+			this.cryptor.cryptor.sbox, this.appDirs.storagePathFor
+		);
+		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox);
 		this.asmail = new ASMail(
 			this.cryptor.cryptor.sbox, this.makeNet,
-			this.appDirs.inboxPathFor, this.logger);
+			this.appDirs.inboxPathFor, this.logger
+		);
 		Object.seal(this);
 	}
 
@@ -143,7 +148,9 @@ export class Core {
 			u.address, idManager.getSigner, u.storeParams, u.storeSKey,
 			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
 		);
-		if (!storesUp) { throw new Error(`Stores failed to initialize`); }
+		if (!storesUp) {
+			throw new Error(`Stores failed to initialize`);
+		}
 
 		// 3) give id manager fs, in which it will record labeled key(s)
 		await setupManagerStorage(
@@ -212,15 +219,18 @@ export class Core {
 		appDomain: string, requestedCAPs: RequestedCAPs
 	): { caps: W3N; close: () => void; } {
 		if (!this.isInitialized || this.closingProc) {
-			throw new Error(`Core is either not yet initialized, or is already closed.`);
+			throw new Error(
+				`Core is either not yet initialized, or is already closed.`
+			);
 		}
 
 		const { storage, close } = this.makeStorageCAP(appDomain, requestedCAPs);
 		const mail = this.makeMailCAP(requestedCAPs);
 		const log = this.makeLogCAP(appDomain, requestedCAPs)!;
 		const mailerid = this.makeMailerIdCAP(requestedCAPs);
+		const keyrings = this.makeKeyringsCAP(requestedCAPs);
 
-		const caps: W3N = { mail, log, mailerid, storage };
+		const caps: W3N = { mail, log, mailerid, storage, keyrings };
 
 		return { caps, close };
 	};
@@ -245,6 +255,15 @@ export class Core {
 		&& (requestedCAPs.mail.receivingFrom === 'all')
 		&& (requestedCAPs.mail.sendingTo === 'all')) {
 			return this.asmail.makeASMailCAP();
+		} else {
+			return undefined;
+		}
+	}
+
+	private makeKeyringsCAP(requestedCAPs: RequestedCAPs): W3N['keyrings'] {
+		if (requestedCAPs.keyrings
+		&& (requestedCAPs.keyrings === 'all')) {
+			return this.keyrings.makeKeyringsCAP();
 		} else {
 			return undefined;
 		}
@@ -279,8 +298,11 @@ export class Core {
 			this.closingProc = (async () => {
 				if (this.isInitialized) {
 					await this.asmail.close();
+					await this.keyrings.close();
 					await this.storages.close();
 					this.asmail = (undefined as any);
+					this.keyrings = (undefined as any);
+					this.idManager = (undefined as any);
 					this.storages = (undefined as any);
 				}
 				await this.cryptor.close();
@@ -291,9 +313,43 @@ export class Core {
 		await this.closingProc;
 	}
 
+	private async performDataMigrationsAtInit(): Promise<void> {
+		await this.storages.migrateCoreAppDataOnFirstRun(
+			'synced', `${ASMAIL_APP_NAME}/keyring`, KEYRINGS_APP_NAME
+		);
+		await this.storages.migrateCoreAppDataOnFirstRun(
+			'synced',
+			`${ASMAIL_APP_NAME}/config/introductory-key.json`,
+			`${KEYRINGS_APP_NAME}/introductory-keys/published-on-server.json`
+		);
+		await this.storages.migrateCoreAppDataOnFirstRun(
+			'synced', `${ASMAIL_APP_NAME}/config/anonymous/invites.json`, `${ASMAIL_APP_NAME}/sending-params/anonymous-invites.json`
+		);
+	}
+
 	private async initCore(idManager: IdManager): Promise<string> {
 		try {
 			this.idManager = idManager;
+
+			const address = this.idManager.getId();
+			const getSigner = this.idManager.getSigner;
+
+			const asmailServerConfig = new ConfigOfASMailServer(
+				address, getSigner, this.makeResolver('asmail'), this.makeNet()
+			);
+
+			// XXX This should be removed, at some point, as there will be no more
+			//     users with very old data folders.
+			await this.performDataMigrationsAtInit();
+
+			const keyringsSyncedFS = await this.storages.makeSyncedFSForApp(
+				KEYRINGS_APP_NAME
+			);
+			await this.keyrings.init(
+				keyringsSyncedFS, this.idManager.getSigner,
+				asmailServerConfig.makeParamSetterAndGetter('init-pub-key')
+			);
+
 			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
 				ASMAIL_APP_NAME
 			);
@@ -303,7 +359,8 @@ export class Core {
 			await this.asmail.init(
 				this.idManager.getId(), this.idManager.getSigner,
 				inboxSyncedFS, inboxLocalFS,
-				this.storages.storageGetterForASMail(), this.makeResolver
+				this.storages.storageGetterForASMail(), this.makeResolver,
+				asmailServerConfig, this.keyrings.forASMail()
 			);
 			this.isInitialized = true;
 			return this.idManager.getId();
@@ -324,8 +381,9 @@ Object.freeze(Core);
 function makeStoragePolicy(
 	appDomain: string, requestedCAPs: RequestedCAPs
 ): StoragePolicy {
-	if (!requestedCAPs.storage) { throw new Error(
-		`Missing storage setting in app's manifest`); }
+	if (!requestedCAPs.storage) {
+		throw new Error(`Missing storage setting in app's manifest`);
+	}
 	const capReq = requestedCAPs.storage;
 
 	let policy: StoragePolicy;
@@ -401,7 +459,8 @@ function severalDomainsAppFSChecker(appFSs: AppFSSetting[]): AppFSChecker {
 		storage: s.storage
 	}));
 	return (appFolder, type) => !!settings.find(s => (
-		(s.revDomain === appFolder) && appFSTypeAllowed(s.storage, type)));
+		(s.revDomain === appFolder) && appFSTypeAllowed(s.storage, type)
+	));
 }
 
 type FSChecker = (type: web3n.storage.StorageType) => 'w'|'r'|false;
@@ -409,7 +468,7 @@ type FSChecker = (type: web3n.storage.StorageType) => 'w'|'r'|false;
 const allFSs: FSChecker = () => 'w';
 
 function fsChecker(setting: FSSetting[]): FSChecker {
-	return (type: web3n.storage.StorageType) => {
+	return type => {
 		const s = setting.find(s => (s.type === type));
 		if (!s) { return false; }
 		return (s.writable ? 'w' : 'r');

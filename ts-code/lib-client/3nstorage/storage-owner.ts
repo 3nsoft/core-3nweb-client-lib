@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,33 +15,24 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-/**
- * This defines functions that implement 3NStorage protocol.
- */
-
 import { makeException, extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/3nstorage/owner';
-import { ServiceUser, IGetMailerIdSigner } from '../user-with-mid-session';
+import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
-import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from './exceptions';
+import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from '../xsp-fs/exceptions';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
-import { ObjId } from './xsp-fs/common';
+import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
 
-function toInitServiceUriGetter(
-	net: NetClient, mainUrlGetter: () => Promise<string>
-): () => Promise<string> {
-	return async () => {
-		const serviceUrl = await mainUrlGetter();
-		const info = await storageInfoAt(net, serviceUrl);
-		if (!info.owner) { throw new Error(`Missing owner service url in 3NStorage information at ${serviceUrl}`); }
-		return info.owner;
-	};
-}
+const storageAccessParams: ServiceAccessParams = {
+	login: api.midLogin.MID_URL_PART,
+	logout: api.closeSession.URL_END,
+	canBeRedirected: true
+};
 
 
 export class StorageOwner extends ServiceUser {
@@ -50,17 +41,11 @@ export class StorageOwner extends ServiceUser {
 	
 	private constructor(
 		user: string, getSigner: IGetMailerIdSigner|undefined,
-		getInitServiceURI: () => Promise<string>, net: NetClient
+		mainUrlGetter: () => Promise<string>, net: NetClient
 	) {
-		super(user,
-			{
-				login: api.midLogin.MID_URL_PART,
-				logout: api.closeSession.URL_END,
-				canBeRedirected: true
-			},
-			getSigner,
-			getInitServiceURI,
-			net
+		super(
+			user, storageAccessParams, getSigner,
+			serviceUriGetter(net, mainUrlGetter), net
 		);
 		Object.seal(this);
 	}
@@ -69,8 +54,7 @@ export class StorageOwner extends ServiceUser {
 		user: string, getSigner: IGetMailerIdSigner,
 		mainUrlGetter: () => Promise<string>, net: NetClient
 	): StorageOwner {
-		const srvUriGetter = toInitServiceUriGetter(net, mainUrlGetter);
-		const remote = new StorageOwner(user, getSigner, srvUriGetter, net);
+		const remote = new StorageOwner(user, getSigner, mainUrlGetter, net);
 		return remote;
 	}
 
@@ -80,8 +64,7 @@ export class StorageOwner extends ServiceUser {
 	): {
 		remote: StorageOwner; setMid: (getSigner: IGetMailerIdSigner) => void;
 	} {
-		const srvUriGetter = toInitServiceUriGetter(net, mainUrlGetter);
-		const remote = new StorageOwner(user, undefined, srvUriGetter, net);
+		const remote = new StorageOwner(user, undefined, mainUrlGetter, net);
 		return {
 			remote,
 			setMid: getSigner => remote.setGetterOfSigner(getSigner)
@@ -390,5 +373,22 @@ export class StorageOwner extends ServiceUser {
 }
 Object.freeze(StorageOwner.prototype);
 Object.freeze(StorageOwner);
+
+
+function serviceUriGetter(
+	net: NetClient, mainUrlGetter: () => Promise<string>
+): () => Promise<string> {
+	return async () => {
+		const serviceUrl = await mainUrlGetter();
+		const info = await storageInfoAt(net, serviceUrl);
+		if (!info.owner) {
+			throw new Error(
+				`Missing owner service url in 3NStorage information at ${serviceUrl}`
+			);
+		}
+		return info.owner;
+	};
+}
+
 
 Object.freeze(exports);

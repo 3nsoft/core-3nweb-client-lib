@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -289,8 +289,9 @@ export function makeNetClient(
 
 	const client: NetClient = {
 		
-		doBinaryRequest<T>(opts: RequestOpts,
-				bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>> {
+		doBinaryRequest<T>(
+			opts: RequestOpts, bytes: Uint8Array|Uint8Array[]
+		): Promise<Reply<T>> {
 			let reqBody: Uint8Array|undefined;
 			if (Array.isArray(bytes)) {
 				const fifo = new BytesFIFOBuffer();
@@ -309,7 +310,10 @@ export function makeNetClient(
 		},
 
 		doJsonRequest<T>(opts: RequestOpts, json: any): Promise<Reply<T>> {
-			const reqBody = utf8.pack(JSON.stringify(json));
+			const reqBody = ((json === undefined) ?
+				new Uint8Array(0) :
+				utf8.pack(JSON.stringify(json))
+			);
 			return (request as RequestFn<T>)(opts, 'application/json', reqBody);
 		}
 

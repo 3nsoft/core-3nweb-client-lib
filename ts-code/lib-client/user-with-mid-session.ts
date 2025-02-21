@@ -31,6 +31,11 @@ import { assert } from '../lib-common/assert';
 
 export type IGetMailerIdSigner = () => Promise<mid.MailerIdSigner>;
 
+export interface ServiceAccessParams {
+	login: string;
+	logout: string;
+	canBeRedirected?: boolean;
+}
 
 export abstract class ServiceUser {
 	
@@ -67,18 +72,18 @@ export abstract class ServiceUser {
 
 	protected constructor(
 		public readonly userId: string,
-		opts: { login: string; logout: string; canBeRedirected?: boolean; },
+		accessParams: ServiceAccessParams,
 		private getSigner: IGetMailerIdSigner|undefined,
 		private getInitServiceURI: () => Promise<string>,
 		protected readonly net: NetClient
 	) {
-		this.loginUrlPart = opts.login;
+		this.loginUrlPart = accessParams.login;
 		if ((this.loginUrlPart.length > 0)
 		&& (this.loginUrlPart[this.loginUrlPart.length-1] !== '/')) {
 			this.loginUrlPart += '/';
 		}
-		this.logoutUrlEnd = opts.logout;
-		this.canBeRedirected = !!opts.canBeRedirected;
+		this.logoutUrlEnd = accessParams.logout;
+		this.canBeRedirected = !!accessParams.canBeRedirected;
 	}
 	
 	private get isUriSet(): boolean {

@@ -16,9 +16,9 @@
 */
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
-import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/3nstorage/exceptions';
-import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
+import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
+import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/xsp-fs/exceptions';
+import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
@@ -30,7 +30,7 @@ import { UpSyncer } from './upsyncer';
 import { NetClient } from '../../../lib-client/request-utils';
 import { lastValueFrom, Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
-import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;

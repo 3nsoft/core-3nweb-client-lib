@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent, LocalObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
+import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent, LocalObjStatus } from '../../../lib-client/xsp-fs/common';
+import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
 import { bytes as randomBytes } from '../../../lib-common/random-node';
 import { secret_box as sbox } from 'ecma-nacl';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';

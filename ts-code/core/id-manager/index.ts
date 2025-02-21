@@ -18,7 +18,7 @@
 import { box } from 'ecma-nacl';
 import { MailerIdProvisioner } from '../../lib-client/mailer-id/provisioner';
 import { user as mid } from '../../lib-common/mid-sigs-NaCl-Ed';
-import { JsonKey, keyFromJson, use as keyUse } from '../../lib-common/jwkeys';
+import { keyFromJson, use as keyUse } from '../../lib-common/jwkeys';
 import { PKLoginException } from '../../lib-client/user-with-pkl-session';
 import { SingleProc } from '../../lib-common/processes/synced';
 import { GenerateKey } from '../startup/sign-in';
@@ -27,6 +27,8 @@ import { NetClient } from '../../lib-client/request-utils';
 import { startMidSession, authenticateMidSession } from '../../lib-client/mailer-id/login';
 import { ServiceLocator } from '../../lib-client/service-locator';
 import { IdKeysStorage } from './key-storage';
+
+type JsonKey = web3n.keys.JsonKey;
 
 type WritableFS = web3n.files.WritableFS;
 

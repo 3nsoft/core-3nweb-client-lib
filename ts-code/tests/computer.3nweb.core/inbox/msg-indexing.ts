@@ -16,13 +16,14 @@
 */
 
 import { MsgIndex } from "../../../core/asmail/inbox/msg-indexing";
-import { MsgKeyInfo } from "../../../core/asmail/keyring";
+// import { MsgKeyInfo } from "../core/asmail/keyring";
 import { afterEachCond, beforeAllWithTimeoutLog, fitCond, itCond, xitCond } from "../../libs-for-tests/jasmine-utils";
 import { setupWithUsers } from "../../libs-for-tests/setups";
 import { makeSetupWithTwoDevsFSs } from "../test-utils";
 import { base64 } from '../../../lib-common/buffer-utils';
 import { bytesEqual } from "../../libs-for-tests/bytes-equal";
 import { sleep } from "../../../lib-common/processes/sleep";
+import { MsgKeyInfo } from "../../../core/keyring";
 
 type MsgInfo = web3n.asmail.MsgInfo;
 

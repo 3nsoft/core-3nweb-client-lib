@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,13 +12,15 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { ParamsFromOthers } from './params-from-others';
 import { OwnSendingParams } from './own-params';
 import { ResourcesForSending } from '../delivery/common';
-import { ConfigOfASMailServer } from '../config/index';
 import { ResourcesForReceiving } from '../inbox';
+import { ParamOnServer } from '../../../lib-client/asmail/service-config';
+import { AnonymousInvites } from './invitations-anon';
 
 export { SendingParams } from './params-from-others';
 
@@ -29,27 +31,24 @@ type ReceptionResources = ResourcesForReceiving['correspondents'];
 
 const PARAMS_FROM_OTHERS_FILE = 'params-from-others.json';
 const OWN_PARAMS_FILE = 'own-params.json';
+const ANONYM_INVITES_FILE = 'anonymous-invites.json';
 
 
 export class SendingParamsHolder {
 
-	private paramsFromOthers: ParamsFromOthers;
-	private ownParams: OwnSendingParams;
-
-	thisSide: {
+	readonly thisSide: {
 		getUpdated: SendingResources['newParamsForSendingReplies'];
 		setAsUsed: ReceptionResources['markOwnSendingParamsAsUsed'];
 	};
-	otherSides: {
+	readonly otherSides: {
 		get: SendingResources['paramsForSendingTo'];
 		set: ReceptionResources['saveParamsForSendingTo'];
 	};
 
 	private constructor(
-		anonSenderInvites: ConfigOfASMailServer['anonSenderInvites']
+		private readonly paramsFromOthers: ParamsFromOthers,
+		private readonly ownParams: OwnSendingParams
 	) {
-		this.paramsFromOthers = new ParamsFromOthers();
-		this.ownParams = new OwnSendingParams(anonSenderInvites);
 		this.otherSides = {
 			get: this.paramsFromOthers.getFor,
 			set: this.paramsFromOthers.setFor
@@ -61,19 +60,32 @@ export class SendingParamsHolder {
 		Object.freeze(this);
 	}
 
-	static async makeAndStart(fs: WritableFS,
-			anonSenderInvites: ConfigOfASMailServer['anonSenderInvites']):
-			Promise<SendingParamsHolder> {
-		const h = new SendingParamsHolder(anonSenderInvites);
-		await Promise.all([
+	static async makeAndInit(
+		fs: WritableFS,
+		anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>
+	): Promise<SendingParamsHolder> {
+		const [ paramsFromOthers, ownParams ] = await Promise.all([
 			fs.writableFile(PARAMS_FROM_OTHERS_FILE)
-			.then(f => h.paramsFromOthers.start(f)),
+			.then(f => ParamsFromOthers.makeAndInit(f)),
 
-			fs.writableFile(OWN_PARAMS_FILE)
-			.then(f => h.ownParams.start(f))
+			fs.writableFile(ANONYM_INVITES_FILE)
+			.then(async anonInvitesFile => {
+				const anonInvites = await AnonymousInvites.makeAndInit(
+					anonInvitesFile, anonInvitesOnServer
+				);
+				return await OwnSendingParams.makeAndInit(
+					await fs.writableFile(OWN_PARAMS_FILE),
+					anonInvites
+				);
+			})
 		]);
 		await fs.close();
-		return h;
+		return new SendingParamsHolder(paramsFromOthers, ownParams);
+	}
+
+	async close(): Promise<void> {
+		await this.ownParams.close();
+		await this.paramsFromOthers.close();
 	}
 
 }

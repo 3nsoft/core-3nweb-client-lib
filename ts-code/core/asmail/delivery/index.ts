@@ -87,7 +87,7 @@ export class Delivery {
 		return delivery;
 	}
 
-	wrap(): DeliveryService {
+	makeCAP(): DeliveryService {
 		const service: DeliveryService = {
 			addMsg: this.addMsg.bind(this),
 			currentState: this.currentState.bind(this),
@@ -290,6 +290,11 @@ export class Delivery {
 		const msg = this.msgs.get(id);
 		if (!msg) { return; }
 		return msg.progress;
+	}
+
+	async close(): Promise<void> {
+		// XXX what should we have here, with potentially still running sending ?
+
 	}
 
 }

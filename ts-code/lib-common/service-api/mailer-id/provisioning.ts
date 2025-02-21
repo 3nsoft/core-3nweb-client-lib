@@ -19,8 +19,10 @@
  * This defines request interfaces for MailerId certificate provisioning.
  */
 
-import * as jwk from '../../jwkeys';
 import * as pklApi from '../pub-key-login';
+
+type SignedLoad = web3n.keys.SignedLoad;
+type JsonKey = web3n.keys.JsonKey;
 
 export namespace pkl {
 
@@ -36,13 +38,13 @@ export namespace certify {
 	export const method = 'POST';
 
 	export interface Request {
-		pkey: jwk.JsonKey;
+		pkey: JsonKey;
 		duration: number;
 	}
 
 	export interface Reply {
-		userCert: jwk.SignedLoad;
-		provCert: jwk.SignedLoad;
+		userCert: SignedLoad;
+		provCert: SignedLoad;
 	}
 
 	export const SC = {

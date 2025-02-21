@@ -18,7 +18,7 @@
 import { makeException, NetClient } from '../request-utils';
 import { mailerIdInfoAt } from '../service-locator';
 import { ServiceUser, ICalcDHSharedKey, LoginCompletion } from '../user-with-pkl-session';
-import { SignedLoad, JsonKey, keyToJson, getKeyCert } from '../../lib-common/jwkeys';
+import { keyToJson, getKeyCert } from '../../lib-common/jwkeys';
 import { deepEqual } from '../../lib-common/json-utils';
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import * as mid from '../../lib-common/mid-sigs-NaCl-Ed';
@@ -26,6 +26,9 @@ import * as random from '../../lib-common/random-node';
 import * as api from  '../../lib-common/service-api/mailer-id/provisioning';
 import { parse as parseUrl } from 'url';
 import { assert } from '../../lib-common/assert';
+
+type JsonKey = web3n.keys.JsonKey;
+type SignedLoad = web3n.keys.SignedLoad;
 
 const DEFAULT_ASSERTION_VALIDITY = 20*60;
 

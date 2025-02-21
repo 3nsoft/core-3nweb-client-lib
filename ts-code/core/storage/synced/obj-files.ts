@@ -18,7 +18,7 @@
 import { FileException } from '../../../lib-common/exceptions/file';
 import { Observable, from } from 'rxjs';
 import { NamedProcs } from '../../../lib-common/processes/synced';
-import { ObjId, SyncedObjStatus } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { ObjId, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
 import { ObjFolders, CanMoveObjToDeeperCache } from '../../../lib-client/objs-on-disk/obj-folders';
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjOnDisk, GetBaseSegsOnDisk, InitDownloadParts } from '../../../lib-client/objs-on-disk/obj-on-disk';
@@ -35,11 +35,11 @@ import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { DiffInfo } from '../../../lib-common/service-api/3nstorage/owner';
 import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
-import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/service';
-import { UploadHeaderChange } from '../../../lib-client/3nstorage/xsp-fs/common';
+import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
+import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { saveUploadHeaderFile } from './upload-header-file';
 import { noop } from '../common/utils';
-import { makeObjVersionNotFoundExc } from '../../../lib-client/3nstorage/exceptions';
+import { makeObjVersionNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
 
 export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
 export const REMOTE_FILE_NAME_EXT = 'v';

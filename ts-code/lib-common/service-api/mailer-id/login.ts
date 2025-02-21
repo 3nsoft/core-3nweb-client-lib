@@ -18,7 +18,7 @@
  * This defines request interfaces for mailerId-based login.
  */
 
-import * as jwk from '../../jwkeys';
+type MailerIdAssertion = web3n.keys.MailerIdAssertion;
 
 export const ERR_SC = {
 	duplicate: 475,
@@ -28,7 +28,7 @@ export const ERR_SC = {
 Object.freeze(ERR_SC);
 
 export namespace startSession {
-	
+
 	export const URL_END = 'start-session';
 
 	export const method = 'POST';
@@ -56,16 +56,12 @@ export namespace startSession {
 Object.freeze(startSession);
 
 export namespace authSession {
-	
+
 	export const URL_END = 'authorize-session';
 
 	export const method = 'POST';
 
-	export interface Request {
-		assertion: jwk.SignedLoad;
-		userCert: jwk.SignedLoad;
-		provCert: jwk.SignedLoad;
-	}
+	export type Request = MailerIdAssertion;
 
 	export const SC = {
 		authFailed: 403,

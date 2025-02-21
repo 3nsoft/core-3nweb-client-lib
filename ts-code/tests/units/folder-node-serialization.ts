@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { parseFolderInfo, serializeFolderInfo } from '../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
-import { FolderInfo, NodeInfo } from '../../lib-client/3nstorage/xsp-fs/folder-node';
+import { parseFolderInfo, serializeFolderInfo } from '../../lib-client/xsp-fs/folder-node-serialization';
+import { FolderInfo, NodeInfo } from '../../lib-client/xsp-fs/folder-node';
 import * as random from '../../lib-common/random-node';
 import { BytesFIFOBuffer } from '../../lib-common/byte-streaming/bytes-fifo-buffer';
 import { bytesEqual } from '../libs-for-tests/bytes-equal';

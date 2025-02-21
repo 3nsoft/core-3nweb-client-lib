@@ -16,6 +16,7 @@
 */
 
 /// <reference path="./asmail.d.ts" />
+/// <reference path="./keys.d.ts" />
 /// <reference path="./common-caps.d.ts" />
 /// <reference path="./files.d.ts" />
 /// <reference path="./mailerid.d.ts" />

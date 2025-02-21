@@ -17,8 +17,8 @@
 
 import { GetSigner } from '../id-manager';
 import { GenerateKey } from '../startup/sign-in';
-import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/3nstorage/xsp-fs/common';
-import { XspFS as xspFS } from '../../lib-client/3nstorage/xsp-fs/fs';
+import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/xsp-fs/common';
+import { XspFS as xspFS } from '../../lib-client/xsp-fs/fs';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
 import { ServiceLocator } from '../../lib-client/service-locator';
@@ -35,6 +35,8 @@ import { LogError } from '../../lib-client/logging/log-to-file';
 import { MakeNet } from '..';
 import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from './system-folders';
 import { AppDataFolders } from './system-folders/apps-data';
+import { CORE_APPS_PREFIX } from './common/constants';
+import { assert } from '../../lib-common/assert';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -88,8 +90,6 @@ function makeNotAllowedToOpenSysFSExc(
 		storageType
 	};
 }
-
-const CORE_APPS_PREFIX = 'computer.3nweb.core';
 
 const KD_PARAMS_FILE_NAME = 'kd-params';
 const LOCAL_STORAGE_DIR = 'local';
@@ -224,6 +224,29 @@ class StorageAndFS<T extends Storage> {
 		this.syncedAppDataRoots = undefined;
 		this.rootFS = (undefined as any);
 		this.storage = (undefined as any);
+	}
+
+	/**
+	 * Moves src to dst if dst doesn't exist.
+	 * @param src is a path starting with core app folder name
+	 * @param dst is a path starting with core app folder name
+	 */
+	async migrateCoreAppDataOnFirstRun(src: string, dst: string): Promise<void> {
+		assert(
+			src.startsWith(CORE_APPS_PREFIX) && !src.includes('..') &&
+			dst.startsWith(CORE_APPS_PREFIX) && !dst.includes('..'),
+			`Invalid core app data migration paths`
+		);
+		if (!(await this.rootFS.checkFolderPresence(src))
+		|| !(await this.rootFS.checkFilePresence(src))
+		|| (await this.rootFS.checkFolderPresence(dst))
+		|| (await this.rootFS.checkFilePresence(dst))) {
+			return;
+		}
+		await this.rootFS.move(
+			`${sysFolders.appData}/${src}`,
+			`${sysFolders.appData}/${dst}`
+		);
 	}
 
 }
@@ -462,6 +485,21 @@ export class Storages implements FactoryOfFSs {
 			getUserFS: this.getUserFS.bind(this),
 			makeLocalFSForApp: this.makeLocalFSForApp.bind(this),
 			makeSyncedFSForApp: this.makeSyncedFSForApp.bind(this)
+		}
+	}
+
+	/**
+	 * This is a migration used for developing/evolving core's apps.
+	 * @param src is a path starting with core app folder name
+	 * @param dst is a path starting with core app folder name
+	 */
+	async migrateCoreAppDataOnFirstRun(
+		type: StorageType, src: string, dst: string
+	): Promise<void> {
+		if (type === 'synced') {
+			await this.synced!.migrateCoreAppDataOnFirstRun(src, dst);
+		} else if (type === 'local') {
+			await this.local!.migrateCoreAppDataOnFirstRun(src, dst);
 		}
 	}
 

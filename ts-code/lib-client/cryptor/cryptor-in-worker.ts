@@ -22,12 +22,9 @@ import { cpus } from 'os';
 import { Deferred, defer } from '../../lib-common/processes/deferred';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { dirname, join } from 'path';
-import { ProtoType } from '../protobuf-type';
-import { cryptor as pb } from '../../protos/cryptor.proto';
-import { signing } from 'ecma-nacl';
 import { assert } from '../../lib-common/assert';
 import { packRequestToWASM, toArgs, toLocalErr, unpackBoolVal, unpackReplyFromWASM, unpackSigningKeyPair, WasmRequest } from './serialization-for-wasm';
-import { ExecCounter } from '../cryptor-work-labels';
+import { ExecCounter } from './cryptor-work-labels';
 
 const MAX_IDLE_MILLIS = 60*1000;
 

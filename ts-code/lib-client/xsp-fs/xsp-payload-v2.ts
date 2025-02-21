@@ -15,14 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { assert } from "../../../lib-common/assert";
-import { uintFrom8Bytes, packUintTo8Bytes, uintFrom4Bytes, packUintTo4Bytes } from "../../../lib-common/big-endian";
+import { assert } from "../../lib-common/assert";
+import { uintFrom8Bytes, packUintTo8Bytes, uintFrom4Bytes, packUintTo4Bytes } from "../../lib-common/big-endian";
 import { ByteSink, ByteSource } from "xsp-files";
 import { CommonAttrs, XAttrs } from "./attrs";
-import { SingleProc } from "../../../lib-common/processes/synced";
-import { wrapAndSyncFileSource } from "../../../lib-common/byte-streaming/wrapping";
+import { SingleProc } from "../../lib-common/processes/synced";
+import { wrapAndSyncFileSource } from "../../lib-common/byte-streaming/wrapping";
 import { Attrs, ReadonlyPayload, WritablePayload } from "./node-persistence";
-import { byteLengthIn } from "../../../lib-common/buffer-utils";
+import { byteLengthIn } from "../../lib-common/buffer-utils";
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;

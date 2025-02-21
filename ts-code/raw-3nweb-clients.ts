@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { StorageOwner as StorageOwnerClient } from './lib-client/3nstorage/service';
+import { StorageOwner as StorageOwnerClient } from './lib-client/3nstorage/storage-owner';
 import { MailRecipient as MailRecipientClient } from './lib-client/asmail/recipient';
 import { MailSender as MailSenderClient } from './lib-client/asmail/sender';
 import { MailerIdProvisioner as MailerIdProvisionerClient } from './lib-client/mailer-id/provisioner';

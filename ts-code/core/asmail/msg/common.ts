@@ -15,9 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { JsonKeyShort } from '../../../lib-common/jwkeys';
-import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
+import { FolderInJSON } from '../../../lib-client/xsp-fs/common';
+
+type JsonKeyShort = web3n.keys.JsonKeyShort;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 /**
  * Metadata for message that uses established key pair. 
@@ -94,7 +95,7 @@ export interface MainBody {
  */
 export interface FlowParams {
 	msgCount: number;
-	introCerts?: confApi.p.initPubKey.Certs;
+	introCerts?: PKeyCertChain;
 	nextCrypto?: SuggestedNextKeyPair;
 	nextSendingParams?: SendingParams;
 }

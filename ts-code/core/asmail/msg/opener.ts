@@ -17,14 +17,15 @@
 
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { errWithCause } from '../../../lib-common/exceptions/error';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
 import { MsgEnvelope, MainBody, SuggestedNextKeyPair, SendingParams } from './common';
 import { makeSegmentsReader, AsyncSBoxCryptor, idToHeaderNonce, makeDecryptedByteSource, ObjSource } from 'xsp-files';
-import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { MsgKeyRole } from '../keyring';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
+import { FolderInJSON } from '../../../lib-client/xsp-fs/common';
+import { MsgKeyRole } from '../../keyring';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor/cryptor-work-labels';
 
 export { SuggestedNextKeyPair } from './common';
+
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 export class OpenedMsg {
 	
@@ -75,7 +76,7 @@ export class OpenedMsg {
 		return this.getSection('Flow Params').nextSendingParams;
 	}
 
-	get introCryptoCerts(): confApi.p.initPubKey.Certs {
+	get introCryptoCerts(): PKeyCertChain {
 		const certs = this.getSection('Flow Params').introCerts;
 		if (!certs) { throw new Error(
 			`Message is missing crypto certs for introductory key, used by sender`); }

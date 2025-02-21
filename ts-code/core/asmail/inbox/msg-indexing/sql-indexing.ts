@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MsgKeyInfo, MsgKeyRole } from '../../keyring';
+import { MsgKeyInfo, MsgKeyRole } from '../../../keyring';
 import { makeTimedCache } from "../../../../lib-common/timed-cache";
 import { TableColumnsAndParams, SQLiteOn3NStorage } from '../../../../lib-sqlite-on-3nstorage';
 import { Database, QueryExecResult } from '../../../../lib-sqlite-on-3nstorage/sqljs';

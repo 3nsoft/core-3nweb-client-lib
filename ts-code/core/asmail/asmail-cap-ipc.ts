@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2023 3NSoft Inc.
+ Copyright (C) 2020 - 2023, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,8 @@ import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from '../../core-ipc/fs';
 import { toRxObserver } from '../../lib-common/utils-for-observables';
+import { makeReqRepObjCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
+import { wrapReqReplySrvMethod } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
 
 type ASMailService = web3n.asmail.Service;
 type Inbox = ASMailService['inbox'];
@@ -56,6 +58,7 @@ export function exposeASMailCAP(
 			removeMsg: removeMsg.wrapService(box.removeMsg),
 			subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
 		},
+		config: exposeCofigCAP(cap.config)
 	};
 }
 
@@ -82,6 +85,7 @@ export function makeASMailCaller(
 			removeMsg: removeMsg.makeCaller(caller, inboxPath),
 			subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
 		},
+		config: makeConfigCaller(caller, objPath.concat('config'))
 	};
 }
 
@@ -780,6 +784,34 @@ namespace observeDelivery {
 
 }
 Object.freeze(observeDelivery);
+
+function exposeCofigCAP(
+	cap: ASMailService['config']
+): ExposedObj<ASMailService['config']> {
+	return {
+		getOnServer: wrapReqReplySrvMethod(cap, 'getOnServer'),
+		setOnServer: wrapReqReplySrvMethod(cap, 'setOnServer')
+	};
+}
+
+function callConfig<M extends keyof ASMailService['config']>(
+	caller: Caller, objPath: string[], method: M
+): ASMailService['config'][M] {
+	return makeReqRepObjCaller(caller, objPath, method);
+}
+
+function makeConfigCaller(
+	caller: Caller, objPath: string[]
+): ASMailService['config'] {
+	return {
+		getOnServer: callConfig(
+			caller, objPath.concat('getOnServer'), 'getOnServer'
+		),
+		setOnServer: callConfig(
+			caller, objPath.concat('setOnServer'), 'setOnServer'
+		)
+	};
+}
 
 
 Object.freeze(exports);

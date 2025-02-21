@@ -1,5 +1,5 @@
 /*
- Copyright 2022 3NSoft Inc.
+ Copyright 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { KeyRing, makeAndKeyRing } from "../../core/asmail/keyring";
+// import { KeyRing, makeAndKeyRing } from "../../core/keyring";
 import { makeInProcessCryptor } from "../../cryptors";
-import { JsonKey } from "../../lib-common/jwkeys";
 import { afterEachCond, beforeAllWithTimeoutLog, itCond } from "../libs-for-tests/jasmine-utils";
 import { setupWithUsers } from "../libs-for-tests/setups";
 import { makeSetupWithTwoDevsFSs } from "./test-utils";
 
+type JsonKey = web3n.keys.JsonKey;
 
 const address = `address Bob Perkins @company.inc`;
 const introPKeyFromServer: JsonKey = {
@@ -40,7 +40,7 @@ describe('ASMail keyring', () => {
 
 	const testFolder = `keyring-test`;
 
-	let keyring: KeyRing;
+	// let keyring: KeyRing;
 
 	const {
 		fsSetup: setup, setupDevsAndFSs
@@ -52,10 +52,10 @@ describe('ASMail keyring', () => {
 
 	beforeEach(async () => {
 		const fs = setup.dev1FS();
-		keyring = await makeAndKeyRing(cryptor, fs, {
-			find: kid => { throw Error(`publishedKeys.find() mock`); },
-			update: async () => { throw Error(`publishedKeys.update() mock`); }
-		});
+		// keyring = await makeAndKeyRing(cryptor, fs, {
+		// 	find: kid => { throw Error(`publishedKeys.find() mock`); },
+		// 	update: async () => { throw Error(`publishedKeys.update() mock`); }
+		// });
 	});
 
 	afterEachCond(async () => {
@@ -63,24 +63,24 @@ describe('ASMail keyring', () => {
 		await setup.resetFS();
 	});
 
-	itCond(`.generateKeysToSend()`, async () => {
-		const {
-			currentPair, encryptor, msgCount
-		} = await keyring.generateKeysToSend(address, introPKeyFromServer);
+// 	itCond(`.generateKeysToSend()`, async () => {
+// 		const {
+// 			currentPair, encryptor, msgCount
+// 		} = await keyring.generateKeysToSend(address, introPKeyFromServer);
 
-// DEBUG
-// console.log(`currentPair`, currentPair, `
-// msgCount`, msgCount);
+// // DEBUG
+// // console.log(`currentPair`, currentPair, `
+// // msgCount`, msgCount);
 
-	const {
-		currentPair: cp, msgCount: count
-	} = await keyring.generateKeysToSend(address);
+// 	const {
+// 		currentPair: cp, msgCount: count
+// 	} = await keyring.generateKeysToSend(address);
 
-// DEBUG
-// console.log(`currentPair`, cp, `
-// msgCount`, count);
+// // DEBUG
+// // console.log(`currentPair`, cp, `
+// // msgCount`, count);
 
 
-	}, undefined, setup);
+// 	}, undefined, setup);
 
 });

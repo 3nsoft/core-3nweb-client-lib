@@ -20,13 +20,13 @@
  * reliance set.
  */
 
-import { makeFileException } from '../../../lib-common/exceptions/file';
-import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../../fs-utils/files';
+import { makeFileException } from '../../lib-common/exceptions/file';
+import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../fs-utils/files';
 import { FileNode, FileLinkParams } from './file-node';
-import { utf8 } from '../../../lib-common/buffer-utils';
+import { utf8 } from '../../lib-common/buffer-utils';
 import { Storage } from './common';
-import { pipe } from '../../../lib-common/byte-streaming/pipe';
-import { toRxObserver } from '../../../lib-common/utils-for-observables';
+import { pipe } from '../../lib-common/byte-streaming/pipe';
+import { toRxObserver } from '../../lib-common/utils-for-observables';
 
 type Stats = web3n.files.Stats;
 type File = web3n.files.File;

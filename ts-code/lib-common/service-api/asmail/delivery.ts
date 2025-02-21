@@ -18,9 +18,10 @@
  * This defines interfaces for mail delivery requests.
  */
 
-import * as jwk from '../../jwkeys';
-import * as config from './config';
 import { stringify as stringifyOpts } from 'querystring';
+
+type MailerIdAssertion = web3n.keys.MailerIdAssertion;
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 export const HTTP_HEADER = {
 	contentType: 'Content-Type',
@@ -42,19 +43,19 @@ export const ERR_SC = {
 Object.freeze(ERR_SC);
 
 export namespace preFlight {
-	
+
 	export const URL_END = 'pre-flight';
-	
+
 	export interface Request extends sessionStart.Request { }
-	
+
 	export interface Reply {
 		maxMsgLength: number;
 	}
-	
+
 	export interface RedirectReply {
 		redirect: string;
 	}
-	
+
 	export const SC = {
 		ok: 200,
 		unknownRecipient: 474,
@@ -63,47 +64,47 @@ export namespace preFlight {
 		redirect: 373
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(preFlight);
 
 export namespace sessionStart {
-	
+
 	export const URL_END = 'start-session';
-	
+
 	export interface Request {
 		sender?: string;
 		recipient: string;
 		invitation?: string;
 	}
-	
+
 	export interface Reply extends preFlight.Reply {
 		sessionId: string;
 	}
-	
+
 	export interface RedirectReply extends preFlight.RedirectReply {}
-	
+
 	export const SC = preFlight.SC;
-	
+
 }
 Object.freeze(sessionStart);
 
 export namespace sessionRestart {
-	
+
 	export const URL_END = 'restart-session';
-	
+
 	export interface Request {
 		recipient: string;
 		msgId: string;
 	}
-	
+
 	export interface Reply extends preFlight.Reply {
 		sessionId: string;
 		maxChunkSize? : number;
 	}
-	
+
 	export interface RedirectReply extends preFlight.RedirectReply {}
-	
+
 	export const SC = {
 		ok: 200,
 		unknownRecipient: 474,
@@ -111,7 +112,7 @@ export namespace sessionRestart {
 		redirect: 373
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(sessionRestart);
 
@@ -119,59 +120,55 @@ export namespace authSender {
 	
 	export const URL_END = 'authorize-sender';
 	
-	export interface Request {
-		assertion: jwk.SignedLoad;
-		userCert: jwk.SignedLoad;
-		provCert: jwk.SignedLoad;
-	}
-	
+	export type Request = MailerIdAssertion;
+
 	export const SC = {
 		ok: 200,
 		authFailed: 403
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(authSender);
 
 export namespace initPubKey {
-	
+
 	export const URL_END = 'init-pub-key';
-	
-	export interface Reply extends config.p.initPubKey.Certs {}
-	
+
+	export type Reply = PKeyCertChain;
+
 	export const SC = {
 		ok: 200,
 		pkeyNotRegistered: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(initPubKey);
 
 export namespace msgMeta {
-	
+
 	export const URL_END = 'msg/meta';
-	
+
 	export interface CryptoInfo {
 		pid?: string;
 		recipientKid?: string;
 		senderPKey?: string;
 	}
-	
+
 	export interface Request extends CryptoInfo {
 		objIds: string[];
 	}
-	
+
 	export interface Reply {
 		msgId: string;
 		maxChunkSize? : number;
 	}
-	
+
 	export const SC = {
 		ok: 201
 	};
-	
+
 }
 Object.freeze(msgMeta);
 
@@ -207,38 +204,38 @@ export interface PutObjSecondQueryOpts {
 }
 
 export namespace msgObj {
-	
+
 	export const EXPRESS_URL_END = 'msg/obj/:objId';
-	
+
 	export function firstPutReqUrlEnd(objId: string,
 			opts: PutObjFirstQueryOpts): string {
 		return `msg/obj/${objId}?${stringifyOpts(opts as any)}`;
 	}
-	
+
 	export function secondPutReqUrlEnd(objId: string,
 			opts: PutObjSecondQueryOpts): string {
 		return `msg/obj/${objId}?${stringifyOpts(opts as any)}`;
 	}
-	
+
 	export const SC = {
 		ok: 201,
 		objAlreadyExists: 473,
 		unknownObj: 474
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(msgObj);
 
 export namespace completion {
-	
+
 	export const URL_END = 'msg-complete';
-	
+
 	export const SC = {
 		ok: 200,
 	};
 	Object.freeze(SC);
-	
+
 }
 Object.freeze(completion);
 

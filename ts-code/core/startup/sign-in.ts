@@ -82,8 +82,11 @@ export class SignIn {
 	private completeLoginAndLocalSetup: SignInService[
 		'completeLoginAndLocalSetup'
 	] = async (pass, progressCB) => {
-		if (!this.completeInitWithoutCache) { throw new Error(
-			`Call method startLoginToRemoteStorage() before calling this.`); }
+		if (!this.completeInitWithoutCache) {
+			throw new Error(
+				`Call method startLoginToRemoteStorage() before calling this.`
+			);
+		}
 		try {
 			const midKeyProgressCB = makeKeyGenProgressCB(0, 50, progressCB);
 			const midKeyGen: GenerateKey = async params => (

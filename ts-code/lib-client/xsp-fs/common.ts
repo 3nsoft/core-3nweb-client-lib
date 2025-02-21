@@ -15,10 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ScryptGenParams } from '../../key-derivation';
+import { ScryptGenParams } from '../key-derivation';
 import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { Observable } from 'rxjs';
-import { LogError } from '../../logging/log-to-file';
+import { LogError } from '../logging/log-to-file';
 
 export { AsyncSBoxCryptor } from 'xsp-files';
 export { FolderInJSON } from './folder-node'; 

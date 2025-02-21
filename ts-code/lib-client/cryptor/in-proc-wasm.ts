@@ -25,7 +25,7 @@ import { cryptor as pb } from '../../protos/cryptor.proto';
 import { defer, Deferred } from '../../lib-common/processes/deferred';
 import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
-import { ExecCounter } from '../cryptor-work-labels';
+import { ExecCounter } from './cryptor-work-labels';
 
 function wasmBytes(): Buffer {
 	// There is a bug with electrons 12, 13, that doesn't let

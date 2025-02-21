@@ -15,9 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { assert } from "../../../lib-common/assert";
-import { toBuffer } from "../../../lib-common/buffer-utils";
-import { uintFrom6Bytes, uintFrom2Bytes, uintFrom4Bytes, packUintTo6Bytes, packUintTo2Bytes, packUintTo4Bytes, uintFrom3Bytes, packUintTo3Bytes } from "../../../lib-common/big-endian";
+import { assert } from "../../lib-common/assert";
+import { toBuffer } from "../../lib-common/buffer-utils";
+import { uintFrom6Bytes, uintFrom2Bytes, uintFrom4Bytes, packUintTo6Bytes, packUintTo2Bytes, packUintTo4Bytes, uintFrom3Bytes, packUintTo3Bytes } from "../../lib-common/big-endian";
 import { Attrs } from "./node-persistence";
 
 export class CommonAttrs {

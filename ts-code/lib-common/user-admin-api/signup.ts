@@ -20,7 +20,7 @@
  * 3NWeb utility protocols, like ASMail.
  */
 
-import { JsonKey } from '../jwkeys';
+type JsonKey = web3n.keys.JsonKey;
 
 export const ERR_SC = {
 	duplicate: 475,

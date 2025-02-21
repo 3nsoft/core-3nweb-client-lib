@@ -21,21 +21,21 @@ import { SegmentsWriter, KEY_LENGTH, makeSegmentsWriter, AsyncSBoxCryptor, idToH
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
 import * as random from '../../../lib-common/random-node';
 import { base64, base64urlSafe, utf8 } from '../../../lib-common/buffer-utils';
-import { FolderInJSON } from '../../../lib-client/3nstorage/xsp-fs/common';
-import { serializeFolderInfo } from '../../../lib-client/3nstorage/xsp-fs/folder-node-serialization';
+import { FolderInJSON } from '../../../lib-client/xsp-fs/common';
+import { serializeFolderInfo } from '../../../lib-client/xsp-fs/folder-node-serialization';
 import { copy } from '../../../lib-common/json-utils';
-import * as confApi from '../../../lib-common/service-api/asmail/config';
 import { MsgEnvelope, SuggestedNextKeyPair, MetaForNewKey,
 	MetaForEstablishedKeyPair, SendingParams }
 	from './common';
 import { isContainerEmpty, iterFilesIn, iterFoldersIn }
 	from './attachments-container';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor/cryptor-work-labels';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FS = web3n.files.FS;
 type AttachmentsContainer = web3n.asmail.AttachmentsContainer
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 /**
  * This contains complete information of ids and keys set in the message during
@@ -328,7 +328,7 @@ export class MsgPacker {
 	 */
 	setNewKeyInfo(
 		recipientKid: string, senderPKey: string,
-		pkeyCerts: confApi.p.initPubKey.Certs, msgCount: number
+		pkeyCerts: PKeyCertChain, msgCount: number
 	): void {
 		this.throwIfAlreadyPacked();
 		if (this.meta) { throw new Error(
