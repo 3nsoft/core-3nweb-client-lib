@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2016, 2020 - 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -27,6 +27,7 @@ for (let i=2; i<process.argv.length; i+=1) {
 const ALL_SPECS = [
 	'units/*.js',
 	'apis/startup/*.js',
+	'apis/keyrings.js',
 	'apis/mailerid.js',
 	'apis/storage.js',
 	'apis/asmail.js',

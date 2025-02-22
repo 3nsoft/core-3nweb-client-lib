@@ -39,6 +39,7 @@ describe('ASMail', () => {
 			expect(typeof w3n.mail).toBe('object');
 			expect(typeof w3n.mail!.delivery).toBe('object');
 			expect(typeof w3n.mail!.inbox).toBe('object');
+			expect(typeof w3n.mail!.config).toBe('object');
 			expect(typeof w3n.mail!.getUserId).toBe('function');
 		}
 	}, undefined, s);
@@ -52,7 +53,47 @@ describe('ASMail', () => {
 		}
 	}, undefined, s);
 
-	itCond('lists incoming messages (no messages)', async () => {
+	describe(`config`, () => {
+
+		let config: NonNullable<web3n.caps.common.W3N['mail']>['config'];
+
+		beforeAll(() => {
+			config = s.testAppCapsByUserIndex(0).mail!.config;
+		});
+
+		itCond(`shows parameter' values on the server`, async () => {
+			const initPubKey = await config.getOnServer('init-pub-key');
+			expect(typeof initPubKey).toBe('object');
+
+			const anonSenderPolicy = await config.getOnServer('anon-sender/policy');
+			expect(anonSenderPolicy).toBeTruthy();
+			expect(typeof anonSenderPolicy!.accept).toBe('boolean');
+			expect(typeof anonSenderPolicy!.defaultMsgSize).toBe('number');
+
+			const anonSenderInvites = await config.getOnServer('anon-sender/invites');
+			expect(anonSenderInvites).toBeTruthy();
+			expect(typeof anonSenderInvites).toBe('object');
+		}, undefined, s);
+
+		itCond(`sets parameter' values on the server`, async () => {
+			// some paramaters can be set directly
+			let anonSenderPolicy = await config.getOnServer('anon-sender/policy');
+			const initDefaultMsgSize = anonSenderPolicy!.defaultMsgSize;
+			anonSenderPolicy!.defaultMsgSize = initDefaultMsgSize + 2*1024*1024;
+			await config.setOnServer('anon-sender/policy', anonSenderPolicy!);
+			anonSenderPolicy = await config.getOnServer('anon-sender/policy');
+			expect(anonSenderPolicy!.defaultMsgSize).toBe(initDefaultMsgSize + 2*1024*1024);
+
+			// but public key should be set via keyring cap, and not here
+			await config.setOnServer('init-pub-key', null).then(
+				() => fail(`public key shouldn't be set directly`),
+				err => expect(err).toBeTruthy()
+			);
+		}, undefined, s);
+
+	});
+
+	itCond('inbox lists incoming messages (no messages)', async () => {
 		assert(s.users.length > 0);
 		for (const u of s.users) {
 			const w3n = s.testAppCapsByUser(u);
@@ -64,6 +105,7 @@ describe('ASMail', () => {
 
 	loadSpecs(
 		s,
-		resolve(__dirname, './asmail/specs'));
+		resolve(__dirname, './asmail/specs')
+	);
 
 });

@@ -31,6 +31,8 @@ import { resolveTxt as resolveDnsTxt } from 'dns';
 export const testApp = {
 	appDomain: 'test.3nweb.computer',
 	capsRequested: {
+		keyrings: 'all',
+		mailerid: true,
 		mail: {
 			receivingFrom: 'all',
 			sendingTo: 'all'
@@ -51,8 +53,7 @@ export const testApp = {
 			userFS: 'all',
 			sysFS: 'all'
 		},
-		mailerid: true,
-		log: 'all'
+		logToPlatform: true
 	} as web3n.caps.common.RequestedCAPs
 };
 

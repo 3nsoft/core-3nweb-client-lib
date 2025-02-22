@@ -440,11 +440,7 @@ export class Keyrings {
 
 	makeKeyringsCAP(): Service {
 		const w: Service = {
-			introKeyToPublishOnASMailServer: {
-				getCurrent: async () => { throw new Error(`not implemented, yet`) },
-				makeNew: async () => { throw new Error(`not implemented, yet`) },
-				remove: async () => { throw new Error(`not implemented, yet`) }
-			}
+			introKeyOnASMailServer: this.publishedKeys.makeIntroKeyCAP(),
 		};
 		return Object.freeze(w);
 	}

@@ -804,12 +804,8 @@ function makeConfigCaller(
 	caller: Caller, objPath: string[]
 ): ASMailService['config'] {
 	return {
-		getOnServer: callConfig(
-			caller, objPath.concat('getOnServer'), 'getOnServer'
-		),
-		setOnServer: callConfig(
-			caller, objPath.concat('setOnServer'), 'setOnServer'
-		)
+		getOnServer: callConfig(caller, objPath, 'getOnServer'),
+		setOnServer: callConfig(caller, objPath, 'setOnServer')
 	};
 }
 

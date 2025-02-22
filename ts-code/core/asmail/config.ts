@@ -49,7 +49,10 @@ export class ConfigOfASMailServer {
 	makeCAP(): Service {
 		const w: Service = {
 			getOnServer: this.serverConfig.getParam.bind(this.serverConfig),
-			setOnServer: this.serverConfig.setParam.bind(this.serverConfig)
+			setOnServer: async (param, value) => {
+				ensureParameterCanBeSetDirectly(param);
+				this.serverConfig.setParam(param, value);
+			}
 		};
 		return Object.freeze(w);
 	}
@@ -57,6 +60,18 @@ export class ConfigOfASMailServer {
 }
 Object.freeze(ConfigOfASMailServer.prototype);
 Object.freeze(ConfigOfASMailServer);
+
+
+function ensureParameterCanBeSetDirectly<P extends keyof ASMailConfigParams>(
+	param: P
+): void {
+	switch (param) {
+		case 'init-pub-key':
+			throw new Error(`Parameter ${param} can't be set directly to server`);
+		default:
+			return;
+	}
+}
 
 
 Object.freeze(exports);

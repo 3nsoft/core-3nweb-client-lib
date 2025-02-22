@@ -26,21 +26,23 @@ const UPDATE_BEFORE_EXPIRY = 7*24*60*60;
 
 type FileEvent = web3n.files.FileEvent;
 type WritableFile = web3n.files.WritableFile;
-
-export type PKeyCertChain = web3n.keys.PKeyCertChain;
+type IntroKeyCAP = web3n.keys.Keyrings['introKeyOnASMailServer'];
+type PKeyCertChain = web3n.keys.PKeyCertChain;
 
 interface PublishedIntroKeysJSON {
 	current?: {
 		keyPair: JWKeyPair;
 		certs: PKeyCertChain;
 	};
-	previous?: JWKeyPair;
+	previous: JWKeyPair[];
 }
 
 
 export class PublishedIntroKey {
 
-	private published: PublishedIntroKeysJSON = {};
+	private published: PublishedIntroKeysJSON = {
+		previous: []
+	};
 	private readonly fileProc: JsonFileProc<PublishedIntroKeysJSON>;
 	private periodicExpiryCheck: ReturnType<typeof setTimeout>|undefined = undefined;
 
@@ -114,17 +116,10 @@ export class PublishedIntroKey {
 		}
 	}
 
-	// protected async initStruct(): Promise<void> {
-	// 	const newPair = await this.makeNewIntroKey();
-	// 	this.published = {
-	// 		current: {
-	// 			keyPair: newPair.pair,
-	// 			certs: newPair.certs
-	// 		}
-	// 	};
-	// }
-
 	private setFromJSON(json: PublishedIntroKeysJSON): void {
+		if (!Array.isArray(json.previous)) {	// migration part
+			json.previous = (json.previous ? [ json.previous ] : []);
+		}
 		this.published = json;
 	}
 
@@ -160,22 +155,26 @@ export class PublishedIntroKey {
 		return { pair, certs };
 	}
 
-	/**
-	 * This generates a new NaCl's box key pair, as a new introductory
-	 * published key.
-	 */
-	update(): Promise<void> {
+	private update(): Promise<PKeyCertChain> {
 		return this.fileProc.order.startOrChain(async () => {
 			const { certs, pair: keyPair } = await this.makeNewIntroKey();
 			await this.pkeyOnServer.setOnServer(certs);
-			if (this.published.current) {
-				this.published.current.keyPair.retiredAt = keyPair.createdAt;
-				this.published.previous = this.published.current.keyPair;
-			}
+			this.retireCurrent(keyPair.createdAt!);
 			this.published.current = { keyPair, certs };
 			await this.fileProc.save(this.toFileJSON(), false);
+			return certs;
 		});
 	};
+
+	private retireCurrent(retiredAt: number): void {
+		if (!this.published.current) {
+			return;
+		}
+		const current = this.published.current;
+		current.keyPair.retiredAt = retiredAt;
+		this.published.previous.push(current.keyPair);
+		this.published.current = undefined;
+	}
 
 	/**
 	 * This looks for a published key with a given key id. If it is found, an
@@ -202,17 +201,41 @@ export class PublishedIntroKey {
 		}
 
 		// check previous key
-		if (this.published.previous
-		&& (this.published.previous.skey.kid === kid)) {
+		const pair = this.published.previous.find(({ skey }) => (skey.kid === kid));
+		if (pair) {
 			return {
 				role: 'prev_published_intro',
-				pair: this.published.previous,
-				replacedAt: this.published.previous.retiredAt
+				pair,
+				replacedAt: pair.retiredAt
 			};
 		}
 
 		// if nothing found, explicitly return undefined
 		return;	
+	}
+
+	makeIntroKeyCAP(): IntroKeyCAP {
+		const w: IntroKeyCAP = {
+			getCurrent: this.getCurrent.bind(this),
+			makeAndPublishNew: this.update.bind(this),
+			remove: this.removeCurrent.bind(this)
+		};
+		return Object.freeze(w);
+	}
+
+	private async getCurrent(): Promise<PKeyCertChain|null> {
+		const certs = this.published.current?.certs;
+		return (certs ? certs : null);
+	}
+
+	private async removeCurrent(): Promise<void> {
+		if (!this.published.current) {
+			return;
+		}
+		return this.fileProc.order.startOrChain(async () => {
+			await this.pkeyOnServer.setOnServer(null);
+			this.retireCurrent(Math.floor(Date.now()/1000));
+		});
 	}
 
 }

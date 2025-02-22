@@ -24,16 +24,16 @@ type IntroKeyOnASMailServer = web3n.keys.IntroKeyOnASMailServer;
 
 export function exposeKeyringsCAP(cap: Keyrings): ExposedObj<Keyrings> {
 	return {
-		introKeyToPublishOnASMailServer: exposeIntroKey(cap.introKeyToPublishOnASMailServer),
+		introKeyOnASMailServer: exposeIntroKey(cap.introKeyOnASMailServer),
 	};
 }
 
 function exposeIntroKey(
-	cap: Keyrings['introKeyToPublishOnASMailServer']
+	cap: Keyrings['introKeyOnASMailServer']
 ): ExposedObj<IntroKeyOnASMailServer> {
 	return {
 		getCurrent: wrapReqReplySrvMethod(cap, 'getCurrent'),
-		makeNew: wrapReqReplySrvMethod(cap, 'makeNew'),
+		makeAndPublishNew: wrapReqReplySrvMethod(cap, 'makeAndPublishNew'),
 		remove: wrapReqReplySrvMethod(cap, 'remove'),
 	};
 }
@@ -48,15 +48,11 @@ function makeIntroKeyCaller(
 	caller: Caller, objPath: string[]
 ): IntroKeyOnASMailServer {
 	return {
-		getCurrent: callIntroKeyOnASMailServer(
-			caller, objPath.concat('getCurrent'), 'getCurrent'
+		getCurrent: callIntroKeyOnASMailServer(caller, objPath, 'getCurrent'),
+		makeAndPublishNew: callIntroKeyOnASMailServer(
+			caller, objPath, 'makeAndPublishNew'
 		),
-		makeNew: callIntroKeyOnASMailServer(
-			caller, objPath.concat('makeNew'), 'makeNew'
-		),
-		remove: callIntroKeyOnASMailServer(
-			caller, objPath.concat('remove'), 'remove'
-		),
+		remove: callIntroKeyOnASMailServer(caller, objPath, 'remove'),
 	};
 }
 
@@ -64,7 +60,7 @@ export function makeKeyringsCaller(
 	caller: Caller, objPath: string[]
 ): Keyrings {
 	return {
-		introKeyToPublishOnASMailServer: makeIntroKeyCaller(
+		introKeyOnASMailServer: makeIntroKeyCaller(
 			caller, objPath.concat('introKeyOnASMailServer')
 		),
 	};

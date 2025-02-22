@@ -121,7 +121,7 @@ declare namespace web3n.keys {
 
 	interface Keyrings {
 
-		introKeyToPublishOnASMailServer: IntroKeyOnASMailServer;
+		introKeyOnASMailServer: IntroKeyOnASMailServer;
 
 	}
 
@@ -129,13 +129,13 @@ declare namespace web3n.keys {
 
 		/**
 		 * Returns introductory key certificates chain that should be published on
-		 * ASMail server, and undefined, if there should be nothing on the server.
+		 * ASMail server, and null, if there should be nothing on the server.
 		 */
-		getCurrent(): Promise<PKeyCertChain|undefined>;
+		getCurrent(): Promise<PKeyCertChain|null>;
 
 		remove(): Promise<void>;
 
-		makeNew(): Promise<PKeyCertChain>;
+		makeAndPublishNew(): Promise<PKeyCertChain>;
 
 	}
 
