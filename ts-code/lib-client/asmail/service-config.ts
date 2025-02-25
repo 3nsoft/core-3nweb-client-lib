@@ -22,7 +22,6 @@ import { makeException, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/config';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
-import { sleep } from '../../lib-common/processes/sleep';
 
 type ASMailConfigParams = web3n.asmail.ASMailConfigParams;
 
@@ -43,8 +42,7 @@ export class MailConfigurator extends ServiceUser {
 	constructor(
 		userId: string, getSigner: IGetMailerIdSigner,
 		mainUrlGetter: () => Promise<string>,
-		net: NetClient,
-		private readonly sleepMillisAfterParamSetting = 50
+		net: NetClient
 	) {
 		super(
 			userId, configAccessParams, getSigner,
@@ -80,8 +78,6 @@ export class MailConfigurator extends ServiceUser {
 		if (rep.status !== api.PARAM_SC.ok) {
 			throw makeException(rep, 'Unexpected status');
 		}
-		// wait to let possibly distributed system to propagate updates internally
-		await sleep(this.sleepMillisAfterParamSetting);
 	}
 
 	makeParamSetterAndGetter<P extends keyof ASMailConfigParams>(

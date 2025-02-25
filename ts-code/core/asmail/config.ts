@@ -51,7 +51,7 @@ export class ConfigOfASMailServer {
 			getOnServer: this.serverConfig.getParam.bind(this.serverConfig),
 			setOnServer: async (param, value) => {
 				ensureParameterCanBeSetDirectly(param);
-				this.serverConfig.setParam(param, value);
+				await this.serverConfig.setParam(param, value);
 			}
 		};
 		return Object.freeze(w);
