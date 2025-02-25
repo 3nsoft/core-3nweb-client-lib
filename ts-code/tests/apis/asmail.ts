@@ -78,11 +78,11 @@ describe('ASMail', () => {
 		itCond(`sets parameter' values on the server`, async () => {
 			// some paramaters can be set directly
 			let anonSenderPolicy = await config.getOnServer('anon-sender/policy');
-			const initDefaultMsgSize = anonSenderPolicy!.defaultMsgSize;
-			anonSenderPolicy!.defaultMsgSize = initDefaultMsgSize + 2*1024*1024;
+			const newDefaultMsgSize = anonSenderPolicy!.defaultMsgSize + 42;
+			anonSenderPolicy!.defaultMsgSize = newDefaultMsgSize;
 			await config.setOnServer('anon-sender/policy', anonSenderPolicy!);
 			anonSenderPolicy = await config.getOnServer('anon-sender/policy');
-			expect(anonSenderPolicy!.defaultMsgSize).toBe(initDefaultMsgSize + 2*1024*1024);
+			expect(anonSenderPolicy!.defaultMsgSize).toBe(newDefaultMsgSize);
 
 			// but public key should be set via keyring cap, and not here
 			await config.setOnServer('init-pub-key', null).then(
