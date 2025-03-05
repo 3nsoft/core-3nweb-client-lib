@@ -155,7 +155,7 @@ class RecordsInSQL {
 			key, keyStatus,
 			mainObjHeaderOfs, removeAfter
 		}));
-		await db.saveToFile();
+		await db.saveToFile({ skipUpload: true });
 	}
 
 	async saveLatestWithAttr(): Promise<void> {
@@ -196,7 +196,7 @@ class RecordsInSQL {
 			const deliveryTS = findMsgAndGetDeliveryTS(db.db, msgId);
 			if (deliveryTS) {
 				deleteMsgFrom(db.db, msgId);
-				await db.saveToFile();
+				await db.saveToFile({ skipUpload: true });
 				return deliveryTS;
 			}
 		}
@@ -310,7 +310,7 @@ class SqliteFiles implements DBsFiles {
 			);
 			const latest = await SQLiteOn3NStorage.makeAndStart(dbFile);
 			latest.db.run(createIndexTab);
-			await latest.saveToFile();
+			await latest.saveToFile({ skipUpload: true });
 			return latest;
 		}
 	}
