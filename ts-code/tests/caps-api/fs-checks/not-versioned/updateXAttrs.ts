@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -108,6 +108,41 @@ it.func = async function(s) {
 	await testFS.makeFolder(folder);
 	await testforPath(folder);
 	expect((await testFS.listFolder(folder)).length).toBe(0);
+
+};
+specs.its.push(it);
+
+it = {
+	expectation: 'changes extended attributes',
+	notIncludedIn: 'device-fs'
+};
+it.func = async function(s) {
+	const { testFS } = s;
+
+	const file = 'fileWithEmptyAttrs';
+	const emptyStringAttr = 'empty.string';
+	const emptyBinaryAttr = 'empty.binary';
+	await testFS.writeTxtFile(file, '');
+	const attrsLst = await testFS.listXAttrs(file);
+	expect(attrsLst).not.toContain(emptyStringAttr);
+	expect(attrsLst).not.toContain(emptyBinaryAttr);
+
+	await testFS.updateXAttrs(file, {
+		set: {
+			[emptyStringAttr]: '',
+			[emptyBinaryAttr]: new Uint8Array(0)
+		}
+	});
+
+	const emptyStrAttrValue = await testFS.getXAttr(file, emptyStringAttr);
+	expect(typeof emptyStrAttrValue).toBe('string');
+	expect(emptyStrAttrValue).toBe('');
+
+	const emptyBinAttrValue: Uint8Array = await testFS.getXAttr(
+		file, emptyBinaryAttr
+	);
+	expect(typeof emptyBinAttrValue).toBe('object');
+	expect(emptyBinAttrValue.length).toBe(0);
 
 };
 specs.its.push(it);

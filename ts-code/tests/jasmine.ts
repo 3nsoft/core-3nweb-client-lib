@@ -26,11 +26,11 @@ for (let i=2; i<process.argv.length; i+=1) {
 
 const ALL_SPECS = [
 	'units/*.js',
-	'apis/startup/*.js',
-	'apis/keyrings.js',
-	'apis/mailerid.js',
-	'apis/storage.js',
-	'apis/asmail.js',
+	'caps-api/startup/*.js',
+	'caps-api/keyrings.js',
+	'caps-api/mailerid.js',
+	'caps-api/storage.js',
+	'caps-api/asmail.js',
 	'computer.3nweb.core/*.js',
 	'computer.3nweb.core/inbox/*.js'
 ];

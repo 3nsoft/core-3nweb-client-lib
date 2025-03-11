@@ -271,8 +271,10 @@ namespace extAttrs {
 	}
 
 	export function packNamedStrAttr(name: string, value: string): Buffer {
-		assert((typeof name === 'string') && (name.length > 0) &&
-			(typeof value === 'string') && (value.length > 0));
+		assert(
+			(typeof name === 'string') && (name.length > 0) &&
+			(typeof value === 'string')
+		);
 		const nameBin = Buffer.from(name, 'utf8');
 		const valueBin = Buffer.from(value, 'utf8');
 		return packNamedAttr(NAMED_UTF8_STR, nameBin, valueBin);
@@ -281,8 +283,7 @@ namespace extAttrs {
 	export function packNamedBinaryAttr(
 		name: string, value: Uint8Array
 	): Buffer {
-		assert((typeof name === 'string') && (name.length > 0) &&
-			(value.length > 0));
+		assert((typeof name === 'string') && (name.length > 0));
 		const nameBin = Buffer.from(name, 'utf8');
 		return packNamedAttr(NAMED_BINARY, nameBin, value);
 	}
@@ -349,31 +350,6 @@ namespace extAttrs {
 				assert(false);
 		}
 	}
-
-	// export function pack(xattrs: XAttrs): Buffer {
-	// 	const ext: Buffer[] = [];
-	// 	for (const xattr of Object.values(xattrs)) {
-	// 		if (xattr.type === 'named-utf8str') {
-	// 			ext.push(packNamedStrAttr(xattr.name, xattr.value));
-	// 		} else if (xattr.type === 'named-json') {
-	// 			ext.push(packNamedJsonAttr(xattr.name, xattr.value));
-	// 		} else if (xattr.type === 'named-binary') {
-	// 			ext.push(packNamedBinaryAttr(xattr.name, xattr.value));
-	// 		} else {
-	// 			throw new Error(`Unknown type of named attribute`);
-	// 		}
-	// 	}
-
-	// 	const bytes = Buffer.allocUnsafe(ext.reduce((len, b) => len+b.length, 0));
-
-	// 	let ofs = 0;
-	// 	for (const buf of ext) {
-	// 		bytes.set(buf, ofs);
-	// 		ofs += buf.length;
-	// 	}
-
-	// 	return bytes;
-	// }
 
 }
 Object.freeze(extAttrs);
