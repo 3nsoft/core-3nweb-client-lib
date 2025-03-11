@@ -113,7 +113,7 @@ it.func = async function(s) {
 specs.its.push(it);
 
 it = {
-	expectation: 'changes extended attributes',
+	expectation: 'empty binary and string attribute values',
 	notIncludedIn: 'device-fs'
 };
 it.func = async function(s) {
