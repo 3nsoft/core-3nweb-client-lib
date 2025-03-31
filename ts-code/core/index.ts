@@ -251,10 +251,14 @@ export class Core {
 	}
 
 	private makeMailCAP(requestedCAPs: RequestedCAPs): W3N['mail'] {
-		if (requestedCAPs.mail
-		&& (requestedCAPs.mail.receivingFrom === 'all')
-		&& (requestedCAPs.mail.sendingTo === 'all')) {
+		if (!requestedCAPs.mail) {
+			return;
+		}
+		const { sendingTo, receivingFrom, preflightsTo } = requestedCAPs.mail;
+		if ((receivingFrom === 'all') && (sendingTo === 'all')) {
 			return this.asmail.makeASMailCAP();
+		} else if (preflightsTo === 'all') {
+			return this.asmail.makePreflightOnlyASMailCAP();
 		} else {
 			return undefined;
 		}

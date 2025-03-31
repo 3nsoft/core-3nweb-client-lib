@@ -82,7 +82,7 @@ declare namespace web3n.asmail {
 	}
 
 	interface DeliveryService {
-		
+	
 		/**
 		 * This returns a promise, resolvable to an allowable total size of a
 		 * message

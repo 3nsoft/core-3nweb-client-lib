@@ -162,6 +162,17 @@ export class ASMail {
 		return Object.freeze(w);
 	};
 
+	makePreflightOnlyASMailCAP(): Service {
+		const { preFlight } = this.delivery.makeCAP();
+		const w = {
+			getUserId: async () => this.address,
+			delivery: {
+				preFlight
+			}
+		} as Service;
+		return Object.freeze(w);
+	};
+
 	async close(): Promise<void> {
 		await this.inbox.close();
 		await this.delivery.close();
