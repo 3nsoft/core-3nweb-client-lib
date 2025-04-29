@@ -14,28 +14,12 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-/**
- * This module contains some code and type declarations that are common for
- * both main and worker processes.
- */
+export type ConnectException = web3n.ConnectException;
+export type HTTPException = web3n.HTTPException;
 
-interface HTTPErrorDetails extends web3n.RuntimeException {
-	url: string;
-	method: string;
-	message?: string;
-}
-
-export interface ConnectException extends HTTPErrorDetails {
-	type: 'http-connect';
-}
-
-export interface HTTPException extends HTTPErrorDetails {
-	type: 'http-request';
-	status: number;
-}
-
-export function makeConnectionException(url: string|undefined,
-		method: string|undefined, msg?: string, cause?: any): ConnectException {
+export function makeConnectionException(
+	url: string|undefined, method: string|undefined, msg?: string, cause?: any
+): ConnectException {
 	const exc: ConnectException = {
 		runtimeException: true,
 		type: 'http-connect',
@@ -49,8 +33,9 @@ export function makeConnectionException(url: string|undefined,
 	return exc;
 }
 
-export function makeHTTPException(url: string, method: string, status: number,
-		msg?: string, cause?: any): HTTPException {
+export function makeHTTPException(
+	url: string, method: string, status: number, msg?: string, cause?: any
+): HTTPException {
 	const exc: HTTPException = {
 		runtimeException: true,
 		type: 'http-request',

@@ -36,6 +36,13 @@ declare namespace web3n.asmail {
 
 	}
 
+	interface PreFlightOnlyService {
+		getUserId: Service['getUserId'];
+		delivery: {
+			preFlight: DeliveryService['preFlight'];
+		}
+	}
+
 	interface DeliveryProgress {
 		notConnected?: true;
 		allDone?: 'all-ok' | 'with-errors';

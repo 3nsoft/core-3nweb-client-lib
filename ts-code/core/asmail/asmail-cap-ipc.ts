@@ -27,6 +27,7 @@ import { makeReqRepObjCaller } from "../../core-ipc/json-ipc-wrapping/caller-sid
 import { wrapReqReplySrvMethod } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
 
 type ASMailService = web3n.asmail.Service;
+type PreFlight = web3n.asmail.PreFlightOnlyService;
 type Inbox = ASMailService['inbox'];
 type Delivery = ASMailService['delivery'];
 type MsgInfo = web3n.asmail.MsgInfo;
@@ -37,56 +38,99 @@ type DeliveryOptions = web3n.asmail.DeliveryOptions;
 
 export function exposeASMailCAP(
 	cap: ASMailService, expServices: CoreSideServices
-): ExposedObj<ASMailService> {
+): ExposedObj<ASMailService>|ExposedObj<PreFlight> {
 	const out = cap.delivery;
 	const box = cap.inbox;
-	return {
-		getUserId: getUserId.wrapService(cap.getUserId),
-		delivery: {
-			addMsg: addMsg.wrapService(out.addMsg, expServices),
-			currentState: currentState.wrapService(out.currentState),
-			listMsgs: delivListMsgs.wrapService(out.listMsgs),
-			observeAllDeliveries: observeAllDeliveries.wrapService(
-				out.observeAllDeliveries),
-			observeDelivery: observeDelivery.wrapService(out.observeDelivery),
-			preFlight: preFlight.wrapService(out.preFlight),
-			rmMsg: rmMsg.wrapService(out.rmMsg)
-		},
-		inbox: {
-			getMsg: getMsg.wrapService(box.getMsg, expServices),
-			listMsgs: inboxListMsgs.wrapService(box.listMsgs),
-			removeMsg: removeMsg.wrapService(box.removeMsg),
-			subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
-		},
-		config: exposeCofigCAP(cap.config)
-	};
+	if (!box && !out.addMsg) {
+		return {
+			getUserId: getUserId.wrapService(cap.getUserId),
+			delivery: {
+				preFlight: preFlight.wrapService(out.preFlight),
+			}
+		};
+	} else {
+		return {
+			getUserId: getUserId.wrapService(cap.getUserId),
+			delivery: {
+				addMsg: addMsg.wrapService(out.addMsg, expServices),
+				currentState: currentState.wrapService(out.currentState),
+				listMsgs: delivListMsgs.wrapService(out.listMsgs),
+				observeAllDeliveries: observeAllDeliveries.wrapService(
+					out.observeAllDeliveries),
+				observeDelivery: observeDelivery.wrapService(out.observeDelivery),
+				preFlight: preFlight.wrapService(out.preFlight),
+				rmMsg: rmMsg.wrapService(out.rmMsg)
+			},
+			inbox: {
+				getMsg: getMsg.wrapService(box.getMsg, expServices),
+				listMsgs: inboxListMsgs.wrapService(box.listMsgs),
+				removeMsg: removeMsg.wrapService(box.removeMsg),
+				subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
+			},
+			config: exposeCofigCAP(cap.config)
+		};
+	}
+}
+
+
+function makeASMailBasedOnListing(
+	caller: Caller, objPath: string[], capLists: 'preflight'|'asmail'
+): ASMailService|PreFlight {
+	const delivPath = methodPathFor<ASMailService>(objPath, 'delivery');
+	const inboxPath = methodPathFor<ASMailService>(objPath, 'inbox');
+	if (capLists === 'asmail') {
+		return {
+			getUserId: getUserId.makeCaller(caller, objPath),
+			delivery: {
+				addMsg: addMsg.makeCaller(caller, delivPath),
+				currentState: currentState.makeCaller(caller, delivPath),
+				listMsgs: delivListMsgs.makeCaller(caller, delivPath),
+				observeAllDeliveries: observeAllDeliveries.makeCaller(
+					caller, delivPath),
+				observeDelivery: observeDelivery.makeCaller(caller, delivPath),
+				preFlight: preFlight.makeCaller(caller, delivPath),
+				rmMsg: rmMsg.makeCaller(caller, delivPath)
+			},
+			inbox: {
+				getMsg: getMsg.makeCaller(caller, inboxPath),
+				listMsgs: inboxListMsgs.makeCaller(caller, inboxPath),
+				removeMsg: removeMsg.makeCaller(caller, inboxPath),
+				subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
+			},
+			config: makeConfigCaller(caller, objPath.concat('config'))
+		};
+	} else if (capLists === 'preflight') {
+		return {
+			getUserId: getUserId.makeCaller(caller, objPath),
+			delivery: {
+				preFlight: preFlight.makeCaller(caller, delivPath),
+			}
+		};
+	} else {
+		throw new Error(`Unknown capLists value ${capLists}`);
+	}
 }
 
 export function makeASMailCaller(
 	caller: Caller, objPath: string[]
-): ASMailService {
-	const delivPath = methodPathFor<ASMailService>(objPath, 'delivery');
-	const inboxPath = methodPathFor<ASMailService>(objPath, 'inbox');
-	return {
-		getUserId: getUserId.makeCaller(caller, objPath),
-		delivery: {
-			addMsg: addMsg.makeCaller(caller, delivPath),
-			currentState: currentState.makeCaller(caller, delivPath),
-			listMsgs: delivListMsgs.makeCaller(caller, delivPath),
-			observeAllDeliveries: observeAllDeliveries.makeCaller(
-				caller, delivPath),
-			observeDelivery: observeDelivery.makeCaller(caller, delivPath),
-			preFlight: preFlight.makeCaller(caller, delivPath),
-			rmMsg: rmMsg.makeCaller(caller, delivPath)
-		},
-		inbox: {
-			getMsg: getMsg.makeCaller(caller, inboxPath),
-			listMsgs: inboxListMsgs.makeCaller(caller, inboxPath),
-			removeMsg: removeMsg.makeCaller(caller, inboxPath),
-			subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
-		},
-		config: makeConfigCaller(caller, objPath.concat('config'))
-	};
+): ASMailService|PreFlight {
+	if (!caller.listObj) {
+		throw new Error(`Caller here expects to have method 'listObj'`);
+	}
+	const topLst = caller.listObj(objPath);
+	const capLists = (topLst.includes('inbox') ? 'asmail' : 'preflight');
+	return makeASMailBasedOnListing(caller, objPath, capLists);
+}
+
+export async function promiseASMailCaller(
+	caller: Caller, objPath: string[]
+): Promise<ASMailService|PreFlight> {
+	if (!caller.listObjAsync) {
+		throw new Error(`Caller here expects to have method 'listObjAsync'`);
+	}
+	const topLst = await caller.listObjAsync(objPath);
+	const capLists = (topLst.includes('inbox') ? 'asmail' : 'preflight');
+	return makeASMailBasedOnListing(caller, objPath, capLists);
 }
 
 
@@ -253,7 +297,8 @@ function packIncomingMessage(
 		carbonCopy: m.carbonCopy,
 		recipients: m.recipients,
 		attachments: (m.attachments ?
-			exposeFSService(m.attachments, expServices) : undefined)
+			exposeFSService(m.attachments, expServices) : undefined
+		)
 	};
 	return incomingMessageType.pack(ipcMsg);
 }
@@ -275,7 +320,8 @@ function unpackIncomingMessage(
 		carbonCopy: ipcMsg.carbonCopy,
 		recipients: ipcMsg.recipients,
 		attachments: (ipcMsg.attachments ?
-			makeFSCaller(caller, ipcMsg.attachments) : undefined)
+			makeFSCaller(caller, ipcMsg.attachments) : undefined
+		)
 	};
 	return msg;
 }
@@ -310,7 +356,8 @@ namespace inboxSubscribe {
 		return (event, obs) => {
 			const s = new Subject<EnvelopeBody>();
 			const unsub = caller.startObservableCall(
-				path, requestType.pack({ event }), s);
+				path, requestType.pack({ event }), s
+			);
 			s.asObservable()
 			.pipe(
 				map(buf => unpackIncomingMessage(buf, caller))

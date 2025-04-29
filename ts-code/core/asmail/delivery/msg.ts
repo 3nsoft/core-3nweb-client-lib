@@ -211,7 +211,8 @@ export class Msg {
 		msg.setSection('From', this.sender);
 		if (typeof this.msgToSend.plainTxtBody === 'string') {
 			msg.setPlainTextBody(this.msgToSend.plainTxtBody);
-		} else if (typeof this.msgToSend.htmlTxtBody === 'string') {
+		}
+		if (typeof this.msgToSend.htmlTxtBody === 'string') {
 			msg.setHtmlTextBody(this.msgToSend.htmlTxtBody);
 		}
 		if (this.msgToSend.jsonBody !== undefined) {

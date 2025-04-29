@@ -35,6 +35,7 @@ it.func = async function(s) {
 	const u2 = s.users[1];
 
 	const txtBody = 'Some text\nBlah-blah-blah';
+	const htmlBody = `Some html. Note that core isn't looking/checking this`;
 	const jsonBody = {
 		field1: 123,
 		field2: 'blah-blah'
@@ -45,6 +46,7 @@ it.func = async function(s) {
 	const outMsg: OutgoingMessage = {
 		msgType: 'mail',
 		plainTxtBody: txtBody,
+		htmlTxtBody: htmlBody,
 		jsonBody
 	};
 	const idForSending = 'a4b5';
@@ -87,6 +89,7 @@ it.func = async function(s) {
 	expect(inMsg.msgId).toBe(msgId);
 	expect(inMsg.msgType).toBe('mail');
 	expect(inMsg.plainTxtBody).toBe(txtBody);
+	expect(inMsg.htmlTxtBody).toBe(htmlBody);
 	expect(inMsg.jsonBody).toBeTruthy();
 	expect((inMsg.jsonBody as typeof jsonBody).field1).toBe(jsonBody.field1);
 	expect((inMsg.jsonBody as typeof jsonBody).field2).toBe(jsonBody.field2);

@@ -249,19 +249,19 @@ export class MsgPacker {
 		if (!this.mainBody.text) {
 			this.mainBody.text = {};
 		}
-		this.mainBody.text = { plain: text };
+		this.mainBody.text.plain = text;
 		this.wasBodySet = true;
 	}
 
 	/**
 	 * This sets a plain html body.
-	 * @param html
+	 * @param htmlTxt
 	 */
-	setHtmlTextBody(html: string): void {
+	setHtmlTextBody(htmlTxt: string): void {
 		if (!this.mainBody.text) {
 			this.mainBody.text = {};
 		}
-		this.mainBody.text = { html };
+		this.mainBody.text.html = htmlTxt;
 		this.wasBodySet = true;
 	}
 

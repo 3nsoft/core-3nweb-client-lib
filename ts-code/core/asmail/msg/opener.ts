@@ -32,22 +32,26 @@ export class OpenedMsg {
 	private msgKeyRole: MsgKeyRole|undefined = undefined;
 
 	constructor(
-			public msgId: string,
-			private main: MsgEnvelope) {
+		public msgId: string,
+		private main: MsgEnvelope
+	) {
 		Object.seal(this);
 	}
 	
 	get establishedKeyChain(): boolean {
-		if (!this.msgKeyRole) { throw new Error(
-			`Key role is not set in incoming message ${this.msgId}`); }
-		return (this.msgKeyRole === 'suggested') ||
+		if (!this.msgKeyRole) {
+			throw new Error(`Key role is not set in incoming message ${this.msgId}`);
+		}
+		return ((this.msgKeyRole === 'suggested') ||
 			(this.msgKeyRole === 'in_use') ||
-			(this.msgKeyRole === 'old');
+			(this.msgKeyRole === 'old')
+		);
 	}
 
 	setMsgKeyRole(msgKeyRole: MsgKeyRole): void {
-		if (this.msgKeyRole) { throw new Error(
-			`Cannot set key role twice in incoming message ${this.msgId}`); }
+		if (this.msgKeyRole) {
+			throw new Error(`Cannot set key role twice in incoming message ${this.msgId}`);
+		}
 		this.msgKeyRole = msgKeyRole;
 	}
 
