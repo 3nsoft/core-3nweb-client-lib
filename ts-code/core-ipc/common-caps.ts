@@ -17,7 +17,7 @@
 
 import { W3N_NAME, CoreSide, ClientSide } from "../ipc-via-protobuf/connector";
 import { exposeLogger, makeLogCaller } from "./log-cap";
-import { exposeASMailCAP, makeASMailCaller } from "../core/asmail/asmail-cap-ipc";
+import { exposeASMailCAP, makeASMailCaller, promiseASMailCaller } from "../core/asmail/asmail-cap-ipc";
 import { exposeStorageCAP, makeStorageCaller, promiseStorageCaller } from "../core/storage/storage-cap-ipc";
 import { exposeMailerIdCAP, makeMailerIdCaller } from "../core/id-manager/mailerid-cap-ipc";
 import { exposeCAPs, makeClientSide, ClientCAPsWraps, CAPsExposures, TypeDifference, promiseClientSide } from "./generic";
@@ -63,7 +63,7 @@ export async function promiseW3Nclient<T extends W3N>(
 ): Promise<T> {
 	const mainCAPs: ClientCAPsWraps<W3N> = {
 		log: makeLogCaller,
-		mail: makeASMailCaller,
+		mail: promiseASMailCaller,
 		mailerid: makeMailerIdCaller,
 		storage: promiseStorageCaller,
 		keyrings: makeKeyringsCaller,

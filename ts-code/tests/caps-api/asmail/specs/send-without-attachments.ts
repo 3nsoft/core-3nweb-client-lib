@@ -18,6 +18,7 @@
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { SpecIt, throwDeliveryErrorFrom } from '../test-utils';
 import { sleep } from '../../../../lib-common/processes/sleep';
+import { deepEqual } from '../../../libs-for-tests/json-equal';
 
 export const specs: SpecDescribe = {
 	description: '.sendMsg',
@@ -90,9 +91,7 @@ it.func = async function(s) {
 	expect(inMsg.msgType).toBe('mail');
 	expect(inMsg.plainTxtBody).toBe(txtBody);
 	expect(inMsg.htmlTxtBody).toBe(htmlBody);
-	expect(inMsg.jsonBody).toBeTruthy();
-	expect((inMsg.jsonBody as typeof jsonBody).field1).toBe(jsonBody.field1);
-	expect((inMsg.jsonBody as typeof jsonBody).field2).toBe(jsonBody.field2);
+	expect(deepEqual(inMsg.jsonBody, jsonBody)).toBeTrue();
 	await u2_w3n.mail!.inbox.removeMsg(msgId);
 	await u2_w3n.mail!.inbox.removeMsg(msgId);	// second call is a noop
 
