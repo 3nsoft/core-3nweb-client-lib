@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -148,21 +148,27 @@ it.func = async function(s) {
 	expect(inMsg.plainTxtBody).toBe(txtBody);
 
 	// check attachments presence
-	expect(!!inMsg.attachments).withContext(`attachments should be present in message ${msgId}`).toBe(true);
+	expect(inMsg.attachments).withContext(`attachments should be present in message ${msgId}`).toBeDefined();
 	const attachments = inMsg.attachments;
 	if (!attachments) { throw new Error(`skipping further checks`); }
+	expect(attachments.writable).toBeFalse();
 
 	// check files in attachments
 	for (const fp of files) {
 		expect(await attachments.readTxtFile(fp.name)).withContext(`file content should be exactly what has been sent`).toBe(fp.content);
+		await sleep(10);
+		const file = await attachments.readonlyFile(fp.name);
+		expect(file.writable).toBeFalse();
+		expect(await file.readTxt()).toBe(fp.content);
 	}
 
 	// check folder in attachments
 	const checkFolderIn = async (parent: ReadonlyFS, params: FolderParams) => {
 		expect(await parent.checkFolderPresence(params.name)).withContext(`folder ${params.name} should be present in ${parent.name}`).toBe(true);
 		const fs = await parent.readonlySubRoot(params.name);
+		expect(fs.writable).toBeFalse();
 		for (const fp of params.files) {
-			expect(await fs.readTxtFile(fp.name)).toBe(fp.content, `file content should be exactly what has been sent`);
+			expect(await fs.readTxtFile(fp.name)).withContext(`file content should be exactly what has been sent`).toBe(fp.content);
 		}
 		for (const fp of params.folders) {
 			await checkFolderIn(fs, fp);

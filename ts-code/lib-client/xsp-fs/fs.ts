@@ -406,9 +406,13 @@ export class XspFS implements WritableFS {
 	}
 
 	async link(path: string, target: File|FS): Promise<void> {
-		if (!target ||
-				(typeof (<Linkable> <any> target).getLinkParams !== 'function')) {
-			throw new Error('Given target is not-linkable');
+		if (!target
+		|| (typeof (target as any as Linkable).getLinkParams !== 'function')) {
+			if ((target as FS).listFolder) {
+				throw makeFileException('notLinkableFolder', target.name);
+			} else {
+				throw makeFileException('notLinkableFile', target.name);
+			}
 		}
 		const params = await (<Linkable> <any> target).getLinkParams();
 		this.ensureLinkingAllowedTo(params);

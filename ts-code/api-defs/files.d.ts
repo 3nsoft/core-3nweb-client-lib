@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -46,6 +46,8 @@ declare namespace web3n.files {
 		isEndless?: true;
 		storageClosed?: true;
 		remoteNotSet?: true;
+		notLinkableFile?: true;
+		notLinkableFolder?: true;
 	}
 
 	interface exceptionCode {

@@ -684,9 +684,13 @@ export class DeviceFS implements WritableFS, Linkable {
 
 	async link(path: string, target: File | FS): Promise<void> {
 		// do sanity checks
-		if (!target ||
-				(typeof (<Linkable> <any> target).getLinkParams !== 'function')) {
-			throw new Error('Given target is not-linkable');
+		if (!target
+		|| (typeof (target as any as Linkable).getLinkParams !== 'function')) {
+			if ((target as FS).listFolder) {
+				throw makeFileException('notLinkableFolder', target.name);
+			} else {
+				throw makeFileException('notLinkableFile', target.name);
+			}
 		}
 		const params = await (target as any as Linkable).getLinkParams();
 		// note, we could check (params.storageType !== 'device'), but, since we
