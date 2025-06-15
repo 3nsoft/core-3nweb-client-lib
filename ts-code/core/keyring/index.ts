@@ -441,6 +441,10 @@ export class Keyrings {
 	makeKeyringsCAP(): Service {
 		const w: Service = {
 			introKeyOnASMailServer: this.publishedKeys.makeIntroKeyCAP(),
+			getCorrespondentKeys: async addr => {
+				const cAddr = toCanonicalAddress(addr);
+				return this.corrKeys.get(cAddr)?.toInfo();
+			}
 		};
 		return Object.freeze(w);
 	}

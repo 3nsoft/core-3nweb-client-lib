@@ -220,5 +220,9 @@ export namespace msgMainObjRecieved {
 
 }
 Object.freeze(msgMainObjRecieved);
+
+// XXX add event about message removal
+//   it is useful in multi-device case, pass implicit implicit signal that will
+//   have context-specific meaning.
 	
 Object.freeze(exports);

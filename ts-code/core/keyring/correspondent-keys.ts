@@ -32,6 +32,8 @@ import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
 
 type JsonKey = web3n.keys.JsonKey;
 type JsonKeyShort = web3n.keys.JsonKeyShort;
+type CorrespondentKeysInfo = web3n.keys.CorrespondentKeysInfo;
+type ReceptionPairInfo = web3n.keys.ReceptionPairInfo;
 
 export interface ReceptionPair {
 	pids: string[];
@@ -438,7 +440,21 @@ export class CorrespondentKeys {
 		}
 		return { msgMasterKey, msgCount, currentPair };
 	}
-	
+
+	toInfo(): CorrespondentKeysInfo {
+		const { sendingPair: sp, receptionPairs: rp } = this.keys;
+		return {
+			sendingPair: (sp ? turnSendingPairToInfo(sp) : null),
+			receptionPairs: {
+				inUse: (rp.inUse ? turnReceptionPairToInfo(rp.inUse) : null),
+				old: (rp.old ? turnReceptionPairToInfo(rp.old) : null),
+				suggested: (
+					rp.suggested ? turnReceptionPairToInfo(rp.suggested) : null
+				)
+			}
+		};
+	}
+
 }
 Object.freeze(CorrespondentKeys.prototype);
 Object.freeze(CorrespondentKeys);
@@ -478,6 +494,38 @@ function updateMsgCountInRatchetedSendingPair(p: RatchetedSendingPair): number {
 		};
 	}
 	return p.sentMsgs.count;
+}
+
+function turnSendingPairToInfo(
+	sp: SendingPair
+): CorrespondentKeysInfo['sendingPair'] {
+	if (sp.type === 'ratcheted') {
+		const { pids, timestamp, sentMsgs } = sp;
+		return {
+			type: 'ratcheted',
+			recipientKId: sp.recipientPKey.kid,
+			senderKId: sp.senderKey.pkey.kid,
+			pids,
+			timestamp,
+			sentMsgs
+		};
+	} else if (sp.type === 'intro') {
+		return {
+			type: 'intro',
+			recipientKId: sp.recipientPKey.kid
+		};
+	} else {
+		return null;
+	}
+}
+
+function turnReceptionPairToInfo(rp: ReceptionPair): ReceptionPairInfo {
+	const { pids, timestamp, receivedMsgs, isSenderIntroKey } = rp;
+	return {
+		pids, timestamp, receivedMsgs, isSenderIntroKey,
+		recipientKId: rp.recipientKey.pkey.kid,
+		senderKId: rp.senderPKey.kid
+	};
 }
 
 Object.freeze(exports);

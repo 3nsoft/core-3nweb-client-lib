@@ -80,4 +80,8 @@ describe('keyrings', () => {
 
 	}, undefined, s);
 
+	itCond(`has method to view correpondent's keys info`, async () => {
+		expect(typeof keyrings.getCorrespondentKeys).toBe('function');
+	});
+
 });

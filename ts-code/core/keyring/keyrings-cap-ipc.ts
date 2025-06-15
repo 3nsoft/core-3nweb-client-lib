@@ -16,7 +16,7 @@
 */
 
 import { Caller, ExposedObj } from "../../ipc-via-protobuf/connector";
-import { makeReqRepObjCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
+import { makeReqRepObjCaller, makeReqRepFuncCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
 import { wrapReqReplySrvMethod } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
 
 type Keyrings = web3n.keys.Keyrings;
@@ -25,6 +25,7 @@ type IntroKeyOnASMailServer = web3n.keys.IntroKeyOnASMailServer;
 export function exposeKeyringsCAP(cap: Keyrings): ExposedObj<Keyrings> {
 	return {
 		introKeyOnASMailServer: exposeIntroKey(cap.introKeyOnASMailServer),
+		getCorrespondentKeys: wrapReqReplySrvMethod(cap, 'getCorrespondentKeys')
 	};
 }
 
@@ -63,6 +64,9 @@ export function makeKeyringsCaller(
 		introKeyOnASMailServer: makeIntroKeyCaller(
 			caller, objPath.concat('introKeyOnASMailServer')
 		),
+		getCorrespondentKeys: makeReqRepFuncCaller(
+			caller, objPath.concat('getCorrespondentKeys')
+		)
 	};
 }
 

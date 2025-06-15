@@ -123,6 +123,10 @@ declare namespace web3n.keys {
 
 		introKeyOnASMailServer: IntroKeyOnASMailServer;
 
+		getCorrespondentKeys: (
+			correspondentAddr: string
+		) => Promise<CorrespondentKeysInfo|undefined>;
+
 	}
 
 	interface IntroKeyOnASMailServer {
@@ -149,6 +153,44 @@ declare namespace web3n.keys {
 		assertion: keys.SignedLoad;
 		userCert: keys.SignedLoad;
 		provCert: keys.SignedLoad;
+	}
+
+	interface CorrespondentKeysInfo {
+		sendingPair: IntroductorySendingPairInfo|RatchetedSendingPairInfo|null;
+		receptionPairs: {
+			suggested: ReceptionPairInfo|null;
+			inUse: ReceptionPairInfo|null;
+			old: ReceptionPairInfo|null;
+		};
+	}
+
+	interface IntroductorySendingPairInfo {
+		type: 'intro';
+		recipientKId: string;
+	}
+
+	interface RatchetedSendingPairInfo {
+		type: 'ratcheted';
+		pids: string[];
+		timestamp: number;
+		senderKId: string;
+		recipientKId: string;
+		sentMsgs?: {
+			count: number;
+			lastTS: number;
+		};
+	}
+
+	interface ReceptionPairInfo {
+		pids: string[];
+		recipientKId: string;
+		isSenderIntroKey?: boolean,
+		senderKId: string;
+		receivedMsgs?: {
+			counts: number[][];
+			lastTS: number;
+		};
+		timestamp: number;
 	}
 
 }
