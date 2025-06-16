@@ -167,12 +167,14 @@ declare namespace web3n.keys {
 	interface IntroductorySendingPairInfo {
 		type: 'intro';
 		recipientKId: string;
+		alg: string;
 	}
 
 	interface RatchetedSendingPairInfo {
 		type: 'ratcheted';
 		pids: string[];
 		timestamp: number;
+		alg: string;
 		senderKId: string;
 		recipientKId: string;
 		sentMsgs?: {
@@ -183,6 +185,7 @@ declare namespace web3n.keys {
 
 	interface ReceptionPairInfo {
 		pids: string[];
+		alg: string;
 		recipientKId: string;
 		isSenderIntroKey?: boolean,
 		senderKId: string;

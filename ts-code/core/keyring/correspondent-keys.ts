@@ -49,25 +49,6 @@ export interface ReceptionPair {
 }
 
 /**
- * Sending pairs are a rotating public key cryptography key material for sending
- * messages.
- * 
- * Let's note naming convention. Since this is a sending pair, this side of
- * communication is called a sender, while the other side is a recipient.
- */
-export interface BaseSendingPair {
-
-	/**
-	 * This is recipients' public key, to which encryption is done.
-	 * If this is an introductory pair, this key is recipient's published intro
-	 * public key.
-	 * Else, if this is an ratcheted pair, this key comes from crypto material
-	 * that recipients suggests from time to time for further use.
-	 */
-	recipientPKey: JsonKeyShort;
-}
-
-/**
  * Introductory pair appears when the first message is sent to a new
  * correspondent. By nature it is an introductory message that uses recipient's
  * published introductory key. Hence, recipient's key material in this pair
@@ -77,15 +58,24 @@ export interface BaseSendingPair {
  * a flag that allows to distinguish it from ratcheted pair with a clean
  * if-statement.
  */
-export interface IntroductorySendingPair extends BaseSendingPair {
+export interface IntroductorySendingPair {
 	type: 'intro';
+
+	/**
+	 * This is recipients' public key, to which encryption is done.
+	 * If this is an introductory pair, this key is recipient's published intro
+	 * public key.
+	 * Else, if this is an ratcheted pair, this key comes from crypto material
+	 * that recipients suggests from time to time for further use.
+	 */
+	recipientPKey: JsonKey;
 }
 
 /**
  * Ratcheted sending pair is a sending pair with pair ids (pids), attached to
  * it. These ids are used to identify correct key material.
  */
-export interface RatchetedSendingPair extends BaseSendingPair {
+export interface RatchetedSendingPair {
 	type: 'ratcheted';
 	pids: string[];
 	timestamp: number;
@@ -98,6 +88,15 @@ export interface RatchetedSendingPair extends BaseSendingPair {
 	 * and is moved to the sending pair when it is used by the other side.
 	 */
 	senderKey: JWKeyPair;
+
+	/**
+	 * This is recipients' public key, to which encryption is done.
+	 * If this is an introductory pair, this key is recipient's published intro
+	 * public key.
+	 * Else, if this is an ratcheted pair, this key comes from crypto material
+	 * that recipients suggests from time to time for further use.
+	 */
+	recipientPKey: JsonKeyShort;
 
 	/**
 	 * This is a precomputed message master key that comes from a given pair.
@@ -505,6 +504,7 @@ function turnSendingPairToInfo(
 			type: 'ratcheted',
 			recipientKId: sp.recipientPKey.kid,
 			senderKId: sp.senderKey.pkey.kid,
+			alg: sp.senderKey.pkey.alg,
 			pids,
 			timestamp,
 			sentMsgs
@@ -512,7 +512,8 @@ function turnSendingPairToInfo(
 	} else if (sp.type === 'intro') {
 		return {
 			type: 'intro',
-			recipientKId: sp.recipientPKey.kid
+			recipientKId: sp.recipientPKey.kid,
+			alg: sp.recipientPKey.alg
 		};
 	} else {
 		return null;
@@ -523,6 +524,7 @@ function turnReceptionPairToInfo(rp: ReceptionPair): ReceptionPairInfo {
 	const { pids, timestamp, receivedMsgs, isSenderIntroKey } = rp;
 	return {
 		pids, timestamp, receivedMsgs, isSenderIntroKey,
+		alg: rp.recipientKey.pkey.alg,
 		recipientKId: rp.recipientKey.pkey.kid,
 		senderKId: rp.senderPKey.kid
 	};
