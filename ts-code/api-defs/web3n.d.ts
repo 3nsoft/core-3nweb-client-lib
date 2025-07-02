@@ -25,7 +25,7 @@
 
 
 declare namespace web3n {
-	
+
 	interface RuntimeException {
 		runtimeException: true;
 		type?: string;
@@ -33,21 +33,47 @@ declare namespace web3n {
 		message?: string;
 	}
 
+	interface ConnectException extends RuntimeException {
+		type: 'connect';
+		connectType: string;
+	}
+
 	interface HTTPErrorDetails extends web3n.RuntimeException {
 		url: string;
 		method: string;
-		message?: string;
 	}
-	
-	interface ConnectException extends HTTPErrorDetails {
-		type: 'http-connect';
+
+	interface HTTPConnectException extends ConnectException {
+		connectType: 'http';
+		url?: string;
+		method?: string;
 	}
-	
+
+	interface DNSConnectException extends ConnectException {
+		connectType: 'dns';
+	}
+
 	interface HTTPException extends HTTPErrorDetails {
 		type: 'http-request';
 		status: number;
 	}
-	
+
+	interface ServLocException extends RuntimeException {
+		type: 'service-locating';
+		address: string;
+
+		/**
+		 * domainNotFound flag indicates that domain in the address doesn't exist.
+		 */
+		domainNotFound?: true;
+
+		/**
+		 * noServiceRecord flag indicates that 3NWeb services are not set at
+		 * domain in the address.
+		 */
+		noServiceRecord?: true;
+	}
+
 	interface EncryptionException {
 		failedCipherVerification?: true;
 		failedSignatureVerification?: true;

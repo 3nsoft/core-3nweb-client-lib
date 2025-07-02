@@ -197,6 +197,9 @@ export class Core {
 	private initForExistingUserWithCache: InitWithCache = async (
 		address, storageKey
 	) => {
+
+		// XXX this shouldn't fail without network. All data is on the disk!
+
 		const completeStorageInit = await this.storages.startInitFromCache(
 			address, storageKey,
 			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
@@ -345,6 +348,8 @@ export class Core {
 			// XXX This should be removed, at some point, as there will be no more
 			//     users with very old data folders.
 			await this.performDataMigrationsAtInit();
+
+			// XXX some of these starting can be done any way
 
 			const keyringsSyncedFS = await this.storages.makeSyncedFSForApp(
 				KEYRINGS_APP_NAME

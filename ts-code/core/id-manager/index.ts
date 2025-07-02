@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -111,14 +111,7 @@ export class IdManager {
 		logError: LogError, logWarning: LogWarning
 	): Promise<IdManager|undefined> {
 		const store = IdKeysStorage.makeWithStorage(fs, logError, logWarning);
-		const idManager = new IdManager(store, makeNet, resolver, address);
-		try {
-			await idManager.provisionUsingSavedKey();
-			return idManager;
-		} catch (err) {
-			await logError(err, `Can't initialize id manager from local store`);
-			return;
-		}
+		return new IdManager(store, makeNet, resolver, address);
 	}
 
 	private async startProvisionWithoutSavedKey(
@@ -171,17 +164,20 @@ export class IdManager {
 		proc = this.provisioningProc.start(async () => {
 			const midUrl = await this.midServiceFor(this.address);
 			const provisioner = new MailerIdProvisioner(
-				this.address, midUrl, this.makeNet());
+				this.address, midUrl, this.makeNet()
+			);
 			const key = await this.store.getSavedKey();
-			if (!key) { throw new Error(
-				`No saved MailerId login key can be found`); }
+			if (!key) {
+				throw new Error(`No saved MailerId login key can be found`);
+			}
 			const skey = keyFromJson(
 				key, keyUse.MID_PKLOGIN, box.JWK_ALG_NAME, box.KEY_LENGTH
 			);
 			const provisioning = await provisioner.provisionSigner(skey.kid);
 			this.signer = await provisioning.complete(() => {
 				const dhshared = box.calc_dhshared_key(
-					provisioning.serverPKey, skey.k);
+					provisioning.serverPKey, skey.k
+				);
 				skey.k.fill(0);
 				return dhshared;
 			}, CERTIFICATE_DURATION_SECONDS, ASSERTION_VALIDITY);

@@ -301,22 +301,6 @@ declare namespace web3n.asmail {
 		msgIsBroken?: true;
 	}
 
-	interface ServLocException extends RuntimeException {
-		type: 'service-locating';
-		address: string;
-
-		/**
-		 * domainNotFound flag indicates that domain in the address doesn't exist.
-		 */
-		domainNotFound?: true;
-
-		/**
-		 * noServiceRecord flag indicates that 3NWeb services are not set at
-		 * domain in the address.
-		 */
-		noServiceRecord?: true;
-	}
-
 	interface ASMailSendException extends RuntimeException {
 		type: 'asmail-delivery';
 		address?: string;

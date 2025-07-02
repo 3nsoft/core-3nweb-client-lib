@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 3NSoft Inc.
+ Copyright (C) 2015, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,40 +14,26 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-export type ConnectException = web3n.ConnectException;
+import { makeRuntimeException } from "./runtime";
+
+export type ConnectException = web3n.HTTPConnectException;
 export type HTTPException = web3n.HTTPException;
 
 export function makeConnectionException(
-	url: string|undefined, method: string|undefined, msg?: string, cause?: any
+	url: string|undefined, method: string|undefined,
+	message?: string, cause?: any
 ): ConnectException {
-	const exc: ConnectException = {
-		runtimeException: true,
-		type: 'http-connect',
-		url: url!,
-		method: method!,
-		cause
-	};
-	if (msg) {
-		exc.message = msg;
-	}
-	return exc;
+	return makeRuntimeException<ConnectException>(
+		'connect', { connectType: 'http', url, method, cause, message }, {}
+	);
 }
 
 export function makeHTTPException(
-	url: string, method: string, status: number, msg?: string, cause?: any
+	url: string, method: string, status: number, message?: string, cause?: any
 ): HTTPException {
-	const exc: HTTPException = {
-		runtimeException: true,
-		type: 'http-request',
-		url: url,
-		method: method,
-		status: status,
-		cause
-	};
-	if (msg) {
-		exc.message = msg;
-	}
-	return exc;
+	return makeRuntimeException<HTTPException>(
+		'http-request', { url, method, status, cause, message }, {}
+	);
 }
 
 Object.freeze(exports);

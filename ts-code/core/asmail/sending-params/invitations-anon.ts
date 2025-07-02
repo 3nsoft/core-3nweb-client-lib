@@ -129,7 +129,7 @@ export class AnonymousInvites {
 		// synced version is read.
 		const infoOnServer = await this.anonInvitesOnServer.getFromServer()
 		.catch((exc: ConnectException) => {
-			if ((<ConnectException> exc).type === 'http-connect') {
+			if (exc.type === 'connect') {
 				return;
 			} else {
 				throw exc;

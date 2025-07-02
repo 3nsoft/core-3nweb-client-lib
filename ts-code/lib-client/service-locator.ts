@@ -19,6 +19,7 @@ import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { parse as parseUrl } from 'url';
 import { Reply, makeException, NetClient } from './request-utils';
 import { promises as dnsPromises } from 'dns';
+import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 
 type SignedLoad = web3n.keys.SignedLoad;
 
@@ -172,30 +173,34 @@ function checkAndPrepareURL(value: string): string {
 	return 'https://'+value;
 }
 
-type ServLocException = web3n.asmail.ServLocException;
+type ServLocException = web3n.ServLocException;
+type DNSConnectException = web3n.DNSConnectException;
 
 function domainNotFoundExc(
 	address: string,
 	cause: { code: string; hostname: string; message: string; }
 ): ServLocException {
-	const exc: ServLocException = {
-		runtimeException: true,
-		type: 'service-locating',
-		address,
-		domainNotFound: true,
-		cause
-	};
-	return exc;
+	return makeRuntimeException<ServLocException>(
+		'service-locating', { address, cause }, { domainNotFound: true }
+	);
 }
 
 function noServiceRecordExc(address: string): ServLocException {
-	const exc: ServLocException = {
-		runtimeException: true,
-		type: 'service-locating',
-		address,
-		noServiceRecord: true
-	};
-	return exc;
+	return makeRuntimeException<ServLocException>(
+		'service-locating', { address }, { noServiceRecord: true }
+	);
+}
+
+function noConnectionExc(
+	cause: { code: string; hostname: string; message: string; }
+): DNSConnectException {
+	return makeRuntimeException<DNSConnectException>(
+		'connect', {
+			connectType: 'dns',
+			message: `The most likely cause of this error is device not connected. Next likely cause is DNS not setup, or not connecting properly. Like the saying goes: "It's not DNS. There is no way it's DNS. It was DNS."`,
+			cause
+		}, {}
+	);
 }
 
 /**
@@ -273,7 +278,8 @@ interface DnsError extends Error {
 
 const DNS_ERR_CODE = {
 	NODATA: 'ENODATA',
-	NOTFOUND: 'ENOTFOUND'
+	NOTFOUND: 'ENOTFOUND',
+	ESERVFAIL: 'ESERVFAIL'
 };
 Object.freeze(DNS_ERR_CODE);
 
@@ -302,6 +308,8 @@ export function makeServiceLocator(
 			const { code, hostname, message } = (err as DnsError);
 			if (code === DNS_ERR_CODE.NODATA) {
 				throw noServiceRecordExc(address);
+			} else if (code === DNS_ERR_CODE.ESERVFAIL) {
+				throw noConnectionExc({ code, hostname, message });
 			} else if (hostname) {
 				throw domainNotFoundExc(address, { code, hostname, message });
 			} else {

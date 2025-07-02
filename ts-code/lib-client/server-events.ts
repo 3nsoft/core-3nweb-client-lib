@@ -104,7 +104,7 @@ export class ServerEvents<N extends string, T> {
 		exc: WSException|ConnectException|HTTPException
 	): boolean {
 		if (!exc.runtimeException) { return false; }
-		if (exc.type === 'http-connect') {
+		if (exc.type === 'connect') {
 			return true;
 		} else if (exc.type === 'http-request') {
 			return false;

@@ -342,7 +342,7 @@ export class InboxOnServer {
 			try {
 				msgIds = await this.msgReceiver.listMsgs(fromTS);
 			} catch (exc) {
-				if ((exc as ConnectException).type !== 'http-connect') {
+				if ((exc as ConnectException).type !== 'connect') {
 					throw exc;
 				}
 				return this.index.listMsgs(fromTS);
