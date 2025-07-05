@@ -18,20 +18,19 @@
 import { SignUp, CreatedUser } from './startup/sign-up';
 import { IdManager } from './id-manager';
 import { Storages, FactoryOfFSs, reverseDomain } from './storage';
-import { SignIn, StartInitWithoutCache, InitWithCache } from './startup/sign-in';
+import { SignIn, GenerateKey, CompleteInitWithoutCache } from './startup/sign-in';
 import { ASMail } from './asmail';
-import { errWithCause } from '../lib-common/exceptions/error';
+import { errWithCause, stringifyErr } from '../lib-common/exceptions/error';
 import { copy as jsonCopy } from '../lib-common/json-utils';
 import { makeCryptor } from '../lib-client/cryptor/cryptor';
-import { Subject, merge, lastValueFrom } from 'rxjs';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
-import { mergeMap, take } from 'rxjs/operators';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
 import { ServiceLocatorMaker } from '../lib-client/service-locator';
 import { Keyrings } from './keyring';
 import { ASMAIL_APP_NAME, KEYRINGS_APP_NAME, MAILERID_APP_NAME } from './storage/common/constants';
 import { ConfigOfASMailServer } from './asmail/config';
+import { defer, Deferred } from '../lib-common/processes/deferred';
 
 
 type RequestedCAPs = web3n.caps.common.RequestedCAPs;
@@ -39,6 +38,9 @@ type StoragePolicy = web3n.caps.common.StoragePolicy;
 type AppFSSetting = web3n.caps.common.AppFSSetting;
 type FSSetting = web3n.caps.common.FSSetting;
 type W3N = web3n.caps.common.W3N;
+type BootProcessObserver = web3n.startup.BootProcessObserver;
+type BootEvent = web3n.startup.BootEvent;
+type ConnectException = web3n.ConnectException;
 
 export interface CoreConf {
 	dataDir: string;
@@ -55,8 +57,8 @@ export class Core {
 	private asmail: ASMail;
 	private keyrings: Keyrings;
 	private idManager: IdManager|undefined = undefined;
-	private isInitialized = false;
 	private closingProc: Promise<void>|undefined = undefined;
+	private isInitialized = false;
 
 	private constructor(
 		private readonly makeNet: MakeNet,
@@ -90,133 +92,231 @@ export class Core {
 		return core;
 	}
 
-	start(): { capsForStartup: web3n.startup.W3N, coreInit: Promise<string>; } {
+	start(): {
+		capsForStartup: web3n.startup.W3N;
+		coreInit: Promise<string>;
+		coreAppsInit: Promise<void>;
+	} {
+		const { promise: midPromise, resolve: midDone } = defer<IdManager>();
+		const { watchBoot, emitBootEvent } = makeForBootEvents();
+
 		const signUp = new SignUp(
-			this.signUpUrl, this.cryptor.cryptor, this.makeNet.bind(this),
-			this.appDirs.getUsersOnDisk, this.logger.logError
+			this.signUpUrl, this.cryptor.cryptor, this.makeNet,
+			this.appDirs.getUsersOnDisk,
+			user => this.initForNewUser(user, midDone, emitBootEvent),
+			watchBoot,
+			this.logger.logError
 		);
+
 		const signIn = new SignIn(
 			this.cryptor.cryptor,
-			this.initForExistingUserWithoutCache,
-			this.initForExistingUserWithCache,
-			this.appDirs.getUsersOnDisk, this.logger.logError
+			addr  => this.initForExistingUserWithoutCache(addr, midDone, emitBootEvent),
+			(addr, storageKey) => this.initForExistingUserWithCache(addr, storageKey, midDone, emitBootEvent),
+			this.appDirs.getUsersOnDisk,
+			watchBoot,
+			this.logger.logError
 		);
-		
+
 		const capsForStartup: web3n.startup.W3N = {
 			signUp: signUp.exposedService(),
 			signIn: signIn.exposedService()
 		};
 		Object.freeze(capsForStartup);
 
-		const initFromSignUp$ = signUp.newUser$
-		.pipe(
-			mergeMap(this.initForNewUser, 1)
-		);
+		const coreInit = midPromise.then(idManager => {
+			this.idManager = idManager;
+			return this.idManager.getId();
+		});
 
-		const initFromSignIn$ = signIn.existingUser$;
+		const coreAppsInit = coreInit.then(async () => {
 
-		const coreInit = lastValueFrom(
-			merge(initFromSignIn$, initFromSignUp$)
-			.pipe(
-				take(1),
-				mergeMap(idManager => this.initCore(idManager), 1)
-			)
-		);
+			// XXX This should be removed, at some point, as there will be no more
+			//     users with very old data folders.
+			await this.performDataMigrationsAtInit();
 
-		return { coreInit, capsForStartup };
+			await this.initCoreApps(emitBootEvent);
+
+			this.isInitialized = true;
+		});
+
+		return { coreInit, coreAppsInit, capsForStartup };
 	};
 
-	private initForNewUser = async (u: CreatedUser): Promise<IdManager> => {
-		// 1) init of id manager without setting fs
-		const stepTwo = await IdManager.initWithoutStore(
-			u.address, this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning
-		);
-		if (!stepTwo) {
-			throw new Error(`MailerId server doesn't recognize identity ${u.address}`);
-		}
+	private async initForNewUser(
+		u: CreatedUser, done: Deferred<IdManager>['resolve'], emitBootEvent: (ev: BootEvent) => void
+	): Promise<void> {
+		emitBootEvent({
+			message: `Initializing system for new user ${u.address}`
+		});
+		try {
 
-		// 2) complete id manager login, without use of fs
-		const idManagerInit = await stepTwo(u.midSKey.default);
-		if (!idManagerInit) {
-			throw new Error(`Failed to provision MailerId identity`);
-		}
-		const { idManager, setupManagerStorage } = idManagerInit;
-
-		// 3) initialize all storages
-		const storesUp = await this.storages.initFreshForNewUser(
-			u.address, idManager.getSigner, u.storeParams, u.storeSKey,
-			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
-		);
-		if (!storesUp) {
-			throw new Error(`Stores failed to initialize`);
-		}
-
-		// 3) give id manager fs, in which it will record labeled key(s)
-		await setupManagerStorage(
-			await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
-			[ u.midSKey.labeled ]
-		);
-
-		return idManager;
-	};
-
-	private initForExistingUserWithoutCache: StartInitWithoutCache = async (
-		address
-	) => {
-		// 1) init of id manager without setting fs
-		const stepTwo = await IdManager.initWithoutStore(
-			address, this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning
-		);
-		if (!stepTwo) { return; }
-
-		return async (midLoginKey, storageKey) => {
+			// 1) init of id manager without setting fs
+			const stepTwo = await IdManager.initWithoutStore(
+				u.address, this.makeResolver('mailerid'), this.makeNet,
+				this.logger.logError, this.logger.logWarning
+			);
+			if (!stepTwo) {
+				const message = `MailerId server doesn't recognize identity ${u.address}`;
+				emitBootEvent({ message, isError: true });
+				throw new Error(message);
+			}
+			emitBootEvent({ message: `✔️  started login to provision MailerId` });
 
 			// 2) complete id manager login, without use of fs
-			const idManagerInit = await stepTwo(midLoginKey);
-			if (!idManagerInit) { return; }
+			const idManagerInit = await stepTwo(u.midSKey.default);
+			if (!idManagerInit) {
+				const message = `Failed to provision MailerId identity`;
+				emitBootEvent({ message, isError: true });
+				throw new Error(message);
+			}
+			emitBootEvent({ message: `✔️  MailerId certificate provisioned` });
 			const { idManager, setupManagerStorage } = idManagerInit;
 
 			// 3) initialize all storages
-			const storeDone = await this.storages.initFromRemote(
-				address, idManager.getSigner, storageKey,
+			emitBootEvent({ message: `Setting up main storage for new user` });
+			const storesUp = await this.storages.initFreshForNewUser(
+				u.address, idManager.getSigner, u.storeParams, u.storeSKey,
 				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
 			);
-			if (!storeDone) { return; }
+			if (!storesUp) {
+				const message = `Main store failed to initialize for new user`;
+				emitBootEvent({ message, isError: true });
+				throw new Error(message);
+			}
+			emitBootEvent({ message: `✔️  main storage initialized` });
 
-			// 4) complete initialization of id manager
+			// 3) give id manager fs, in which it will record labeled key(s)
+			emitBootEvent({ coreApp: MAILERID_APP_NAME, message: `setting up storage` });
 			await setupManagerStorage(
-				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME)
+				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
+				[ u.midSKey.labeled ]
 			);
-				
-			return idManager;
-		};
-	};
+			emitBootEvent({ coreApp: MAILERID_APP_NAME, message: `✔️  storage setup completed` });
 
-	private initForExistingUserWithCache: InitWithCache = async (
-		address, storageKey
-	) => {
+			done(idManager);
+		} catch (exc) {
+			if ((exc as ConnectException).type === 'connect') {
+				emitBootEvent({ message: `🔌  fail due to loss of connectivity`, isError: true });
+			} else {
+				emitBootEvent({ message: exc.message ?? stringifyErr(exc), isError: true });
+			}
+			throw exc;
+		}
+	}
 
-		// XXX this shouldn't fail without network. All data is on the disk!
+	private async initForExistingUserWithoutCache(
+		address: string, done: Deferred<IdManager>['resolve'], emitBootEvent: (ev: BootEvent) => void
+	): Promise<CompleteInitWithoutCache|undefined> {
+		emitBootEvent({
+			message: `Initializing system for user ${address}, without local cache on this device`
+		});
+		try {
 
-		const completeStorageInit = await this.storages.startInitFromCache(
-			address, storageKey,
-			this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
-		);
-		if (!completeStorageInit) { return; }
+			// 1) init of id manager without setting fs
+			const stepTwo = await IdManager.initWithoutStore(
+				address, this.makeResolver('mailerid'), this.makeNet,
+				this.logger.logError, this.logger.logWarning
+			);
+			if (!stepTwo) {
+				emitBootEvent({
+					isError: true, message: `MailerId server doesn't recognize identity ${address}`
+				});
+				return;
+			}
 
-		const idManager = await IdManager.initFromCachedStore(
-			address,
-			await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
-			this.makeResolver('mailerid'), () => this.makeNet(),
-			this.logger.logError, this.logger.logWarning
-		);
-		if (!idManager) { return; }
+			return async (midLoginKey, storageKey) => {
+				try {
 
-		completeStorageInit(idManager.getSigner);
-		return idManager;
-	};
+					// 2) complete id manager login, without use of fs
+					const idManagerInit = await stepTwo(midLoginKey);
+					if (!idManagerInit) {
+						emitBootEvent({
+							isError: true, message: `password/key is incorrect to provision MailerId certificate`
+						});
+						return false;
+					}
+					emitBootEvent({ message: `✔️  MailerId certificate provisioned` });
+					const { idManager, setupManagerStorage } = idManagerInit;
+
+					// 3) initialize all storages
+					emitBootEvent({ message: `Setting up main storage without local cache` });
+					const storeDone = await this.storages.initFromRemote(
+						address, idManager.getSigner, storageKey,
+						this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+					);
+					if (!storeDone) {
+						emitBootEvent({ message: `Main store failed to initialize`, isError: true });
+						return false;
+					}
+					emitBootEvent({ message: `✔️  main storage initialized` });
+
+					// 4) complete initialization of id manager
+					emitBootEvent({ coreApp: MAILERID_APP_NAME, message: `setting up storage` });
+					await setupManagerStorage(
+						await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME)
+					);
+					emitBootEvent({ coreApp: MAILERID_APP_NAME, message: `✔️  storage setup completed` });
+
+					done(idManager);
+					return true;
+				} catch (exc) {
+					if ((exc as ConnectException).type === 'connect') {
+						emitBootEvent({ message: `🔌  fail due to loss of connectivity`, isError: true });
+					} else {
+						emitBootEvent({ message: exc.message ?? stringifyErr(exc), isError: true });
+					}
+					throw exc;
+				}
+			};
+		} catch (exc) {
+			if ((exc as ConnectException).type === 'connect') {
+				emitBootEvent({ message: `🔌  fail due to loss of connectivity`, isError: true });
+			} else {
+				emitBootEvent({ message: exc.message ?? stringifyErr(exc), isError: true });
+			}
+			throw exc;
+		}
+	}
+
+	private async initForExistingUserWithCache(
+		address: string, storageKey: GenerateKey, done: Deferred<IdManager>['resolve'],
+		emitBootEvent: (ev: BootEvent) => void
+	): Promise<boolean> {
+		emitBootEvent({
+			message: `Initializing system for user ${address}, with local cache on this device`
+		});
+		try {
+
+			emitBootEvent({ message: `Unlocking data from local cache with provided password/key` });
+			const completeStorageInit = await this.storages.startInitFromCache(
+				address, storageKey,
+				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+			);
+			if (!completeStorageInit) {
+				emitBootEvent({
+					isError: true, message: `password/key is incorrect to decrypt local caches, or caches are damaged`
+				});
+				return false;
+			}
+			emitBootEvent({ message: `✔️  main storage is opened` });
+
+			const idManager = await IdManager.initFromCachedStore(
+				address,
+				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
+				this.makeResolver('mailerid'), this.makeNet,
+				this.logger.logError, this.logger.logWarning
+			);
+			if (!idManager) { return false; }
+			emitBootEvent({ message: `✔️  MailerId manager is initialized` });
+
+			completeStorageInit(idManager.getSigner);
+			done(idManager);
+			return true;
+		} catch (exc) {
+			emitBootEvent({ message: exc.message ?? stringifyErr(exc), isError: true });
+			throw exc;
+		}
+	}
 
 	makeCAPsForApp(
 		appDomain: string, requestedCAPs: RequestedCAPs
@@ -296,10 +396,6 @@ export class Core {
 		}
 	}
 
-	private closeBroadcast = new Subject<void>();
-
-	close$ = this.closeBroadcast.asObservable();
-
 	async close(): Promise<void> {
 		if (!this.closingProc) {
 			this.closingProc = (async () => {
@@ -314,7 +410,6 @@ export class Core {
 				}
 				await this.cryptor.close();
 				this.cryptor = (undefined as any);
-				this.closeBroadcast.next();
 			})();
 		}
 		await this.closingProc;
@@ -334,31 +429,29 @@ export class Core {
 		);
 	}
 
-	private async initCore(idManager: IdManager): Promise<string> {
-		try {
-			this.idManager = idManager;
+	private async initCoreApps(emitBootEvent: (ev: BootEvent) => void): Promise<void> {
 
-			const address = this.idManager.getId();
-			const getSigner = this.idManager.getSigner;
+		// XXX push events to this.bootProcObserver
+
+		try {
+			const address = this.idManager!.getId();
+			const getSigner = this.idManager!.getSigner;
 
 			const asmailServerConfig = new ConfigOfASMailServer(
 				address, getSigner, this.makeResolver('asmail'), this.makeNet()
 			);
 
-			// XXX This should be removed, at some point, as there will be no more
-			//     users with very old data folders.
-			await this.performDataMigrationsAtInit();
-
-			// XXX some of these starting can be done any way
-
+			emitBootEvent({ coreApp: KEYRINGS_APP_NAME, message: `starting initialization` });
 			const keyringsSyncedFS = await this.storages.makeSyncedFSForApp(
 				KEYRINGS_APP_NAME
 			);
 			await this.keyrings.init(
-				keyringsSyncedFS, this.idManager.getSigner,
+				keyringsSyncedFS, this.idManager!.getSigner,
 				asmailServerConfig.makeParamSetterAndGetter('init-pub-key')
 			);
+			emitBootEvent({ coreApp: KEYRINGS_APP_NAME, message: `✔️  initialized` });
 
+			emitBootEvent({ coreApp: ASMAIL_APP_NAME, message: `starting initialization` });
 			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
 				ASMAIL_APP_NAME
 			);
@@ -366,15 +459,15 @@ export class Core {
 				ASMAIL_APP_NAME
 			);
 			await this.asmail.init(
-				this.idManager.getId(), this.idManager.getSigner,
+				this.idManager!.getId(), this.idManager!.getSigner,
 				inboxSyncedFS, inboxLocalFS,
 				this.storages.storageGetterForASMail(), this.makeResolver,
 				asmailServerConfig, this.keyrings.forASMail()
 			);
-			this.isInitialized = true;
-			return this.idManager.getId();
+			emitBootEvent({ coreApp: ASMAIL_APP_NAME, message: `✔️  initialized` });
 		} catch (err) {
-			throw errWithCause(err, 'Failed to initialize core');
+			emitBootEvent({ isError: true, message: err.message ?? stringifyErr(err) });
+			throw errWithCause(err, 'Failed to initialize core apps');
 		}
 	}
 
@@ -385,6 +478,25 @@ export class Core {
 }
 Object.freeze(Core.prototype);
 Object.freeze(Core);
+
+
+function makeForBootEvents() {
+	let bootProcObserver: BootProcessObserver|undefined = undefined;
+	return {
+		watchBoot(obs: BootProcessObserver): () => void {
+			if (bootProcObserver) {
+				bootProcObserver.error?.(`New observer is added, and it stops the previous one.`);
+			}
+			bootProcObserver = obs;
+			return () => {
+				bootProcObserver = undefined;
+			}
+		},
+		emitBootEvent(ev: BootEvent): void {
+			bootProcObserver?.next?.(ev);
+		}
+	};
+}
 
 
 function makeStoragePolicy(

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -27,11 +27,12 @@ describe('signUp process', () => {
 	const s = minimalSetup();
 	let w3n: web3n.startup.W3N;
 	let coreInit: Promise<string>;
+	let coreAppsInit: Promise<void>;
 	let closeIPC: () => void;
 
 	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
-		({ closeIPC, coreInit, w3n } = s.runner.startCore());
+		({ closeIPC, coreInit, coreAppsInit, w3n } = s.runner.startCore());
 	}, 30000);
 
 	afterAllCond(async () => {
@@ -78,6 +79,8 @@ describe('signUp process', () => {
 
 		const initAs = await coreInit;
 		expect(initAs).toBe(userId);
+
+		await coreAppsInit;
 
 		try {
 			const { caps, close } = s.runner.core.makeCAPsForApp(

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,6 +29,7 @@ describe('signIn process (with cache)', () => {
 	let user: User;
 	let w3n: web3n.startup.W3N;
 	let coreInit: Promise<string>;
+	let coreAppsInit: Promise<void>;
 	let closeIPC: () => void;
 
 	beforeAllWithTimeoutLog(async () => {
@@ -37,7 +38,7 @@ describe('signIn process (with cache)', () => {
 		const runner = s.runners.get(user.userId)!;
 		await sleep(3000);
 		await runner.restart(false, false);
-		({ closeIPC, coreInit, w3n } = runner.startCore());
+		({ closeIPC, coreInit, coreAppsInit, w3n } = runner.startCore());
 	}, 30000);
 
 	afterAllCond(async () => {
@@ -75,6 +76,8 @@ describe('signIn process (with cache)', () => {
 
 		const initAs = await coreInit;
 		expect(initAs).toBe(user.userId);
+
+		await coreAppsInit;
 
 		try {
 			const { caps, close } = core.makeCAPsForApp(

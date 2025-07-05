@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 - 2023, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -26,13 +26,13 @@ import type { GetUsersOnDisk } from '../app-files';
 import * as random from '../../lib-common/random-node';
 import { Cryptor } from '../../lib-client/cryptor/cryptor';
 import { box } from 'ecma-nacl';
-import { makeKeyGenProgressCB, ProgressCB } from './sign-in';
-import { Subject } from 'rxjs';
+import { makeKeyGenProgressCB } from './sign-in';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { UserMidParams, UserStorageParams } from '../../lib-common/user-admin-api/signup';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
 
 type JsonKey = web3n.keys.JsonKey;
+type ProgressCB = web3n.startup.ProgressCB;
 
 export interface ScryptGenParams {
 	logN: number;
@@ -103,13 +103,15 @@ export class SignUp {
 		private cryptor: Cryptor,
 		private makeNet: () => NetClient,
 		private getUsersOnDisk: GetUsersOnDisk,
+		private initForNewUser: (u: CreatedUser) => Promise<void>,
+		private readonly watchBoot: SignUpService['watchBoot'],
 		private readonly logError: LogError
 	) {
 		this.setServiceURL(serviceURL);
 		Object.seal(this);
 	}
 
-	private setServiceURL(serviceURL: string): void {
+	private async setServiceURL(serviceURL: string): Promise<void> {
 		const url = parseUrl(serviceURL);
 		if (url.protocol !== 'https:') {
 			throw new Error("Url protocol must be https.");
@@ -120,30 +122,41 @@ export class SignUp {
 		}
 	}
 
+	private async getAvailableDomains(
+		signupToken: string|undefined
+	): Promise<string[]> {
+		return await checkAvailableDomains(
+			this.net, this.serviceURL, signupToken
+		);
+	}
+
+	private async getAvailableAddresses(
+		name: string, signupToken: string|undefined
+	): Promise<string[]> {
+		return await checkAvailableAddressesForName(
+			this.net, this.serviceURL, name, signupToken
+		);
+	}
+
 	exposedService(): SignUpService {
 		const service: SignUpService = {
-			setSignUpServer: async srvUrl => this.setServiceURL(srvUrl),
-			getAvailableDomains: signupToken => checkAvailableDomains(
-				this.net, this.serviceURL, signupToken
-			),
-			addUser: this.addUser,
-			createUserParams: this.createUserParams,
-			getAvailableAddresses: (
-				name, signupToken
-			) => checkAvailableAddressesForName(
-				this.net, this.serviceURL, name, signupToken
-			),
-			isActivated: async () => { throw new Error(`Not implemented, yet`); }
+			setSignUpServer: this.setServiceURL.bind(this),
+			getAvailableDomains: this.getAvailableDomains.bind(this),
+			addUser: this.addUser.bind(this),
+			createUserParams: this.createUserParams.bind(this),
+			getAvailableAddresses: this.getAvailableAddresses.bind(this),
+			isActivated: () => { throw new Error(`Not implemented, yet`); },
+			watchBoot: this.watchBoot
 		};
 		return Object.freeze(service);
 	}
 
-	private createUserParams: SignUpService['createUserParams'] = async (
-		pass, progressCB
-	) => {
+	private async createUserParams(
+		pass: string, progressCB: ProgressCB
+	): Promise<void> {
 		await this.genMidParams(pass, 0, 50, progressCB);
 		await this.genStorageParams(pass, 51, 100, progressCB);
-	};
+	}
 
 	private async genStorageParams(
 		pass: string, progressStart: number, progressEnd: number,
@@ -199,7 +212,9 @@ export class SignUp {
 		};
 	}
 
-	private addUser: SignUpService['addUser'] = async (address, signupToken) => {
+	private async addUser(
+		address: string, signupToken: string|undefined
+	): Promise<boolean> {
 		for (const user of await this.getUsersOnDisk()) {
 			if (areAddressesEqual(address, user)) {
 				throw new Error(`Account ${user} already exists on a disk.`);
@@ -216,7 +231,7 @@ export class SignUp {
 			);
 		});
 		if (!accountCreated) { return false; }
-		this.doneBroadcast.next({
+		this.initForNewUser({
 			address,
 			midSKey: {
 				default: this.mid.defaultSKey,
@@ -227,7 +242,7 @@ export class SignUp {
 		});
 		this.forgetKeys();
 		return true;
-	};
+	}
 
 	private async logAndWrap(err: any, msg: string): Promise<ErrorWithCause> {
 		await this.logError(err, msg);
@@ -238,10 +253,6 @@ export class SignUp {
 		this.store = (undefined as any);
 		this.mid = (undefined as any);
 	}
-
-	private doneBroadcast = new Subject<CreatedUser>();
-
-	newUser$ = this.doneBroadcast.asObservable();
 
 }
 Object.freeze(SignUp.prototype);

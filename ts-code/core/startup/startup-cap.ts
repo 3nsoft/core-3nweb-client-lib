@@ -22,6 +22,7 @@ import { makeObservableFuncCaller, makeReqRepObjCaller } from "../../core-ipc/js
 
 type SignInService = web3n.startup.SignInService;
 type SignUpService = web3n.startup.SignUpService;
+type BootEvent = web3n.startup.BootEvent;
 type Observer<T> = web3n.Observer<T>;
 
 export function wrapSignInCAP(cap: SignInService): ExposedObj<SignInService> {
@@ -49,7 +50,8 @@ export function wrapSignInCAP(cap: SignInService): ExposedObj<SignInService> {
 				obs.complete?.();
 			}, err => obs.error?.(err));
 			return noop;
-		})
+		}),
+		watchBoot: wrapObservingFunc<BootEvent>(cap.watchBoot)
 	};
 }
 
@@ -80,7 +82,8 @@ export function makeSignInCaller(
 				obsFn(obs, addr, pass);
 				return promise;
 			}
-		})()
+		})(),
+		watchBoot: makeObservableFuncCaller<BootEvent>(caller, objPath.concat('watchBoot'))
 	};
 }
 
@@ -132,7 +135,8 @@ export function wrapSignUpCAP(cap: SignUpService): ExposedObj<SignUpService> {
 			.then(() => obs.complete?.(), err => obs.error?.(err));
 			return noop;
 		}),
-		isActivated: wrapReqReplySrvMethod(cap, 'isActivated')
+		isActivated: wrapReqReplySrvMethod(cap, 'isActivated'),
+		watchBoot: wrapObservingFunc<BootEvent>(cap.watchBoot)
 	};
 }
 
@@ -168,7 +172,8 @@ export function makeSignUpCaller(
 				return completion.promise;
 			};
 		})(),
-		isActivated: callSignUp(caller, objPath, 'isActivated')
+		isActivated: callSignUp(caller, objPath, 'isActivated'),
+		watchBoot: makeObservableFuncCaller<BootEvent>(caller, objPath.concat('watchBoot'))
 	};
 }
 

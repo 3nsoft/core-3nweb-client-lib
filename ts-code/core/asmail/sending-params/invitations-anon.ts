@@ -121,23 +121,31 @@ export class AnonymousInvites {
 		return serverJSON;
 	}
 
-	private async syncServiceSetting(): Promise<void> {
+	private async syncServiceSetting(rethrowConnectExc = false): Promise<void> {
 		// XXX we may have the following bug here:
 		// Device with older version of param gets to this point, and sets older
 		// value.
 		// To protect aginst this case, absorbing from file must ensure highest
 		// synced version is read.
-		const infoOnServer = await this.anonInvitesOnServer.getFromServer()
-		.catch((exc: ConnectException) => {
-			if (exc.type === 'connect') {
-				return;
-			} else {
-				throw exc;
+		try {
+			const infoOnServer = await this.anonInvitesOnServer.getFromServer()
+			.catch((exc: ConnectException) => {
+				if (exc.type === 'connect') {
+					return;
+				} else {
+					throw exc;
+				}
+			});
+			const currentVal = this.toServiceJSON();
+			if (!deepEqual(infoOnServer, currentVal)) {
+				await this.anonInvitesOnServer.setOnServer(currentVal);
 			}
-		});
-		const currentVal = this.toServiceJSON();
-		if (!deepEqual(infoOnServer, currentVal)) {
-			await this.anonInvitesOnServer.setOnServer(currentVal);
+		} catch (exc) {
+			if (!rethrowConnectExc
+			&& ((exc as ConnectException).type === 'connect')) {
+				return;
+			}
+			throw exc;
 		}
 	}
 

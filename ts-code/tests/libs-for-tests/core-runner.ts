@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -159,7 +159,7 @@ export class CoreRunner {
 		if (!this.runningCore) {
 			this.setNewCore();
 		}
-		const { capsForStartup: caps, coreInit } = this.core.start();
+		const { capsForStartup: caps, coreInit, coreAppsInit } = this.core.start();
 		const usersOnDisk = await caps.signIn.getUsersOnDisk();
 		let isLogged: boolean;
 		if (usersOnDisk.find(userOnDisk => (userOnDisk === this.user.userId))) {
@@ -184,13 +184,14 @@ export class CoreRunner {
 			);
 		}
 		await coreInit;
+		await coreAppsInit;
 	}
 
 	async createUser(userId: string): Promise<User> {
 		if (this.user) {
 			throw new Error('App already has associated user.');
 		}
-		const { capsForStartup: caps, coreInit } = this.core.start();
+		const { capsForStartup: caps, coreInit, coreAppsInit } = this.core.start();
 		const pass = await stringOfB64Chars(16);
 		await caps.signUp.createUserParams(pass, () => {});
 		const isCreated = await caps.signUp.addUser(userId);
@@ -200,6 +201,7 @@ export class CoreRunner {
 			);
 		}
 		await coreInit;
+		await coreAppsInit;
 		this.user = { userId, pass };
 		return this.user;
 	}
@@ -207,14 +209,15 @@ export class CoreRunner {
 	startCore(capsViaIPC = true): {
 		w3n: StartupW3N;
 		coreInit: Promise<string>;
+		coreAppsInit: Promise<void>;
 		closeIPC: () => void
 	} {
-		const { capsForStartup: rawW3N, coreInit } = this.core.start();
+		const { capsForStartup: rawW3N, coreInit, coreAppsInit } = this.core.start();
 		if (capsViaIPC) {
 			const { clientW3N: w3n, close: closeIPC } = wrapStartupW3N(rawW3N);
-			return { w3n, coreInit, closeIPC };
+			return { w3n, coreInit, coreAppsInit, closeIPC };
 		} else {
-			return { w3n: rawW3N, coreInit, closeIPC: () => {} };
+			return { w3n: rawW3N, coreInit, coreAppsInit, closeIPC: () => {} };
 		}
 	}
 

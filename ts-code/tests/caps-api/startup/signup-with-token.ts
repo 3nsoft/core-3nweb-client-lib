@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -26,6 +26,7 @@ describe('signUp process with token for single user', () => {
 	});
 	let w3n: web3n.startup.W3N;
 	let coreInit: Promise<string>;
+	let coreAppsInit: Promise<void>;
 	let closeIPC: () => void;
 
 	const userId = 'Bob Miller @home.town';
@@ -34,7 +35,7 @@ describe('signUp process with token for single user', () => {
 
 	beforeAllWithTimeoutLog(async () => {
 		if (!s.isUp) { return; }
-		({ closeIPC, coreInit, w3n } = s.runner.startCore());
+		({ closeIPC, coreInit, coreAppsInit, w3n } = s.runner.startCore());
 		token = await s.server.createSingleUserSignupCtx(userId);
 	});
 
@@ -54,6 +55,8 @@ describe('signUp process with token for single user', () => {
 
 		const initAs = await coreInit;
 		expect(initAs).toBe(userId);
+
+		await coreAppsInit;
 	}, 10000);
 
 });
