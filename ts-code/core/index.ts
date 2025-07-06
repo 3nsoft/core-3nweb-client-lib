@@ -429,10 +429,7 @@ export class Core {
 		);
 	}
 
-	private async initCoreApps(emitBootEvent: (ev: BootEvent) => void): Promise<void> {
-
-		// XXX push events to this.bootProcObserver
-
+	private async initCoreApps(emitBootEvent: (ev: BootEvent|true) => void): Promise<void> {
 		try {
 			const address = this.idManager!.getId();
 			const getSigner = this.idManager!.getSigner;
@@ -469,6 +466,7 @@ export class Core {
 			emitBootEvent({ isError: true, message: err.message ?? stringifyErr(err) });
 			throw errWithCause(err, 'Failed to initialize core apps');
 		}
+		emitBootEvent(true);
 	}
 
 	getStorages(): FactoryOfFSs {
@@ -492,8 +490,12 @@ function makeForBootEvents() {
 				bootProcObserver = undefined;
 			}
 		},
-		emitBootEvent(ev: BootEvent): void {
-			bootProcObserver?.next?.(ev);
+		emitBootEvent(ev: BootEvent|true): void {
+			if (ev === true) {
+				bootProcObserver?.complete?.();
+			} else {
+				bootProcObserver?.next?.(ev);
+			}
 		}
 	};
 }
