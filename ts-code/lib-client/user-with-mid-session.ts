@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,15 +21,15 @@
  */
 
 import { makeException, Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
-import { user as mid } from '../lib-common/mid-sigs-NaCl-Ed';
 import * as api from '../lib-common/service-api/mailer-id/login';
 import * as WebSocket from 'ws';
 import { openSocket } from './ws-utils';
 import { parse as parseUrl } from 'url';
 import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
+import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
 
-export type IGetMailerIdSigner = () => Promise<mid.MailerIdSigner>;
+export type IGetMailerIdSigner = () => Promise<MailerIdSigner>;
 
 export interface ServiceAccessParams {
 	login: string;
@@ -136,7 +136,7 @@ export abstract class ServiceUser {
 	}
 	
 	private async authenticateSession(
-		sessionId: string, midSigner: mid.MailerIdSigner
+		sessionId: string, midSigner: MailerIdSigner
 	): Promise<void> {
 		this.throwOnBadServiceURI();
 		await authenticateMidSession(
@@ -151,7 +151,7 @@ export abstract class ServiceUser {
 	 * @return a promise, resolvable, when mailerId login successfully
 	 * completes.
 	 */
-	async login(midSigner?: mid.MailerIdSigner): Promise<void> {
+	async login(midSigner?: MailerIdSigner): Promise<void> {
 		if (this.sessionId) { return; } 
 		if (this.loginProc) { return this.loginProc; }
 		this.loginProc = (async () => {

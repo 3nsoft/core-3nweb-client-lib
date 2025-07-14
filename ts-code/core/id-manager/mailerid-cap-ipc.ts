@@ -24,7 +24,9 @@ type MailerId = web3n.mailerid.Service;
 export function exposeMailerIdCAP(cap: MailerId): ExposedObj<MailerId> {
 	return {
 		getUserId: wrapReqReplySrvMethod(cap, 'getUserId'),
-		login: wrapReqReplySrvMethod(cap, 'login')
+		login: wrapReqReplySrvMethod(cap, 'login'),
+		sign: wrapReqReplySrvMethod(cap, 'sign'),
+		verifySignature: wrapReqReplySrvMethod(cap, 'verifySignature')
 	};
 }
 
@@ -39,7 +41,9 @@ export function makeMailerIdCaller(
 ): MailerId {
 	return {
 		getUserId: callMailerId(caller, objPath, 'getUserId'),
-		login: callMailerId(caller, objPath, 'login')
+		login: callMailerId(caller, objPath, 'login'),
+		sign: callMailerId(caller, objPath, 'sign'),
+		verifySignature: callMailerId(caller, objPath, 'verifySignature')
 	};
 }
 

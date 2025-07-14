@@ -16,10 +16,11 @@
 */
 
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
-import { relyingParty as mid, makeMalformedCertsException } from '../../lib-common/mid-sigs-NaCl-Ed';
 import { getKeyCert } from '../../lib-common/jwkeys';
 import { getMailerIdInfoFor, ServiceLocator } from '../../lib-client/service-locator';
 import { NetClient } from '../../lib-client/request-utils';
+import { verifyPubKey } from '../../lib-common/mailerid-sigs/relying-party';
+import { makeMalformedCertsException } from '../../lib-common/mailerid-sigs';
 
 type JsonKey = web3n.keys.JsonKey;
 type SignedLoad = web3n.keys.SignedLoad;
@@ -46,13 +47,15 @@ export async function checkAndExtractPKey(
 		domain: rootAddr, rootCert
 	} = await getRootCertForKey(certs.provCert.kid, resolver, client, address);
 
-	const pkey = mid.verifyPubKey(certs.pkeyCert, address,
+	const pkey = verifyPubKey(
+		certs.pkeyCert, address,
 		{ user: certs.userCert, prov: certs.provCert, root: rootCert },
-		rootAddr, validAt);
+		rootAddr, validAt
+	);
 	return pkey;
 }
 
-async function getRootCertForKey(
+export async function getRootCertForKey(
 	kid: string, resolver: ServiceLocator, client: NetClient, address: string
 ): Promise<{ domain: string; rootCert: SignedLoad; }> {
 	const {
@@ -83,8 +86,7 @@ async function getRootCertForKey(
  * @param validAt is epoch in seconds (!), for which certificates must be valid
  */
 export async function checkAndExtractPKeyWithAddress(
-	client: NetClient, resolver: ServiceLocator,
-	certs: PKeyCertChain, validAt: number
+	client: NetClient, resolver: ServiceLocator, certs: PKeyCertChain, validAt: number
 ): Promise<{ pkey: JsonKey; address: string; }> {
 	if (typeof validAt !== 'number') { throw new Error(`Invalid time parameter: ${validAt}`); }
 
@@ -101,9 +103,11 @@ export async function checkAndExtractPKeyWithAddress(
 		domain: rootAddr, rootCert
 	} = await getRootCertForKey(certs.provCert.kid, resolver, client, address);
 
-	const pkey = mid.verifyPubKey(certs.pkeyCert, address,
+	const pkey = verifyPubKey(
+		certs.pkeyCert, address,
 		{ user: certs.userCert, prov: certs.provCert, root: rootCert },
-		rootAddr, validAt);
+		rootAddr, validAt
+	);
 	return { address, pkey };
 }
 

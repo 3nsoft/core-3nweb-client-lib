@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,9 +20,35 @@ declare namespace web3n.mailerid {
 
 	interface Service {
 
+		/**
+		 * Returns MailerId/address of a current user.
+		 */
 		getUserId(): Promise<string>;
 
+		/**
+		 * Performs a MailerId-based login at a given url, returning session id.
+		 * @param serviceUrl 
+		 */
 		login(serviceUrl: string): Promise<string>;
+
+		/**
+		 * Signs given payload with current identity, returning object with
+		 * signature and a complete MailerId certificates' chain of a used key.
+		 * @param payload 
+		 */
+		sign(payload: Uint8Array): Promise<MailerIdSignature>;
+
+		/**
+		 * Verifies given signature, returning true if it is ok.
+		 * Since this is a check of MailerId signature, root certificate of a
+		 * respective identity provider would have to be retrieved with a chance
+		 * of related exceptions being thrown.
+		 * @param midSignature 
+		 */
+		verifySignature(midSignature: MailerIdSignature): Promise<{
+			cryptoCheck: boolean;
+			midProviderCheck?: MailerIdProviderCheckResult;
+		}>;
 
 	}
 
@@ -32,6 +58,30 @@ declare namespace web3n.mailerid {
 		sessionId: string;
 		issuedAt: number;
 		expiresAt: number;
+	}
+
+	interface MailerIdSignature {
+		rootMidCert: keys.SignedLoad;
+		provCert: keys.SignedLoad;
+		signeeCert: keys.SignedLoad;
+		signature: keys.SignedLoad;
+	}
+
+	type MailerIdProviderCheckResult =
+		'all-ok'
+		| 'unknown-root-cert'
+		| 'not-current-provider'
+		|'dns-not-set'
+		| 'offline-no-check'
+		| 'other-fail';
+
+	interface MailerIdException extends RuntimeException {
+		type: 'mailerid';
+		algMismatch?: true;
+		timeMismatch?: true;
+		certsMismatch?: true;
+		certMalformed?: true;
+		sigVerificationFails?: true;
 	}
 
 }

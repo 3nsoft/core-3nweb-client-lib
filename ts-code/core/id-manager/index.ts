@@ -17,8 +17,7 @@
 
 import { box } from 'ecma-nacl';
 import { MailerIdProvisioner } from '../../lib-client/mailer-id/provisioner';
-import { user as mid } from '../../lib-common/mid-sigs-NaCl-Ed';
-import { keyFromJson, use as keyUse } from '../../lib-common/jwkeys';
+import { getKeyCert, keyFromJson, use as keyUse } from '../../lib-common/jwkeys';
 import { PKLoginException } from '../../lib-client/user-with-pkl-session';
 import { SingleProc } from '../../lib-common/processes/synced';
 import { GenerateKey } from '../startup/sign-in';
@@ -27,6 +26,10 @@ import { NetClient } from '../../lib-client/request-utils';
 import { startMidSession, authenticateMidSession } from '../../lib-client/mailer-id/login';
 import { ServiceLocator } from '../../lib-client/service-locator';
 import { IdKeysStorage } from './key-storage';
+import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
+import { verifySignature } from '../../lib-common/mailerid-sigs/relying-party';
+import { getRootCertForKey } from '../asmail/key-verification';
+import { deepEqual } from '../../lib-common/json-utils';
 
 type JsonKey = web3n.keys.JsonKey;
 
@@ -50,7 +53,7 @@ export interface CompleteProvisioning {
 /**
  * This returns a promise, resolvable to mailerId signer.
  */
-export type GetSigner = () => Promise<mid.MailerIdSigner>;
+export type GetSigner = () => Promise<MailerIdSigner>;
 
 export type SetupManagerStorage = (
 	fs: WritableFS, keysToSave?: JsonKey[]
@@ -59,7 +62,7 @@ export type SetupManagerStorage = (
 
 export class IdManager {
 
-	private signer: mid.MailerIdSigner = (undefined as any);
+	private signer: MailerIdSigner = (undefined as any);
 	private provisioningProc = new SingleProc();
 
 	private constructor(
@@ -158,8 +161,8 @@ export class IdManager {
 		}
 	}
 
-	private async provisionUsingSavedKey(): Promise<mid.MailerIdSigner> {
-		let proc = this.provisioningProc.latestTaskAtThisMoment<mid.MailerIdSigner>();
+	private async provisionUsingSavedKey(): Promise<MailerIdSigner> {
+		let proc = this.provisioningProc.latestTaskAtThisMoment<MailerIdSigner>();
 		if (proc) { return proc; }
 		proc = this.provisioningProc.start(async () => {
 			const midUrl = await this.midServiceFor(this.address);
@@ -217,6 +220,41 @@ export class IdManager {
 			login: async serviceUrl => {
 				const signer = await this.getSigner();
 				return doMidLogin(serviceUrl, this.getId(), this.makeNet(), signer);
+			},
+			sign: async content => {
+				const signer = await this.getSigner();
+				const { signature, signeeCert, provCert } = signer.sign(content);
+
+				const { rootCert: rootMidCert } = await getRootCertForKey(
+					signer.providerCert.kid, this.midServiceFor, this.makeNet(), signer.address
+				);
+
+				return { signature, signeeCert, provCert, rootMidCert };
+			},
+			verifySignature: async midSig => {
+				const { signature, signeeCert, provCert, rootMidCert } = midSig;
+				const cryptoCheck = verifySignature(rootMidCert, provCert, signeeCert, signature);
+				if (!cryptoCheck) {
+					return { cryptoCheck };
+				}
+				try {
+					const { rootCert, domain } = await getRootCertForKey(
+						rootMidCert.kid, this.midServiceFor, this.makeNet(),
+						getKeyCert(signeeCert).cert.principal.address
+					);
+					if (deepEqual(rootCert, rootMidCert)) {
+						return { cryptoCheck, midProviderCheck: 'all-ok' };
+					} else {
+
+						// XXX indicate more specific error cases
+
+						return { cryptoCheck, midProviderCheck: 'other-fail' };
+					}
+				} catch (err) {
+					// XXX indicate more specific error cases
+
+					return { cryptoCheck, midProviderCheck: 'other-fail' };
+				}
 			}
 		};
 		return Object.freeze(w);
@@ -230,7 +268,7 @@ Object.freeze(IdManager);
 type Service = web3n.mailerid.Service;
 
 async function doMidLogin(
-	loginUrl: string, userId: string, net: NetClient, signer: mid.MailerIdSigner
+	loginUrl: string, userId: string, net: NetClient, signer: MailerIdSigner
 ): Promise<string> {
 	const { sessionId, redirect } = await startMidSession(userId, net, loginUrl);
 	if (!sessionId) {

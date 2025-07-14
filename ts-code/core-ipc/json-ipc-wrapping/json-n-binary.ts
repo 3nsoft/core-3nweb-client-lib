@@ -234,7 +234,7 @@ export function deserializeArgs(
 			}
 			args.push(arg);
 		} else {
-			// XXX throw error here
+			args.push(undefined);
 		}
 	}
 	return args;

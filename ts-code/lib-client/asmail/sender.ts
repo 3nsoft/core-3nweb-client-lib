@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,9 +20,9 @@
 
 import { NetClient, makeException } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/delivery';
-import { user as mid } from '../../lib-common/mid-sigs-NaCl-Ed';
 import { asmailInfoAt, ServiceLocator } from '../service-locator';
 import { parse as parseUrl } from 'url';
+import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 
 const LIMIT_ON_MAX_CHUNK = 1024*1024;
 
@@ -355,7 +355,7 @@ export class MailSender {
 	 * Rejected promise passes an error object, conditionally containing
 	 * status field.
 	 */
-	async authorizeSender(assertionSigner: mid.MailerIdSigner): Promise<void> {
+	async authorizeSender(assertionSigner: MailerIdSigner): Promise<void> {
 		const assertion = assertionSigner.generateAssertionFor(
 			this.serviceDomain, this.sessionId);
 		const reqData: api.authSender.Request = {

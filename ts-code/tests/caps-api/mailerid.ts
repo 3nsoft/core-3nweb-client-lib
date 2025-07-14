@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,7 @@ import { itCond } from '../libs-for-tests/jasmine-utils';
 import { setupWithUsers, serviceWithMailerIdLogin } from '../libs-for-tests/setups';
 import { assert } from '../../lib-common/assert';
 import { User } from '../libs-for-tests/core-runner';
+import { base64, utf8 } from '../../lib-common/buffer-utils';
 
 type CommonW3N = web3n.caps.common.W3N;
 
@@ -45,5 +46,26 @@ describe('MailerId', () => {
 		const sessionId = await w3n.mailerid!.login(srv.serviceUrl);
 		expect(await srv.isSessionValid(sessionId)).toBe(true);
 	}, undefined, s);
+
+	itCond('signs and checks MailerId signatures', async () => {
+		const payloadAsObj = {
+			some: '1234324',
+			fields: 123
+		};
+		const payloadBytes = utf8.pack(JSON.stringify(payloadAsObj));
+		const sig = await w3n.mailerid!.sign(payloadBytes);
+		expect(sig.signature.load).toBe(base64.pack(payloadBytes));
+
+		// check good signature
+		const check1 = await w3n.mailerid!.verifySignature(sig);
+		expect(check1.cryptoCheck).toBeTrue();
+		expect(check1.midProviderCheck).toBe('all-ok');
+
+		// and messed up signature
+		sig.signature.load = sig.signature.load.substring(4);
+		const check2 = await w3n.mailerid!.verifySignature(sig);
+		expect(check2.cryptoCheck).toBeFalse();
+		expect(check2.midProviderCheck).toBeUndefined();
+	});
 
 });

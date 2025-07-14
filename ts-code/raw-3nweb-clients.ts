@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2020 - 2021, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,8 +21,8 @@ import { MailSender as MailSenderClient } from './lib-client/asmail/sender';
 import { MailerIdProvisioner as MailerIdProvisionerClient } from './lib-client/mailer-id/provisioner';
 import * as signupClientFuncs from './lib-client/3nweb-signup';
 import * as signupApi from './lib-common/user-admin-api/signup';
-import { user as midUser } from './lib-common/mid-sigs-NaCl-Ed';
 import * as srvLocFuncs from './lib-client/service-locator';
+import { type MailerIdSigner as MidSigner } from './lib-common/mailerid-sigs/user';
 
 
 export type StorageOwner = StorageOwnerClient;
@@ -41,7 +41,7 @@ export const MailerIdProvisioner = MailerIdProvisionerClient;
 
 export type UserMidParams = signupApi.UserMidParams;
 export type UserStorageParams = signupApi.UserStorageParams;
-export type MailerIdSigner = midUser.MailerIdSigner;
+export type MailerIdSigner = MidSigner;
 
 export const serviceLocationFuncs = srvLocFuncs;
 
