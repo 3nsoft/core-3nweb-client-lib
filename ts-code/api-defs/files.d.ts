@@ -48,6 +48,7 @@ declare namespace web3n.files {
 		remoteNotSet?: true;
 		notLinkableFile?: true;
 		notLinkableFolder?: true;
+		badFnCallArguments?: true;
 	}
 
 	interface exceptionCode {

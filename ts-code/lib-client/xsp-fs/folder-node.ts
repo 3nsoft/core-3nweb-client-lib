@@ -619,6 +619,11 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		type: NodeType, name: string, exclusive: boolean,
 		changes?: XAttrsChanges, linkParams?: LinkParameters<any>
 	): Promise<T> {
+		if ((typeof name !== 'string') || (name.length === 0)) {
+			throw makeFileException(
+				'badFnCallArguments', name, `Given name is invalid for making ${type} node`
+			);
+		}
 		return this.doChange(true, async () => {
 
 			// do check for concurrent creation of a node
