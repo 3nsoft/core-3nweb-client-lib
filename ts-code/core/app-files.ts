@@ -28,8 +28,9 @@ function userIdToFolderName(userId: string): string {
 	return base64urlSafe.pack(utf8.pack(userId));
 }
 
-function folderNameToUserId(folderName: string): string {
-	return utf8.open(base64urlSafe.open(folderName));
+function folderNameToUserId(folderName: string): string|undefined {
+	const str = utf8.open(base64urlSafe.open(folderName));
+	return (str.includes('@') ? str : undefined);
 }
 
 export const UTIL_DIR = 'util';
@@ -74,7 +75,10 @@ export function appDirs(appDir: string) {
 			for (const entry of lst) {
 				if (!entry.isFolder || (entry.name === UTIL_DIR)) { continue; }
 				try {
-					users.push(folderNameToUserId(entry.name));
+					const userId = folderNameToUserId(entry.name);
+					if (userId) {
+						users.push(userId);
+					}
 				} catch (e) { continue; }
 			}
 			return users;
