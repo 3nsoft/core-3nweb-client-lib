@@ -9,6 +9,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Using 1.84.1-... rust toolchain to compile this. New one(s) ask for wasm-bindgen version bump.
 wasm-bindgen = "0.2.78"
 nacl = "0.5.3"
 wasm-message-passing-3nweb = "0.2.0"
