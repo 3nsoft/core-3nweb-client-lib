@@ -223,14 +223,15 @@ export class CorrespondentKeys {
 	 */
 	mapAllKeysIntoRing(): void {
 		// index key pairs
-		const pairs = [ this.keys.receptionPairs.suggested,
+		const pairs = [
+			this.keys.receptionPairs.suggested,
 			this.keys.receptionPairs.inUse,
-			this.keys.receptionPairs.old ];
+			this.keys.receptionPairs.old
+		];
 		const email = this.correspondent;
 		pairs.forEach(pair => {
 			if (!pair) { return; }
-			pair.pids.forEach(pid =>
-				this.keyring.pairIdToEmailMap.addPair(pid, email));
+			pair.pids.forEach(pid => this.keyring.pairIdToEmailMap.addPair(pid, email));
 		});
 	}
 
@@ -261,12 +262,12 @@ export class CorrespondentKeys {
 		const recipientKey = await generateKeyPair();
 		const msgMasterKey = calcMsgMasterKeyB64(recipientKey.skey, corrPKey);
 		const pair: ReceptionPair = {
-				pids: generatePids(),
-				recipientKey,
-				senderPKey: corrPKey,
-				isSenderIntroKey,
-				msgMasterKey,
-				timestamp: Date.now()
+			pids: generatePids(),
+			recipientKey,
+			senderPKey: corrPKey,
+			isSenderIntroKey,
+			msgMasterKey,
+			timestamp: Date.now()
 		};
 
 		this.keys.receptionPairs.suggested = pair;
@@ -279,13 +280,15 @@ export class CorrespondentKeys {
 	}
 
 	private shouldSuggestNewPair(): boolean {
-		if (!this.keys.sendingPair) { throw new Error(
-			"Sending pair should be set before calling this function."); }
+		if (!this.keys.sendingPair) {
+			throw new Error("Sending pair should be set before calling this function.");
+		}
 		if (this.keys.sendingPair.type === 'intro') { return true; }
 		if (!this.keys.sendingPair.sentMsgs) { return false; }
 		const now = Date.now();
-		if ((this.keys.sendingPair.sentMsgs.lastTS + MIN_PERIOD_FOR_PAIR) < now) {
-			return false; }
+		if ((this.keys.sendingPair.timestamp + MIN_PERIOD_FOR_PAIR) > now) {
+			return false;
+		}
 		return true;
 	}
 
@@ -299,6 +302,7 @@ export class CorrespondentKeys {
 		if (this.keys.receptionPairs.suggested !== pair) { return; }
 		const mp = this.keys.receptionPairs.inUse;
 		this.keys.receptionPairs.inUse = this.keys.receptionPairs.suggested;
+		this.keys.receptionPairs.suggested = null;
 		if (mp) {
 			const dp = this.keys.receptionPairs.old;
 			this.keys.receptionPairs.old = mp;
@@ -351,21 +355,21 @@ export class CorrespondentKeys {
 			if (existingPair.type === 'ratcheted') {
 				if ((existingPair.recipientPKey.k === pair.recipientPKey.k)
 				&& (existingPair.senderKey.pkey.kid === pair.senderKid)) { return; }
-				if (existingPair.timestamp < pair.timestamp) { return; }
+				if (existingPair.timestamp > pair.timestamp) { return; }
 			}
 		}
 
 		let senderKey: JWKeyPair;
 		if (pair.isSenderIntroKey) {
-			if (!usedPublishedIntro) { throw new Error(
-				`Missing a published intro key, referenced in the pair`); }
+			if (!usedPublishedIntro) {
+				throw new Error(`Missing a published intro key, referenced in the pair`);
+			}
 			senderKey = usedPublishedIntro;
 		} else {
 			senderKey = this.findReceptionKey(pair.senderKid);
 		}
 		try {
-			const msgMasterKey = calcMsgMasterKeyB64(
-				senderKey.skey, pair.recipientPKey);
+			const msgMasterKey = calcMsgMasterKeyB64(senderKey.skey, pair.recipientPKey);
 			this.keys.sendingPair = {
 				type: 'ratcheted',
 				pids: pair.pids,
@@ -413,8 +417,9 @@ export class CorrespondentKeys {
 		currentPair: ASMailKeyPair; msgMasterKey: Uint8Array; msgCount: number;
 	}> {
 		if (!this.keys.sendingPair) {
-			if (!recipientIntroPKey) { throw new Error(
-				`Sending pair for ${this.correspondent} is not set.`); }
+			if (!recipientIntroPKey) {
+				throw new Error(`Sending pair for ${this.correspondent} is not set.`);
+			}
 			this.keys.sendingPair = {
 				type: 'intro',
 				recipientPKey: recipientIntroPKey
@@ -447,9 +452,7 @@ export class CorrespondentKeys {
 			receptionPairs: {
 				inUse: (rp.inUse ? turnReceptionPairToInfo(rp.inUse) : null),
 				old: (rp.old ? turnReceptionPairToInfo(rp.old) : null),
-				suggested: (
-					rp.suggested ? turnReceptionPairToInfo(rp.suggested) : null
-				)
+				suggested: (rp.suggested ? turnReceptionPairToInfo(rp.suggested) : null)
 			}
 		};
 	}
@@ -470,8 +473,9 @@ function toSuggestedPair(pair: ReceptionPair): SuggestedNextKeyPair {
 }
 
 function selectPid(pair: RatchetedSendingPair): string {
-	if (pair.pids.length < 1) { throw new Error(
-		"There are no pair ids in array."); }
+	if (pair.pids.length < 1) {
+		throw new Error("There are no pair ids in array.");
+	}
 	const i = Math.round((pair.pids.length-1) * random.uint8Sync()/255);
 	return pair.pids[i];
 }
