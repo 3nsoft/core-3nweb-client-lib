@@ -176,6 +176,8 @@ const WRITE_NONEXCL_FLAGS: FileFlags = {
 	truncate: true
 };
 
+const itemToPathMap = new WeakMap<FS|File, string>();
+
 export class DeviceFS implements WritableFS, Linkable {
 
 	readonly versioned: false = false;
@@ -277,12 +279,18 @@ export class DeviceFS implements WritableFS, Linkable {
 
 	private static makeAndWrapWrFS(root: string, name: string): WritableFS {
 		const wrFS = wrapWritableFS(new DeviceFS(root, true, name));
+		itemToPathMap.set(wrFS, root);
 		return wrFS;
 	}
 
 	private static makeAndWrapRoFS(root: string, name: string): ReadonlyFS {
 		const roFS = wrapReadonlyFS(new DeviceFS(root, false, name));
+		itemToPathMap.set(roFS, root);
 		return roFS;
+	}
+
+	static pathOf(item: FS|File): string|undefined {
+		return itemToPathMap.get(item);
 	}
 
 	static async makeReadonly(root: string): Promise<ReadonlyFS> {
@@ -723,7 +731,9 @@ export class DeviceFS implements WritableFS, Linkable {
 
 	async readonlyFile(path: string): Promise<ReadonlyFile> {
 		await this.checkFilePresence(path, true);
-		return wrapReadonlyFile(new FileObject(this, path, true, false));
+		const roFile = wrapReadonlyFile(new FileObject(this, path, true, false));
+		itemToPathMap.set(roFile, this.fullPath(path));
+		return roFile
 	}
 
 	async writableFile(
@@ -736,7 +746,9 @@ export class DeviceFS implements WritableFS, Linkable {
 		if (!exists && !flags.create) {
 			throw makeFileException('notFound', path);
 		}
-		return wrapWritableFile(new FileObject(this, path, exists, true));
+		const wrFile = wrapWritableFile(new FileObject(this, path, exists, true));
+		itemToPathMap.set(wrFile, this.fullPath(path));
+		return wrFile;
 	}
 
 	watchFolder(path: string, observer: Observer<FolderEvent>): () => void {

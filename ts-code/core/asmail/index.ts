@@ -76,9 +76,7 @@ export class ASMail {
 			await this.setupSendingParams(syncedFS);
 
 			await Promise.all([
-				this.setupInbox(
-					syncedFS, getSigner, getStorages, makeResolver
-				),
+				this.setupInbox(syncedFS, getSigner, getStorages, makeResolver),
 				this.setupDelivery(localFS, getSigner, makeResolver)
 			]);
 
