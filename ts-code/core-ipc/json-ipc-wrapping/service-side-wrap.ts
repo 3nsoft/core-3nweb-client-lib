@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2024 3NSoft Inc.
+ Copyright (C) 2022 - 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,14 +17,9 @@
 
 import { Subject, map } from "rxjs";
 import { EnvelopeBody, ExposedFn } from "../../ipc-via-protobuf/connector";
-import { deserializeArgs, serializeArgs } from "./json-n-binary";
+import { deserializeArgs, FindObjectRef, FindReferencedObj, serializeArgs } from "./json-n-binary";
 
 type Observer<T> = web3n.Observer<T>;
-
-interface PassedDatum {
-	bytes?: Uint8Array;
-	passedByReference?: any[];
-}
 
 export type HandleObservingCall<TEvent> = (
 	obs: Observer<TEvent>, ...requestArgs: any[]
@@ -33,8 +28,10 @@ export type HandleObservingCall<TEvent> = (
 export type HandleReqReplyCall = (...requestArgs: any[]) => Promise<any>;
 
 export interface TransformOpts {
-	unpackRequest?: ((req: PassedDatum|undefined) => any[]) | 'noop';
-	packReply?: ((reply: any) => PassedDatum|undefined) | 'noop';
+	unpackRequest?: ((req: EnvelopeBody) => any[]) | 'noop';
+	packReply?: ((reply: any) => EnvelopeBody) | 'noop';
+	findRefOf?: FindObjectRef;
+	findReferencedObj?: FindReferencedObj;
 }
 
 export function wrapReqReplySrvMethod<T extends object, M extends keyof T>(
@@ -65,7 +62,7 @@ export function wrapReqReplyFunc(
 		func = funcOrTransforms as HandleReqReplyCall;
 	}
 	return buf => {
-		const args = argsFromBuffer(buf, transforms);
+		const args = argsFromPassedDatum(buf, transforms);
 		let promise = (args ?
 			func.call(srv, ...args) :
 			func.call(srv)
@@ -81,50 +78,33 @@ export function wrapReqReplyFunc(
 	};
 }
 
-function argsFromBuffer(
-	buf: EnvelopeBody, transforms: TransformOpts|undefined
-): any[]|undefined {
-	return argsFromPassedDatum(
-		{ bytes: buf as PassedDatum['bytes'] },
-		transforms?.unpackRequest
-	);
-}
-
-function resultToBuffer<T>(
-	data: T, transforms: TransformOpts|undefined
-): EnvelopeBody {
-	const sequencePack = toPassedDatum(data, transforms?.packReply);
-	return sequencePack?.bytes as EnvelopeBody;
-}
-
 function argsFromPassedDatum(
-	data: PassedDatum|undefined, unpack: TransformOpts['unpackRequest']
+	bytes: EnvelopeBody, transforms: TransformOpts|undefined
 ): (any[])|undefined {
-	if (!data) { return; }
-	if (unpack) {
-		if (unpack === 'noop') {
-			return [ data.bytes ];
+	if (!bytes) { return; }
+	if (transforms?.unpackRequest) {
+		if (transforms.unpackRequest === 'noop') {
+			return [ bytes ];
 		} else {
-			return unpack(data);
+			return transforms.unpackRequest(bytes);
 		}
 	} else {
-		const { bytes, passedByReference } = data;
-		return (bytes ? deserializeArgs(bytes, passedByReference) : undefined);
+		return (bytes ? deserializeArgs(bytes) : undefined);
 	}
 }
 
-function toPassedDatum(
-	data: any, pack: TransformOpts['packReply']
-): PassedDatum|undefined {
+function resultToBuffer(
+	data: any, transforms: TransformOpts|undefined
+): EnvelopeBody {
 	if (data === undefined) { return; }
-	if (pack) {
-		if (pack === 'noop') {
+	if (transforms?.packReply) {
+		if (transforms.packReply === 'noop') {
 			if (!ArrayBuffer.isView(data)) { throw new Error(
 				`Method returned non-binary, while no serialization is set`
 			); }
-			return { bytes: data as Uint8Array };
+			return data as Buffer;
 		}
-		return pack(data);
+		return transforms.packReply(data);
 	} else {
 		return serializeArgs([ data ]);
 	}
@@ -155,7 +135,7 @@ export function wrapObservingFunc<TEvent>(
 		func = funcOrTransforms as HandleObservingCall<TEvent>;
 	}
 	return buf => {
-		const args = argsFromBuffer(buf, transforms);
+		const args = argsFromPassedDatum(buf, transforms);
 		const s = new Subject<TEvent>();
 		const obs = s.asObservable().pipe(
 			map(ev => resultToBuffer(ev, transforms))

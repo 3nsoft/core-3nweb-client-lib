@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2022 - 2023, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { ObjectReference } from '../../ipc-via-protobuf/protobuf-msg';
 import { ProtoType } from '../../lib-client/protobuf-type';
 import { copy as copyJSON } from '../../lib-common/json-utils';
 import { json_ipc } from '../../protos/json-ipc.proto';
@@ -37,24 +38,27 @@ interface BinaryValue {
 }
 
 interface TransferredObj {
-	indexInPassed: number;
 	objLocation: string[];
+	objRef: ObjectReference<any>;
 }
+
+export type FindObjectRef = (o: any) => ObjectReference<any>|undefined;
+
+export type FindReferencedObj = (ref: ObjectReference<any>) => any;
 
 const valuesType = ProtoType.for<ValuesSequence>(json_ipc.ValuesSequence);
 
 export function serializeArgs(
-	args: any[]
-): { bytes: Uint8Array; passedByReference?: any[]; } {
-	const { seq, passedByReference } = argsToValuesSequence(args);
-	return { bytes: valuesType.pack(seq), passedByReference };
+	args: any[], findRefOf?: FindObjectRef
+): Buffer {
+	const seq = argsToValuesSequence(args, findRefOf);
+	return valuesType.pack(seq);
 }
 
 function argsToValuesSequence(
-	args: any[]
-	): { seq: ValuesSequence; passedByReference?: any[]; } {
+	args: any[], findRefOf: FindObjectRef|undefined
+	): ValuesSequence {
 	const seq: ValuesSequence = { values: [] };
-	const passedByReference: any[] = [];
 	for (const arg of args) {
 		if (arg && (typeof arg === 'object')) {
 			if (ArrayBuffer.isView(arg)) {
@@ -62,14 +66,18 @@ function argsToValuesSequence(
 					arr: { arr: arg as Uint8Array, objLocation: [] }
 				});
 			} else if ((arg as ObjectFromCore)._isObjectFromCore) {
-				const indexInPassed = addToArray(passedByReference, arg);
+				if (!findRefOf) {
+					throw new Error(`Function to find reference for object from core is not given`);
+				}
+				const objRef = findRefOf(arg);
+				if (!objRef) {
+					throw new Error(`Reference for object from core wasn't found`);
+				}
 				seq.values.push({
-					transferred: { indexInPassed, objLocation: [] }
+					transferred: { objLocation: [], objRef }
 				});
 			} else {
-				seq.values.push(turnToJsonExtractingBinaryAndTransferable(
-					arg, passedByReference
-				));
+				seq.values.push(turnToJsonExtractingBinaryAndTransferable(arg, findRefOf));
 			}
 		} else {
 			seq.values.push({
@@ -77,31 +85,16 @@ function argsToValuesSequence(
 			});
 		}
 	}
-	return {
-		seq,
-		passedByReference: ((passedByReference.length > 0) ?
-			passedByReference : undefined
-		)
-	};
-}
-
-function addToArray(arr: Array<any>, o: any): number {
-	let foundIndex = arr.indexOf(o);
-	if (foundIndex < 0) {
-		arr.push(o);
-		return arr.length - 1;
-	} else {
-		return foundIndex;
-	}
+	return seq;
 }
 
 function turnToJsonExtractingBinaryAndTransferable<T extends object>(
-	arg: T, passedByReference: any[]
+	arg: T, findRefOf: FindObjectRef|undefined
 ): {
 	json: string; binaryInJson?: BinaryValue[];
 	transferredInJson?: TransferredObj[];
 } {
-	const parts = extractNonJsonableFrom(arg, passedByReference);
+	const parts = extractNonJsonableFrom(arg, findRefOf);
 	if (parts) {
 		const { copy, binaryInJson, transferredInJson } = parts;
 		return {
@@ -117,7 +110,7 @@ function turnToJsonExtractingBinaryAndTransferable<T extends object>(
 }
 
 function extractNonJsonableFrom<T extends object>(
-	arg: T, passedByReference: any[]
+	arg: T, findRefOf: FindObjectRef|undefined
 ): {
 	copy: T; binaryInJson: BinaryValue[];
 	transferredInJson: TransferredObj[];
@@ -131,8 +124,14 @@ function extractNonJsonableFrom<T extends object>(
 		const nonJson = getValueAtObjLocation(arg, objLocation);
 		setNewValueAtObjLocation(copy, objLocation, null);
 		if ((nonJson as ObjectFromCore)._isObjectFromCore) {
-			const indexInPassed = addToArray(passedByReference, nonJson);
-			transferredInJson.push({ indexInPassed, objLocation });
+			if (!findRefOf) {
+				throw new Error(`Function to find reference for object from core is not given`);
+			}
+			const objRef = findRefOf(arg);
+			if (!objRef) {
+				throw new Error(`Reference for object from core wasn't found`);
+			}
+			transferredInJson.push({ objLocation, objRef });
 		} else {
 			binaryInJson.push({ arr: nonJson, objLocation });
 		}
@@ -197,20 +196,8 @@ function setNewValueAtObjLocation(
 	}
 }
 
-function getInitAndSetNewValueAt(
-	o: object, objLocation: string[], newValue: any
-): any {
-	const value = (o as any)[objLocation[0]];
-	if (objLocation.length > 1) {
-		return getInitAndSetNewValueAt(value, objLocation.slice(1), newValue);
-	} else {
-		(o as any)[objLocation[0]] = newValue;
-		return value;
-	}
-}
-
 export function deserializeArgs(
-	bytes: Uint8Array, passedByReference: any[]|undefined
+	bytes: Uint8Array, findReferencedObj?: FindReferencedObj
 ): any[] {
 	const values = valuesType.unpack(bytes as Buffer);
 	const args: any[] = [];
@@ -221,16 +208,20 @@ export function deserializeArgs(
 		if (arr) {
 			args.push(arr.arr);
 		} else if (transferred) {
-			args.push(getTransferred(
-				transferred.indexInPassed, passedByReference
-			));
+			if (!findReferencedObj) {
+				throw new Error(`Function to find referenced object is not given`);
+			}
+			args.push(findReferencedObj(transferred.objRef));
 		} else if ((typeof json === 'string') && (json.length > 0)) {
 			const arg = JSON.parse(json);
 			if (binaryInJson) {
 				attachBinaryArrays(arg, binaryInJson);
 			}
-			if (transferredInJson) {
-				attachTransferred(arg, transferredInJson, passedByReference);
+			if (Array.isArray(transferredInJson) && (transferredInJson.length > 0)) {
+				if (!findReferencedObj) {
+					throw new Error(`Function to find referenced object is not given`);
+				}
+				attachTransferred(arg, transferredInJson, findReferencedObj);
 			}
 			args.push(arg);
 		} else {
@@ -248,28 +239,10 @@ function attachBinaryArrays<T extends object>(
 	}
 }
 
-function getTransferred(
-	indexInPassed: number, passedByReference: any[]|undefined
-): any {
-	if (!passedByReference) {
-		// XXX throw error here
-		throw new Error(`need better error`);
-	}
-	const o = passedByReference[indexInPassed];
-	if (!o || !(o as ObjectFromCore)._isObjectFromCore) {
-		// XXX throw error here
-		throw new Error(`need better error`);
-	}
-	return o;
-}
-
 function attachTransferred<T extends object>(
-	arg: T, transferredInJson: TransferredObj[],
-	passedByReference: any[]|undefined
+	arg: T, transferredInJson: TransferredObj[], findReferencedObj: FindReferencedObj
 ): void {
-	for (const { indexInPassed, objLocation } of transferredInJson) {
-		setNewValueAtObjLocation(arg, objLocation, getTransferred(
-			indexInPassed, passedByReference
-		));
+	for (const { objRef, objLocation } of transferredInJson) {
+		setNewValueAtObjLocation(arg, objLocation, findReferencedObj(objRef));
 	}
 }

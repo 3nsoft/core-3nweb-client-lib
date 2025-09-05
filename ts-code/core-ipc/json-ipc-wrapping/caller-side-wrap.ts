@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2024 3NSoft Inc.
+ Copyright (C) 2022 - 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,53 +17,48 @@
 
 import { Subject } from "rxjs";
 import { Caller, EnvelopeBody } from "../../ipc-via-protobuf/connector";
-import { deserializeArgs, serializeArgs } from "./json-n-binary";
+import { deserializeArgs, FindObjectRef, FindReferencedObj, serializeArgs } from "./json-n-binary";
 
 type Observer<T> = web3n.Observer<T>;
 
-interface PassedDatum {
-	bytes?: Uint8Array;
-	passedByReference?: any[];
-}
-
 export interface TransformOpts {
-    unpackReply?: ((reply: PassedDatum | undefined) => any) | 'noop';
-    packRequest?: ((args: any[]) => PassedDatum | undefined) | 'noop';
+    unpackReply?: ((reply: EnvelopeBody) => any) | 'noop';
+    packRequest?: ((args: any[]) => EnvelopeBody) | 'noop';
+	 findRefOf?: FindObjectRef;
+	 findReferencedObj?: FindReferencedObj;
 }
 
 function replyFromPassedDatum(
-	data: PassedDatum|undefined, unpack: TransformOpts['unpackReply']
+	bytes: EnvelopeBody, transforms?: TransformOpts
 ): any {
-	if (!data) { return; }
-	if (unpack) {
-		if (unpack === 'noop') {
-			return [data.bytes];
+	if (!bytes) { return; }
+	if (transforms?.unpackReply) {
+		if (transforms.unpackReply === 'noop') {
+			return [bytes];
 		}
 		else {
-			return unpack(data);
+			return transforms.unpackReply(bytes);
 		}
 	}
 	else {
-		const { bytes, passedByReference } = data;
-		return (bytes ? deserializeArgs(bytes, passedByReference)[0] : undefined);
+		return (bytes ? deserializeArgs(bytes, transforms?.findReferencedObj)[0] : undefined);
 	}
 }
 
 function argsToPassedDatum(
-	args: any[], pack: TransformOpts['packRequest']
-): PassedDatum|undefined {
+	args: any[], transforms?: TransformOpts
+): EnvelopeBody {
 	if (args === undefined) { return; }
-	if (pack) {
-		if (pack === 'noop') {
+	if (transforms?.packRequest) {
+		if (transforms.packRequest === 'noop') {
 			if (!ArrayBuffer.isView(args[0])) {
 				throw new Error(`Method returned non-binary, while no serialization is set`);
 			}
-			return { bytes: args[0] as Uint8Array };
+			return args[0] as Buffer;
 		}
-		return pack(args);
-	}
-	else {
-		return serializeArgs(args);
+		return transforms.packRequest(args);
+	} else {
+		return serializeArgs(args, transforms?.findRefOf);
 	}
 }
 
@@ -71,22 +66,14 @@ export function makeReqRepFuncCaller<F extends Function>(
 	clientSide: Caller, path: string[], transforms?: TransformOpts
 ): F {
 	return (async (...args: any[]) => {
-		const req = argsToPassedDatum(args, transforms?.packRequest);
-		if (req?.passedByReference) {
-			throw new Error(`Passing by reference is notimplemented, yet.`);
-		}
-		const reply = await clientSide.startPromiseCall(
-			path, req?.bytes as EnvelopeBody
-		);
-		return replyFromPassedDatum({
-			bytes: reply as PassedDatum['bytes']
-		}, transforms?.unpackReply);
+		const bytes = argsToPassedDatum(args, transforms);
+		const reply = await clientSide.startPromiseCall(path, bytes);
+		return replyFromPassedDatum(reply, transforms);
 	}) as any as F;
 }
 
 export function makeReqRepObjCaller<T, M extends keyof T>(
-	clientSide: Caller, objPath: string[], method: M,
-	transforms?: TransformOpts
+	clientSide: Caller, objPath: string[], method: M, transforms?: TransformOpts
 ): T[M] {
 	return makeReqRepFuncCaller(
 		clientSide, objPath.concat(method as string), transforms
@@ -97,20 +84,15 @@ export function makeObservableFuncCaller<TEvent>(
 	clientSide: Caller, path: string[], transforms?: TransformOpts
 ): (obs: Observer<TEvent>, ...args: any[]) => (() => void) {
 	return (obs, ...args) => {
-		const req = argsToPassedDatum(args, transforms?.packRequest);
+		const bytes = argsToPassedDatum(args, transforms);
 		const s = new Subject<EnvelopeBody>();
-		const unsub = clientSide.startObservableCall(
-			path, req?.bytes as EnvelopeBody, s
-		);
+		const unsub = clientSide.startObservableCall(path, bytes, s);
 		s.subscribe({
 			next: data => {
 					if (!obs.next) {
 						return;
 					}
-					const ev = replyFromPassedDatum(
-						{ bytes: data as PassedDatum['bytes'] },
-						transforms?.unpackReply
-					);
+					const ev = replyFromPassedDatum(data, transforms);
 					obs.next(ev);
 			},
 			complete: () => obs.complete?.(),
