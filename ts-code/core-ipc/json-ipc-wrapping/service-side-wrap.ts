@@ -89,7 +89,7 @@ function argsFromPassedDatum(
 			return transforms.unpackRequest(bytes);
 		}
 	} else {
-		return (bytes ? deserializeArgs(bytes) : undefined);
+		return (bytes ? deserializeArgs(bytes, transforms?.findReferencedObj) : undefined);
 	}
 }
 
@@ -106,7 +106,7 @@ function resultToBuffer(
 		}
 		return transforms.packReply(data);
 	} else {
-		return serializeArgs([ data ]);
+		return serializeArgs([ data ], transforms?.findRefOf);
 	}
 }
 

@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "common.proto";
+
 package json_ipc;
 
 message ValuesSequence {
@@ -8,8 +10,8 @@ message ValuesSequence {
 		repeated string obj_location = 2;
 	}
 	message TransferredObj {
-		uint32 index_in_passed = 1;
-		repeated string obj_location = 2;
+		repeated string obj_location = 1;
+		common.ObjectReference obj_ref = 2;
 	}
 	message Value {
 		string json = 1;
