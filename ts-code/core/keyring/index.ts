@@ -32,6 +32,7 @@ import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
 import { PublishedIntroKey } from './published-intro-key';
 import { GetSigner } from '../id-manager';
 import { ParamOnServer } from '../../lib-client/asmail/service-config';
+import { Logger } from '../../lib-client/logging/log-to-file';
 
 type JsonKey = web3n.keys.JsonKey;
 type PKeyCertChain = web3n.keys.PKeyCertChain;
@@ -102,7 +103,8 @@ export class Keyrings {
 	private publishedKeys: PublishedIntroKey = (undefined as any);
 
 	constructor(
-		private readonly cryptor: AsyncSBoxCryptor
+		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly logger: Logger
 	) {
 		Object.seal(this);
 	}
@@ -353,19 +355,33 @@ export class Keyrings {
 		correspondent: string, pair: SuggestedNextKeyPair
 	): void {
 		let ck = this.corrKeys.get(correspondent);
-		if (ck) {
-			ck.ratchetUpSendingPair(pair);
-		} else {
-			if (!pair.isSenderIntroKey) {
-				throw new Error(`Expected addition of correspondent to be done, when new `);
-			}
+		if (!ck) {
+			ck = this.addCorrespondent(correspondent);
+		}
+		if (pair.isSenderIntroKey) {
 			const usedIntro = this.publishedKeys.find(pair.senderKid);
 			if (!usedIntro) {
 				throw new Error(`Recently used published intro key is not found`);
 			}
-			ck = this.addCorrespondent(correspondent);
 			ck.ratchetUpSendingPair(pair, usedIntro.pair);
+		} else {
+			ck.ratchetUpSendingPair(pair)
 		}
+
+		// if (ck) {
+		// 	ck.ratchetUpSendingPair(pair);
+		// } else {
+		// 	if (!pair.isSenderIntroKey) {
+		// 		throw new Error(`Expected addition of correspondent to be done, when new `);
+		// 	}
+		// 	const usedIntro = this.publishedKeys.find(pair.senderKid);
+		// 	if (!usedIntro) {
+		// 		throw new Error(`Recently used published intro key is not found`);
+		// 	}
+		// 	ck = this.addCorrespondent(correspondent);
+		// 	ck.ratchetUpSendingPair(pair, usedIntro.pair);
+		// }
+
 		this.saveChanges();
 	}
 
@@ -419,15 +435,19 @@ export class Keyrings {
 		// absorb next crypto
 		const pair = openedMsg.nextCrypto;
 		if (pair) {
-			if (msgMeta.recipientKid) {
-				if (!pair.isSenderIntroKey) {
-					throw new Error(`Introductory message is not referencing used intro key in the next crypto`);
+			try {
+				if (msgMeta.recipientKid) {
+					if (!pair.isSenderIntroKey) {
+						throw new Error(`Introductory message is not referencing used intro key in the next crypto`);
+					}
+					if (msgMeta.recipientKid !== pair.senderKid) {
+						throw new Error(`Introductory message is referencing wrong key in the next crypto`);
+					}
 				}
-				if (msgMeta.recipientKid !== pair.senderKid) {
-					throw new Error(`Introductory message is referencing wrong key in the next crypto`);
-				}
+				this.absorbSuggestedNextKeyPair(decrInfo.correspondent, pair);
+			} catch (err) {
+				this.logger.logError(err, `Fail to absorb next suggested key for messaging`);
 			}
-			this.absorbSuggestedNextKeyPair(decrInfo.correspondent, pair);
 		}
 
 		return { decrInfo, openedMsg };

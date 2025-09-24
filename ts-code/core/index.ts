@@ -72,7 +72,7 @@ export class Core {
 		this.storages = new Storages(
 			this.cryptor.cryptor.sbox, this.appDirs.storagePathFor
 		);
-		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox);
+		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox, this.logger);
 		this.asmail = new ASMail(
 			this.cryptor.cryptor.sbox, this.makeNet,
 			this.appDirs.inboxPathFor, this.logger
