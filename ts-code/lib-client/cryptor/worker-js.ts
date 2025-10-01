@@ -22,17 +22,6 @@ import { stringifyErr } from '../../lib-common/exceptions/error';
 import { CryptorException } from './cryptor';
 
 
-function transfer(...arrs: Uint8Array[]): ArrayBuffer[]|undefined {
-	const transferLst: ArrayBuffer[] = [];
-	for (const arr of arrs) {
-		const buffer = arr.buffer;
-		if (!transferLst.includes(buffer)) {
-			transferLst.push(buffer);
-		}
-	}
-	return transferLst;
-}
-
 if (!parentPort) {
 	throw new Error(`Missing expected parentPort. Is this called within WebWorker process?`);
 }

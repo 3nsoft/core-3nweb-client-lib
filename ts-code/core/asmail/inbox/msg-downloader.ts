@@ -44,8 +44,9 @@ export class MsgDownloader {
 		Object.freeze(this);
 	}
 
-	private async sync<T>(msgId: string, objId: ObjId,
-			action: () => Promise<T>): Promise<T> {
+	private async sync<T>(
+		msgId: string, objId: ObjId, action: () => Promise<T>
+	): Promise<T> {
 		const id = `${msgId}/${objId}`;
 		return this.downloadProcs.startOrChain(id, action);
 	}
@@ -67,8 +68,10 @@ export class MsgDownloader {
 		msgId: string, objId: ObjId
 	): Promise<InitDownloadParts> {
 		if (!objId) { throw new Error(`Message object cannot be null`); }
-		const { header, segsChunk, segsTotalLen } = await this.sync(msgId, objId,
-			() => this.msgReceiver.getObj(msgId, objId, DOWNLOAD_START_CHUNK));
+		const { header, segsChunk, segsTotalLen } = await this.sync(
+			msgId, objId,
+			() => this.msgReceiver.getObj(msgId, objId, DOWNLOAD_START_CHUNK)
+		);
 		const layout: Layout = {
 			sections: [ { src: 'new', ofs: 0, len: segsTotalLen } ]
 		};
@@ -81,16 +84,14 @@ export class MsgDownloader {
 		if (!objId) { throw new Error(`Message object cannot have null id`); }
 		return this.sync(msgId, objId, async () => {
 			if ((end - start) < MAX_GETTING_CHUNK) {
-				const allBytes = await this.msgReceiver.getObjSegs(
-					msgId, objId, start, end);
+				const allBytes = await this.msgReceiver.getObjSegs(msgId, objId, start, end);
 				return allBytes;
 			} else {
 				const chunks: Uint8Array[] = [];
 				let ofs=start;
 				while (ofs<end) {
 					const len = Math.min(end-ofs, MAX_GETTING_CHUNK);
-					const chunk = await this.msgReceiver.getObjSegs(
-						msgId, objId, ofs, ofs+len);
+					const chunk = await this.msgReceiver.getObjSegs(msgId, objId, ofs, ofs+len);
 					chunks.push(chunk);
 					ofs += chunk.length;
 				}

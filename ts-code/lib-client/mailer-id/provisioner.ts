@@ -72,10 +72,10 @@ export class MailerIdProvisioner extends ServiceUser {
 	}
 
 	private async setUrlAndDomain(): Promise<void> {
-		const info = await mailerIdInfoAt(this.net, this.entryURI);
+		const { currentCert, provisioning } = await mailerIdInfoAt(this.net, this.entryURI);
 		this.midDomain = parseUrl(this.serviceURI).hostname!;
-		this.serviceURI = info.provisioning;
-		this.rootCert = info.currentCert;
+		this.serviceURI = provisioning;
+		this.rootCert = currentCert;
 	}
 	
 	/**
@@ -88,28 +88,37 @@ export class MailerIdProvisioner extends ServiceUser {
 	 */
 	private async getCertificates(pkey: JsonKey, duration: number): Promise<void> {
 		assert(!!this.encryptor);
-		const plainReqData: api.certify.Request = {
-			pkey: pkey,
-			duration: duration
-		};
-		const rep = await this.net.doBinaryRequest<Uint8Array>({
-			url: this.serviceURI + api.certify.URL_END,
-			method: api.certify.method,
-			sessionId: this.sessionId,
-			responseType: 'arraybuffer'
-		}, this.encryptor!.packJSON(plainReqData));
+		const plainReqData: api.certify.Request = { pkey, duration };
+		const rep = await this.net.doBinaryRequest<Uint8Array>(
+			{
+				url: this.serviceURI + api.certify.URL_END,
+				method: api.certify.method,
+				sessionId: this.sessionId,
+				responseType: 'arraybuffer'
+			},
+			this.encryptor!.packJSON(plainReqData)
+		);
 		try {
 			if (rep.status === api.certify.SC.ok) {
 				let certs: api.certify.Reply;
 				try {
 					certs = this.encryptor!.openJSON(rep.data);
 				} catch (err) {
-					throw makeException(rep,
-						'Malformed reply: '+err.message);
+					throw makeException(rep, 'Malformed reply: '+err.message);
 				}
 				if (!certs.userCert || !certs.provCert) {
-					throw makeException(rep,
-						'Malformed reply: Certificates are missing.');
+					throw makeException(rep, 'Malformed reply: Certificates are missing.');
+				}
+				if (certs.provCert.kid !== this.rootCert.kid) {
+					const { currentCert, previousCerts } = await mailerIdInfoAt(this.net, this.entryURI);
+					const rootCert = ((currentCert.kid === certs.provCert.kid) ?
+						currentCert : previousCerts.find(cert => (cert.kid === certs.provCert.kid))
+					);
+					if (rootCert) {
+						this.rootCert = rootCert;
+					} else {
+						throw makeException(rep, 'Malformed reply: referenced root MailerId certificate id is unknown.');
+					}
 				}
 				const pkeyAndId = verifyChainAndGetUserKey(
 					{ user: certs.userCert, prov: certs.provCert, root: this.rootCert },
@@ -117,13 +126,11 @@ export class MailerIdProvisioner extends ServiceUser {
 					getKeyCert(certs.userCert).issuedAt+1
 				);
 				if (pkeyAndId.address !== toCanonicalAddress(this.userId)) {
-					throw makeException(rep,
-						'Malformed reply: Certificate is for a wrong address.');
+					throw makeException(rep, 'Malformed reply: Certificate is for a wrong address.');
 				}
 				const keyInCert = keyToJson(pkeyAndId.pkey);
 				if (!deepEqual(keyInCert, pkey)) {
-					throw makeException(rep,
-						'Malformed reply: Certificate is for a wrong key.');
+					throw makeException(rep, 'Malformed reply: Certificate is for a wrong key.');
 				}
 				this.userCert = certs.userCert;
 				this.provCert = certs.provCert;

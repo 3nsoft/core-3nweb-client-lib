@@ -20,6 +20,9 @@ import { parse as parseUrl } from 'url';
 import { Reply, makeException, NetClient } from './request-utils';
 import { promises as dnsPromises } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
+import { MailerIdRootRoute } from '../lib-common/service-api/mailer-id/root-route';
+import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route';
+import { ASMailRootRoute } from '../lib-common/service-api/asmail/root-route';
 
 type SignedLoad = web3n.keys.SignedLoad;
 
@@ -60,23 +63,17 @@ function transformPathToCompleteUri(
 	}
 }
 
-export interface ASMailRoutes {
-	delivery?: string;
-	retrieval?: string;
-	config?: string;
-}
-
 /**
- * This returns a promise, resolvable to ASMailRoutes object.
+ * This returns a promise, resolvable to ASMailRootRoute object.
  * @param client
  * @param url
  */
 export async function asmailInfoAt(
 	client: NetClient, url: string
-): Promise<ASMailRoutes> {
-	const rep = await readJSONLocatedAt<ASMailRoutes>(client, url);
+): Promise<ASMailRootRoute> {
+	const rep = await readJSONLocatedAt<ASMailRootRoute>(client, url);
 	const json = rep.data;
-	const transform = <ASMailRoutes> {};
+	const transform: ASMailRootRoute = {};
 	if ('string' === typeof json.delivery) {
 		transform.delivery = transformPathToCompleteUri(url, json.delivery, rep);
 	}
@@ -97,26 +94,26 @@ export interface MailerIdServiceInfo {
 }
 
 /**
- * This returns a promise, resolvable to MailerIdRoutes object.
+ * This returns a promise, resolvable to MailerIdRootRoute object.
  * @param client
  * @param url
  */
 export async function mailerIdInfoAt(
 	client: NetClient, url: string
 ): Promise<MailerIdServiceInfo> {
-	const rep = await readJSONLocatedAt<MailerIdServiceInfo>(client, url);
+	const rep = await readJSONLocatedAt<MailerIdRootRoute>(client, url);
 	const json = rep.data;
-	const transform = <MailerIdServiceInfo> {};
+	const transform = {} as MailerIdServiceInfo;
 	if ('string' === typeof json.provisioning) {
-		transform.provisioning = transformPathToCompleteUri(
-			url, json.provisioning, rep);
+		transform.provisioning = transformPathToCompleteUri(url, json.provisioning, rep);
 	} else {
 		throw makeException(rep, 'Malformed reply');
 	}
-	if (('object' === typeof json["current-cert"]) &&
-			isLikeSignedKeyCert(json["current-cert"])) {
+	if (isLikeSignedKeyCert(json["current-cert"])) {
 		transform.currentCert = json["current-cert"];
-		transform.previousCerts = json["previous-certs"];
+		transform.previousCerts = (Array.isArray(json["previous-certs"]) ?
+			json["previous-certs"].filter(isLikeSignedKeyCert) : []
+		);
 	} else {
 		throw makeException(rep, 'Malformed reply');
 	}
@@ -124,23 +121,17 @@ export async function mailerIdInfoAt(
 	return transform;
 }
 
-export interface StorageRoutes {
-	owner?: string;
-	shared?: string;
-	config?: string;
-}
-
 /**
- * This returns a promise, resolvable to StorageRoutes object.
+ * This returns a promise, resolvable to StorageRootRoute object.
  * @param client
  * @param url
  */
 export async function storageInfoAt(
 	client: NetClient, url: string
-): Promise<StorageRoutes> {
-	const rep = await readJSONLocatedAt<StorageRoutes>(client, url);
+): Promise<StorageRootRoute> {
+	const rep = await readJSONLocatedAt<StorageRootRoute>(client, url);
 	const json = rep.data;
-	const transform = <StorageRoutes> {};
+	const transform = <StorageRootRoute> {};
 	if (typeof json.owner === 'string') {
 		transform.owner = transformPathToCompleteUri(url, json.owner, rep);
 	}

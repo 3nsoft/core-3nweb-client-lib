@@ -60,14 +60,14 @@ namespace formatV1 {
 		return bytes;
 	}
 
-	function packNode(nodeInfo: NodeInfo): Uint8Array[] {
-		const bytes = [ nodeInfo.key ];
+	function packNode(nodeInfo: NodeInfo): Uint8Array<ArrayBuffer>[] {
+		const bytes = [ nodeInfo.key as Uint8Array<ArrayBuffer> ];
 		const json: NodeJSON = {
 			t: (nodeInfo.isFolder ? 1 : (nodeInfo.isFile ? 2 : 3)),
 			n: nodeInfo.name,
 			o: nodeInfo.objId
 		};
-		const jsonBytes = utf8.pack(JSON.stringify(json));
+		const jsonBytes = utf8.pack(JSON.stringify(json)) as Uint8Array<ArrayBuffer>;
 		assert(jsonBytes.length < 0xffffffff);
 		bytes.push(numberToBytes(jsonBytes.length));
 		bytes.push(jsonBytes);
@@ -89,7 +89,7 @@ namespace formatV1 {
 		o: string;
 	}
 
-	function numberToBytes(x: number): Uint8Array {
+	function numberToBytes(x: number): Uint8Array<ArrayBuffer> {
 		const arr = Buffer.allocUnsafe(4);
 		packUintTo4Bytes(x, arr, 0);
 		return arr;
@@ -109,10 +109,12 @@ namespace formatV1 {
 		return folderInfo;
 	}
 
-	function deserializeNodeInfoV1(bytes: Uint8Array):
-			{ node: NodeInfo, bytesRead: number; } {
-		if (bytes.length < (KEY_LENGTH + 4)) { throw parsingException(
-			`Cannot deserialize node key from bytes`); }
+	function deserializeNodeInfoV1(
+		bytes: Uint8Array
+	): { node: NodeInfo, bytesRead: number; } {
+		if (bytes.length < (KEY_LENGTH + 4)) {
+			throw parsingException(`Cannot deserialize node key from bytes`);
+		}
 
 		const key = makeUint8ArrayCopy(bytes.subarray(0, KEY_LENGTH));
 		bytes = bytes.subarray(KEY_LENGTH);
@@ -121,8 +123,7 @@ namespace formatV1 {
 		bytes = bytes.subarray(4);
 
 		try {
-			const json: NodeJSON = JSON.parse(utf8.open(
-				bytes.subarray(0, jsonBytesLen)));
+			const json: NodeJSON = JSON.parse(utf8.open(bytes.subarray(0, jsonBytesLen)));
 			
 			const node: NodeInfo = {
 				name: json.n,

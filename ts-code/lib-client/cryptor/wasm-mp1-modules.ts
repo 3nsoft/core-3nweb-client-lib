@@ -32,7 +32,7 @@ class MP1 {
 	constructor(
 		wasmBytes: Uint8Array,
 	) {
-		const module = new WebAssembly.Module(wasmBytes);
+		const module = new WebAssembly.Module(wasmBytes as Uint8Array<ArrayBuffer>);
 		this.instance = new WebAssembly.Instance(module, this.makeImports());
 		this.mp1_accept_msg = this.getExportedFn('_3nweb_mp1_accept_msg');
 		Object.seal(this);

@@ -71,7 +71,7 @@ declare namespace web3n.mailerid {
 		'all-ok'
 		| 'unknown-root-cert'
 		| 'not-current-provider'
-		|'dns-not-set'
+		| 'dns-not-set'
 		| 'offline-no-check'
 		| 'other-fail';
 

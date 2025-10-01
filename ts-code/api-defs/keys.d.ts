@@ -96,7 +96,7 @@ declare namespace web3n.keys {
 		 */
 		alg: string;
 		/**
-		 * This is an id of a key that did the signature.
+		 * This is an id of a key that created the signature.
 		 */
 		kid: string;
 		/**
