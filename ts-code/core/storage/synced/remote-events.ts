@@ -49,7 +49,7 @@ export class RemoteEvents {
 		const serverEvents = new ServerEvents<
 			events.EventNameType, events.AllTypes
 		>(
-			() => this.remoteStorage.openEventSource(),
+			() => this.remoteStorage.openEventSource(this.logError),
 			SERVER_EVENTS_RESTART_WAIT_SECS,
 			this.logError
 		);

@@ -24,6 +24,7 @@ import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, 
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
+import { LogError } from '../logging/log-to-file';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
@@ -361,10 +362,10 @@ export class StorageOwner extends ServiceUser {
 		}
 	}
 
-	async openEventSource(): Promise<SubscribingClient> {
+	async openEventSource(log: LogError): Promise<SubscribingClient> {
 		const rep = await this.openWS(api.wsEventChannel.URL_END);
 		if (rep.status === api.wsEventChannel.SC.ok) {
-			return makeSubscriber(rep.data, undefined);
+			return makeSubscriber(rep.data, undefined, log);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

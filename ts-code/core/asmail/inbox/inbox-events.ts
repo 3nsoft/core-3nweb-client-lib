@@ -49,7 +49,7 @@ export class InboxEvents {
 		logError: LogError
 	) {
 		const serverEvents = new ServerEvents<EventNames, Events>(
-			() => msgReceiver.openEventSource(),
+			() => msgReceiver.openEventSource(logError),
 			SERVER_EVENTS_RESTART_WAIT_SECS,
 			logError
 		);

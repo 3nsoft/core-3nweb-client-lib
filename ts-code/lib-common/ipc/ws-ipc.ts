@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 3NSoft Inc.
+ Copyright (C) 2017, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,6 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
+import { LogError } from '../../lib-client/logging/log-to-file';
 import { makeRuntimeException } from '../exceptions/runtime';
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
 import * as WebSocket from 'ws';
@@ -38,14 +39,16 @@ const MAX_TXT_BUFFER = 64*1024;
  * messages.
  * @param ws 
  */
-function makeJsonCommPoint(ws: WebSocket): RawDuplex<Envelope> {
+function makeJsonCommPoint(ws: WebSocket, log: LogError): RawDuplex<Envelope> {
 	
 	const observers = new MultiObserverWrap<Envelope>();
 
-	ws.on('message', onTxtMessage(ws, observers));
-	ws.on('close', onClose(observers));
-	ws.on('error', onError(ws, observers));
-	ws.on('ping', () => ws.pong());
+	const resetTimer = makeSignalsTimeObserver(ws.url, log);
+
+	ws.on('message', onTxtMessage(ws, observers, resetTimer));
+	ws.on('close', onClose(observers, resetTimer));
+	ws.on('error', onError(ws, observers, resetTimer));
+	ws.on('ping', onPing(ws, resetTimer));
 
 	const commPoint: RawDuplex<Envelope> = {
 		subscribe: obs => observers.add(obs),
@@ -65,7 +68,7 @@ function makeJsonCommPoint(ws: WebSocket): RawDuplex<Envelope> {
  * @param observers 
  */
 function onTxtMessage(
-	ws: WebSocket, observers: MultiObserverWrap<Envelope>
+	ws: WebSocket, observers: MultiObserverWrap<Envelope>, resetTimer: () => void
 ): (data: any) => void {
 	return (data: any): void => {
 		if (typeof data !== 'string') { return; }
@@ -81,6 +84,7 @@ function onTxtMessage(
 		}
 
 		observers.next(env);
+		resetTimer();
 	};
 }
 
@@ -89,12 +93,14 @@ function onTxtMessage(
  * @param observers 
  */
 function onClose(
-	observers: MultiObserverWrap<any>
+	observers: MultiObserverWrap<any>, resetTimer: (done: true, err?: any) => void
 ): (code: number, reason: string) => void {
 	return (code, reason) => {
 		if (code === 1000) {
+			resetTimer(true);
 			observers.complete();
 		} else {
+			resetTimer(true, { code, reason });
 			observers.error(makeWSException({
 				socketClosed: true,
 				cause: { code, reason }
@@ -109,18 +115,59 @@ function onClose(
  * @param observers 
  */
 function onError(
-	ws: WebSocket, observers: MultiObserverWrap<any>
+	ws: WebSocket, observers: MultiObserverWrap<any>, closeTimer: (done: true, err: any) => void
 ): ((err: any) => void) {
 	return (err?: any): void => {
+		closeTimer(true, err);
 		observers.error(makeWSException({ cause: err }));
 		ws.close();
 	};
 }
 
+function onPing(ws: WebSocket, resetTimer: () => void): () => void {
+	return () => {
+		resetTimer();
+		ws.pong();
+	};
+}
+
+function makeSignalsTimeObserver(
+	url: string, log: LogError
+): (done?: true, err?: any) => void {
+	const serverPingSettings = 2*60*1000;
+	let lastMoment = Date.now();
+	let int: ReturnType<typeof setInterval>|undefined = undefined;
+	function resetWait(setNew = true) {
+		lastMoment = Date.now();
+		if (int) {
+			clearInterval(int);
+			int = undefined;
+		}
+		if (setNew) {
+			int = setInterval(() => {
+				log(`Ping/data from ${url} is not observed in last ${Math.floor((Date.now() - lastMoment)/1000)} seconds`);
+			}, serverPingSettings*1.5).unref();
+		}
+	}
+
+	return (done, err) => {
+		if (done) {
+			if (err) {
+				log(`WebSocket to ${url} closed with error`, err);
+			} else {
+				log(`WebSocket to ${url} closed`);
+			}
+			resetWait(false);
+		} else {
+			resetWait();
+		}
+	};
+}
+
 export function makeSubscriber(
-	ws: WebSocket, ipcChannel: string|undefined
+	ws: WebSocket, ipcChannel: string|undefined, log: LogError
 ): SubscribingClient {
-	const comm = makeJsonCommPoint(ws);
+	const comm = makeJsonCommPoint(ws, log);
 	return makeSubscribingClient(ipcChannel, comm);
 }
 

@@ -20,6 +20,7 @@ import * as api from '../../lib-common/service-api/asmail/retrieval';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
+import { LogError } from '../logging/log-to-file';
 
 type InboxException = web3n.asmail.InboxException;
 
@@ -204,10 +205,10 @@ export class MailRecipient extends ServiceUser {
 		}
 	}
 
-	async openEventSource(): Promise<SubscribingClient> {
+	async openEventSource(log: LogError): Promise<SubscribingClient> {
 		const rep = await this.openWS(api.wsEventChannel.URL_END);
 		if (rep.status === api.wsEventChannel.SC.ok) {
-			return makeSubscriber(rep.data, undefined);
+			return makeSubscriber(rep.data, undefined, log);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

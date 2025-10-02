@@ -73,6 +73,7 @@ export type Envelope = RequestEnvelope<any> | ReplyEnvelope<any> |
 interface EventException extends web3n.RuntimeException {
 	type: 'events';
 	unknownEvent?: true;
+	event?: string;
 	channel?: string;
 	duplexDisconnected?: true;
 	request?: string;
@@ -534,6 +535,7 @@ class EventsSendingSide extends ReplyingSide {
 			throw makeEventException({
 				channel: this.channel,
 				unknownEvent: true,
+				event,
 				message: `Events' channel ${event} is not found in handling subscribe`
 			});
 		}
@@ -548,6 +550,7 @@ class EventsSendingSide extends ReplyingSide {
 			throw makeEventException({
 				channel: this.channel,
 				unknownEvent: true,
+				event,
 				message: `Events' channel ${event} is not found in handling unsubscribe`
 			});
 		}
