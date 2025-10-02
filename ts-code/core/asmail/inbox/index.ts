@@ -145,7 +145,8 @@ export class InboxOnServer {
 		private readonly logError: LogError
 	) {
 		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.logError);
+			this.msgReceiver, this.getMsg.bind(this), this.logError
+		);
 		Object.seal(this);
 	}
 

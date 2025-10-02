@@ -50,7 +50,8 @@ export class RemoteEvents {
 			events.EventNameType, events.AllTypes
 		>(
 			() => this.remoteStorage.openEventSource(),
-			SERVER_EVENTS_RESTART_WAIT_SECS
+			SERVER_EVENTS_RESTART_WAIT_SECS,
+			this.logError
 		);
 
 		this.absorbingRemoteEventsProc = merge(

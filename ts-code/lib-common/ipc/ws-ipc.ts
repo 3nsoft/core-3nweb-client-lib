@@ -14,6 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
+import { makeRuntimeException } from '../exceptions/runtime';
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
 import * as WebSocket from 'ws';
 
@@ -23,6 +24,10 @@ export interface WSException extends web3n.RuntimeException {
 	type: 'websocket',
 	socketSlow?: true,
 	socketClosed?: true
+}
+
+export function makeWSException(params: Partial<WSException>, flags?: Partial<WSException>): WSException {
+	return makeRuntimeException('websocket', params, flags ?? {});
 }
 
 const MAX_TXT_BUFFER = 64*1024;
@@ -46,12 +51,7 @@ function makeJsonCommPoint(ws: WebSocket): RawDuplex<Envelope> {
 		subscribe: obs => observers.add(obs),
 		postMessage(env: Envelope): void {
 			if ((ws as any).bufferedAmount > MAX_TXT_BUFFER) {
-				const exc: WSException = {
-					runtimeException: true,
-					type: 'websocket',
-					socketSlow: true
-				};
-				throw exc;
+				throw makeWSException({ socketSlow: true });
 			}
 			ws.send(JSON.stringify(env));
 		}
@@ -95,13 +95,10 @@ function onClose(
 		if (code === 1000) {
 			observers.complete();
 		} else {
-			const exc: WSException = {
-				runtimeException: true,
-				type: 'websocket',
+			observers.error(makeWSException({
 				socketClosed: true,
 				cause: { code, reason }
-			};
-			observers.error(exc);
+			}));
 		}
 	};
 }
@@ -115,12 +112,7 @@ function onError(
 	ws: WebSocket, observers: MultiObserverWrap<any>
 ): ((err: any) => void) {
 	return (err?: any): void => {
-		const exc: WSException = {
-			runtimeException: true,
-			type: 'websocket',
-			cause: err
-		};
-		observers.error(exc);
+		observers.error(makeWSException({ cause: err }));
 		ws.close();
 	};
 }

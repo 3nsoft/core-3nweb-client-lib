@@ -19,10 +19,11 @@ import { SubscribingClient } from '../lib-common/ipc/generic-ipc';
 import { Observable, from, throwError } from 'rxjs';
 import { SingleProc } from '../lib-common/processes/synced';
 import { sleep } from '../lib-common/processes/sleep';
-import { catchError, mergeMap } from 'rxjs/operators';
+import { catchError, mergeMap, tap } from 'rxjs/operators';
 import { WSException } from '../lib-common/ipc/ws-ipc';
 import { ConnectException, HTTPException } from '../lib-common/exceptions/http';
 import { stringifyErr } from '../lib-common/exceptions/error';
+import { LogError } from './logging/log-to-file';
 
 export class ServerEvents<N extends string, T> {
 
@@ -30,8 +31,9 @@ export class ServerEvents<N extends string, T> {
 	private openningServer = new SingleProc();
 	
 	constructor(
-		private subscribeToServer: () => Promise<SubscribingClient>,
-		private restartWaitSecs: number
+		private readonly subscribeToServer: () => Promise<SubscribingClient>,
+		private restartWaitSecs: number,
+		private readonly logError: LogError
 	) {
 		Object.seal(this);
 	}
@@ -79,12 +81,17 @@ export class ServerEvents<N extends string, T> {
 			};
 		})
 		.pipe(
+			// XXX tap to log more details
+			tap({
+				complete: () => this.logError({}, `ServerEvents.observe stream completes`),
+				error: err => this.logError(err, `ServerEvents.observe stream has error`)
+			}),
 			catchError(err => {
 				if (this.shouldRestartAfterErr(err)) {
 					console.error(stringifyErr(err));
 					return this.restartObservation(event);
 				} else {
-					return throwError(err);
+					return throwError(() => err);
 				}
 			})
 		);

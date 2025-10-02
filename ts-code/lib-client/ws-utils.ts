@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,23 +15,26 @@
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
 import * as WebSocket from 'ws';
-import { IncomingMessage } from 'http';
+import { IncomingMessage, OutgoingHttpHeaders } from 'http';
 import { SESSION_ID_HEADER, Reply } from './request-utils';
 import { defer } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
 import { globalAgent as agent } from 'https';
 
-export function openSocket(url: string, sessionId: string):
-		Promise<Reply<WebSocket>> {
-	if (!url.startsWith('wss://')) { throw new Error(
-		`Url protocol must be wss`); }
-	const headers: any = {};
+export function openSocket(
+	url: string, sessionId: string
+): Promise<Reply<WebSocket>> {
+	if (!url.startsWith('wss://')) {
+		throw new Error(`Url protocol must be wss`);
+	}
+	const headers: OutgoingHttpHeaders = {};
 	headers[SESSION_ID_HEADER] = sessionId;
 	const ws = new WebSocket(url, { headers, agent });
 	const opening = defer<Reply<WebSocket>>();
-	const initOnError = err => opening.reject(makeConnectionException(
+	const initOnError = (err: any) => opening.reject(makeConnectionException(
 		url, undefined,
-		`Cannot open websocket connection due to error: ${err.message}`));
+		`Cannot open websocket connection due to error: ${err.message}`
+	));
 	const onNonOkReply = (req, res: IncomingMessage) => {
 		const errReply: Reply<WebSocket> = {
 			url,

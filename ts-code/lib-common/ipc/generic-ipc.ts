@@ -12,9 +12,11 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { ErrorWithCause } from '../exceptions/error';
+import { makeRuntimeException } from '../exceptions/runtime';
 import { MapOfSets } from '../map-of-sets';
 import { NamedProcs } from '../processes/synced';
 
@@ -72,6 +74,12 @@ interface EventException extends web3n.RuntimeException {
 	type: 'events';
 	unknownEvent?: true;
 	channel?: string;
+	duplexDisconnected?: true;
+	request?: string;
+}
+
+function makeEventException(params: Partial <EventException>): EventException {
+	return makeRuntimeException('events', params, {});
 }
 
 export interface RequestServer extends Closable {
@@ -103,8 +111,9 @@ export interface RequestingClient extends Closable {
 	 * @param reqName is a name of this request, sort of like a function name
 	 * @param req is a request object that is sent to worker in the message
 	 */
-	makeRequest<T>(reqName: string, req: any,
-			notifyCallback?: (progress: any) => void): Promise<T>;
+	makeRequest<T>(
+		reqName: string, req: any, notifyCallback?: (progress: any) => void
+	): Promise<T>;
 
 }
 
@@ -128,9 +137,11 @@ export interface EventfulServer extends RequestServer {
 	 * @param unsubscriptionHandler is a function, if given, is called when
 	 * last consumer is unsubscribed from a given group of events.
 	 */
-	addEventGroup(eventGroup: string,
+	addEventGroup(
+		eventGroup: string,
 		subscriptionHandler: (eventChannel: string) => Promise<void>|void,
-		unsubscriptionHandler?: (eventChannel: string) => void): void;
+		unsubscriptionHandler?: (eventChannel: string) => void
+	): void;
 
 	/**
 	 * This function sends an event, if another side have subscribed to it, else
@@ -230,8 +241,9 @@ abstract class MessageHandler {
 	private onEndCBs: ((err?: any) => void)[]|undefined = undefined;
 
 	protected constructor(
-			public channel: string|undefined,
-			public rawDuplex: RawDuplex<Envelope>) {
+		public channel: string|undefined,
+		public rawDuplex: RawDuplex<Envelope>
+	) {
 		this.detachFromComm = this.rawDuplex.subscribe({
 			next: env => this.handleMsg(env),
 			complete: () => this.handleCompletion(),
@@ -322,8 +334,16 @@ class RequestingSide extends MessageHandler implements RequestingClient {
 		this.replyDeferreds.clear();
 	}
 
-	makeRequest<T>(name: string, req: any,
-			notifyCallback?: (progress: any) => void): Promise<T> {
+	async makeRequest<T>(
+		name: string, req: any, notifyCallback?: (progress: any) => void
+	): Promise<T> {
+		if (!this.rawDuplex) {
+			throw makeEventException({
+				channel: this.channel,
+				duplexDisconnected: true,
+				request: name
+			});
+		}
 		this.counter += 1;
 		if (this.counter === Number.MAX_SAFE_INTEGER) {
 			this.counter = Number.MIN_SAFE_INTEGER;
@@ -403,8 +423,7 @@ class ReplyingSide extends MessageHandler implements RequestServer {
 		this.sendReply(env, reply);
 	}
 
-	private sendReply(req: RequestEnvelope<any>, reply: ReplyEnvelope<any>):
-			void {
+	private sendReply(req: RequestEnvelope<any>, reply: ReplyEnvelope<any>): void {
 		if (this.rawDuplex) {
 			this.rawDuplex.postMessage(reply);
 		} else {
@@ -412,29 +431,28 @@ class ReplyingSide extends MessageHandler implements RequestServer {
 		}
 	}
 
-	private errorReply(env: RequestEnvelope<any>,
-			err: Error|RuntimeException): ReplyEnvelope<any> {
-		const reply: ReplyEnvelope<any> =  {
+	private errorReply(
+		env: RequestEnvelope<any>, err: Error|RuntimeException
+	): ReplyEnvelope<any> {
+		return {
 			type: 'reply',
 			reqName: env.name,
 			reqCount: env.count,
-			rep: null
+			rep: null,
+			err: ((err as RuntimeException).runtimeException ?
+				err : toTransferrableError(err as ErrorWithCause)
+			)
 		};
-		if ((err as RuntimeException).runtimeException) {
-			reply.err = err;
-		} else {
-			reply.err = toTransferrableError(err as ErrorWithCause);
-		}
-		return reply;
 	}
 
-	private normalReply<T>(env: RequestEnvelope<any>, rep: T,
-			isInProgress = false): ReplyEnvelope<any> {
+	private normalReply<T>(
+		env: RequestEnvelope<any>, rep: T, isInProgress = false
+	): ReplyEnvelope<any> {
 		const reply: ReplyEnvelope<T> = {
 			type: 'reply',
 			reqName: env.name,
 			reqCount: env.count,
-			rep: rep,
+			rep,
 		};
 		if (isInProgress) {
 			reply.isInProgress = true;
@@ -447,14 +465,16 @@ class ReplyingSide extends MessageHandler implements RequestServer {
 	 * @param handler handles requests that come from the other side
 	 */
 	addHandler(reqName: string, handler: RequestHandler<any, any>): void {
-		if (typeof handler !== 'function') { throw new Error(
-			`Given handler for request ${reqName} is not a function`); }
+		if (typeof handler !== 'function') {
+			throw new Error(`Given handler for request ${reqName} is not a function`);
+		}
 		if (this.channel) {
 			reqName = `${this.channel}/${reqName}`;
 		}
 		const existingHandler = this.requestHandlers.get(reqName);
-		if (existingHandler) { throw new Error(
-			`Handler is already set for request ${reqName}`); }
+		if (existingHandler) {
+			throw new Error(`Handler is already set for request ${reqName}`);
+		}
 		this.requestHandlers.set(reqName, handler);
 	}
 
@@ -472,18 +492,10 @@ class ReplyingSide extends MessageHandler implements RequestServer {
 Object.freeze(ReplyingSide.prototype);
 Object.freeze(ReplyingSide);
 
-export function makeRequestServer(channel: string|undefined,
-		comm: RawDuplex<Envelope>): RequestServer {
+export function makeRequestServer(
+	channel: string|undefined, comm: RawDuplex<Envelope>
+): RequestServer {
 	return (new ReplyingSide(channel, comm)).wrap();
-}
-
-function makeUnknownEventException(message?: string): EventException {
-	return {
-		runtimeException: true,
-		type: 'events',
-		unknownEvent: true,
-		message
-	};
 }
 
 type SubscriptionHandler = (eventChannel: string) => Promise<void>;
@@ -518,8 +530,13 @@ class EventsSendingSide extends ReplyingSide {
 	private async handleSubscribe(env: RequestEnvelope<string>): Promise<void> {
 		const event = env.req;
 		const gr = this.findGroup(event);
-		if (!gr) { throw makeUnknownEventException(
-			`Events' channel ${event} is not found in handling subscribe`); }
+		if (!gr) {
+			throw makeEventException({
+				channel: this.channel,
+				unknownEvent: true,
+				message: `Events' channel ${event} is not found in handling subscribe`
+			});
+		}
 		this.subscribedEvents.add(event);
 		await gr.subscribe(event);
 	}
@@ -527,17 +544,24 @@ class EventsSendingSide extends ReplyingSide {
 	private handleUnsubscribe(env: RequestEnvelope<string>): void {
 		const event = env.req;
 		const gr = this.findGroup(event);
-		if (!gr) { throw makeUnknownEventException(
-			`Events' channel ${event} is not found in handling unsubscribe`); }
+		if (!gr) {
+			throw makeEventException({
+				channel: this.channel,
+				unknownEvent: true,
+				message: `Events' channel ${event} is not found in handling unsubscribe`
+			});
+		}
 		this.subscribedEvents.delete(event);
 		if (gr.unsubscribe) {
 			gr.unsubscribe(event);
 		}
 	}
 
-	addEventGroup(group: string,
-			subscriptionHandler: SubscriptionHandler,
-			unsubscriptionHandler?: UnsubscriptionHandler): void {
+	addEventGroup(
+		group: string,
+		subscriptionHandler: SubscriptionHandler,
+		unsubscriptionHandler?: UnsubscriptionHandler
+	): void {
 		if (this.findGroup(group)) { throw new Error(
 			`Event subscription group ${group} is already present`); }
 		const gr: GroupInfo = {
@@ -600,8 +624,9 @@ class EventsSendingSide extends ReplyingSide {
 Object.freeze(EventsSendingSide.prototype);
 Object.freeze(EventsSendingSide);
 
-export function makeEventfulServer(channel: string|undefined,
-		comm: RawDuplex<Envelope>): EventfulServer {
+export function makeEventfulServer(
+	channel: string|undefined, comm: RawDuplex<Envelope>
+): EventfulServer {
 	return (new EventsSendingSide(channel, comm)).wrap();
 }
 
@@ -655,12 +680,11 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 	constructor(channel: string|undefined, comm: RawDuplex<Envelope>) {
 		super(channel, comm);
 		this.channels = new IpcEventChannels(
-			(ipcChannel: string) =>
-				this.makeRequest<void>(SUBSCRIBE_REQ_NAME, ipcChannel)
-				.catch(err => this.completeEvent(ipcChannel, err)),
-			(ipcChannel: string) =>
-				this.makeRequest<void>(UNSUBSCRIBE_REQ_NAME, ipcChannel)
-				.catch(_ => {}));
+			ipcChannel => this.makeRequest<void>(SUBSCRIBE_REQ_NAME, ipcChannel).catch(
+				err => this.completeEvent(ipcChannel, err)
+			),
+			ipcChannel => this.makeRequest<void>(UNSUBSCRIBE_REQ_NAME, ipcChannel).catch(_ => {})
+		);
 	}
 
 	protected handleMsg(env: Envelope): void {
@@ -734,7 +758,8 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 
 	subscribe<T>(channel: string, observer: Observer<T>): () => void {
 		if (!observer.next && !observer.complete && !observer.error) {
-			throw new Error(`Given observer has no methods for events/notifications`); }
+			throw new Error(`Given observer has no methods for events/notifications`);
+		}
 		const ipcChannel = this.channel ? `${this.channel}/${channel}` : channel;
 		const detach = (): void => {
 			this.listeners.remove(ipcChannel, listener);
@@ -768,13 +793,14 @@ class IpcEventChannels {
 	/**
 	 * These are all subscribed ipc channels.
 	 */
-	private subscribedIpcChannels = new Set<string>();
+	private readonly subscribedIpcChannels = new Set<string>();
 
-	private subscriptionProcs = new NamedProcs();
+	private readonly subscriptionProcs = new NamedProcs();
 
 	constructor(
-			private subscribe: (ipcChannel: string) => Promise<void>,
-			private unsubscribe: (ipcChannel: string) => void) {
+		private readonly subscribe: (ipcChannel: string) => Promise<void>,
+		private readonly unsubscribe: (ipcChannel: string) => void
+	) {
 		Object.freeze(this);
 	}
 
@@ -820,8 +846,9 @@ export class MultiObserverWrap<T> {
 	}
 
 	add(obs: Observer<T>): () => void {
-		if (this.isDone) { throw new Error(
-			`Cannot add observer, as this source is already done`); }
+		if (this.isDone) {
+			throw new Error(`Cannot add observer, as this source is already done`);
+		}
 		this.obs.add(obs);
 		return () => { this.obs.delete(obs); };
 	}
@@ -874,10 +901,12 @@ export class SingleObserverWrap<T> {
 	}
 
 	set(obs: Observer<T>): void {
-		if (this.isDone) { throw new Error(
-			`Cannot add observer, as this source is already done`); }
-		if (this.obs) { throw new Error(
-			`Single observer is already set at this source`); }
+		if (this.isDone) {
+			throw new Error(`Cannot add observer, as this source is already done`);
+		}
+		if (this.obs) {
+			throw new Error(`Single observer is already set at this source`);
+		}
 		this.obs = obs;
 	}
 

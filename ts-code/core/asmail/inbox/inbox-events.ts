@@ -19,7 +19,7 @@ import { Observable, MonoTypeOperatorFunction } from 'rxjs';
 import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { ServerEvents } from '../../../lib-client/server-events';
-import { mergeMap, filter, share } from 'rxjs/operators';
+import { mergeMap, filter, share, tap } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
@@ -35,6 +35,11 @@ const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
  * Instance of this class handles event subscription from UI side. It observes
  * inbox server events, handles them, and generates respective events for UI
  * side.
+ * 
+ * Event stream should hide complexity of going offline, may be sleeping and
+ * waking. Consumer should see messages coming, and internally this needs to
+ * be opportunistically connected, as long as there are subscribers to messages.
+ * Hence, this should do restarts to server around wakeup events.
  */
 export class InboxEvents {
 
@@ -45,11 +50,17 @@ export class InboxEvents {
 	) {
 		const serverEvents = new ServerEvents<EventNames, Events>(
 			() => msgReceiver.openEventSource(),
-			SERVER_EVENTS_RESTART_WAIT_SECS
+			SERVER_EVENTS_RESTART_WAIT_SECS,
+			logError
 		);
 
 		this.newMsg$ = serverEvents.observe(msgRecievedCompletely.EVENT_NAME)
 		.pipe(
+			// XXX tap to log more details
+			tap({
+				complete: () => logError({}, `InboxEvents.newMsg$ completes`),
+				error: err => logError(err, `InboxEvents.newMsg$ has error`)
+			}),
 			mergeMap(async ev => {
 				try {
 					const msg = await getMsg(ev.msgId)
@@ -71,7 +82,8 @@ export class InboxEvents {
 	subscribe<T>(event: InboxEventType, observer: Observer<T>): () => void {
 		if (event === 'message') {
 			const subscription = (this.newMsg$ as Observable<any>).subscribe(
-				toRxObserver(observer));
+				toRxObserver(observer)
+			);
 			return () => subscription.unsubscribe();
 		} else {
 			throw new Error(`Event type ${event} is unknown to inbox`);
