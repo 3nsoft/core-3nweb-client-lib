@@ -425,7 +425,9 @@ export class Core {
 			`${KEYRINGS_APP_NAME}/introductory-keys/published-on-server.json`
 		);
 		await this.storages.migrateCoreAppDataOnFirstRun(
-			'synced', `${ASMAIL_APP_NAME}/config/anonymous/invites.json`, `${ASMAIL_APP_NAME}/sending-params/anonymous-invites.json`
+			'synced',
+			`${ASMAIL_APP_NAME}/config/anonymous/invites.json`,
+			`${ASMAIL_APP_NAME}/sending-params/anonymous-invites.json`
 		);
 	}
 

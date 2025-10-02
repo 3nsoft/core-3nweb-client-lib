@@ -24,7 +24,7 @@ import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 
-const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
+const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 
 
 /**

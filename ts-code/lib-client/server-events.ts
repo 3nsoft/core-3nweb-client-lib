@@ -84,7 +84,8 @@ export class ServerEvents<N extends string, T> {
 			// XXX tap to log more details
 			tap({
 				complete: () => this.logError({}, `ServerEvents.observe stream completes`),
-				error: err => this.logError(err, `ServerEvents.observe stream has error`)
+				error: err => this.logError(err, `ServerEvents.observe stream has error,
+${stringifyErr(err)}`)
 			}),
 			catchError(err => {
 				if (this.shouldRestartAfterErr(err)) {
@@ -125,6 +126,10 @@ export class ServerEvents<N extends string, T> {
 	private restartObservation(event: N): Observable<T> {
 		return from(sleep(this.restartWaitSecs * 1000))
 		.pipe(
+			// XXX tap to log more details
+			tap({
+				next: () => this.logError({}, `ServerEvents.restartObservation of ${event} events`)
+			}),
 			mergeMap(() => this.observe(event))
 		);
 	}

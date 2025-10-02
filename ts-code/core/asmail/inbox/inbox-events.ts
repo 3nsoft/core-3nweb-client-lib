@@ -28,7 +28,7 @@ type Observer<T> = web3n.Observer<T>;
 type Events = msgRecievedCompletely.Event;
 type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
 
-const SERVER_EVENTS_RESTART_WAIT_SECS = 30;
+const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 
 
 /**

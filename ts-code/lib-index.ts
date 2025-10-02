@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,16 +16,19 @@
 */
 
 export * from "./core";
+export { SignUp, CreatedUser } from './core/startup/sign-up';
+export { IdManager } from './core/id-manager';
+export { Storages, FactoryOfFSs, reverseDomain, PerAppStorage } from './core/storage';
+export { SignIn, GenerateKey, CompleteInitWithoutCache } from './core/startup/sign-in';
+export { ASMail } from './core/asmail';
 
 export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";
 export { makeNetClient } from "./lib-client/request-utils";
 
-export { FactoryOfFSs, PerAppStorage, reverseDomain } from "./core/storage";
+export { appDirs } from './core/app-files';
 export { sysFolders } from "./core/storage/system-folders";
 
 export { DeviceFS } from './lib-client/local-files/device-fs';
-
-export { appDirs } from './core/app-files';
 
 export { makeLogger } from './lib-client/logging/log-to-file';
 
