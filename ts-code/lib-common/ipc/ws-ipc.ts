@@ -153,9 +153,9 @@ function makeSignalsTimeObserver(
 	return (done, err) => {
 		if (done) {
 			if (err) {
-				log(`WebSocket to ${url} closed with error`, err);
+				log(err, `WebSocket to ${url} closed with error`);
 			} else {
-				log(`WebSocket to ${url} closed`);
+				log(null, `WebSocket to ${url} closed`);
 			}
 			resetWait(false);
 		} else {

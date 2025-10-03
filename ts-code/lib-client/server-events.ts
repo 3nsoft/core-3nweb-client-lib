@@ -83,13 +83,12 @@ export class ServerEvents<N extends string, T> {
 		.pipe(
 			// XXX tap to log more details
 			tap({
-				complete: () => this.logError({}, `ServerEvents.observe stream completes`),
-				error: err => this.logError(err, `ServerEvents.observe stream has error,
-${stringifyErr(err)}`)
+				complete: () => this.logError(null, `ServerEvents.observe('${event}') stream completes`),
+				error: err => this.logError(err, `ServerEvents.observe('${event}') stream has error`)
 			}),
 			catchError(err => {
 				if (this.shouldRestartAfterErr(err)) {
-					console.error(stringifyErr(err));
+					// console.error(stringifyErr(err));
 					return this.restartObservation(event);
 				} else {
 					return throwError(() => err);
@@ -128,7 +127,7 @@ ${stringifyErr(err)}`)
 		.pipe(
 			// XXX tap to log more details
 			tap({
-				next: () => this.logError({}, `ServerEvents.restartObservation of ${event} events`)
+				next: () => this.logError(null, `ServerEvents.restartObservation of ${event} events`)
 			}),
 			mergeMap(() => this.observe(event))
 		);

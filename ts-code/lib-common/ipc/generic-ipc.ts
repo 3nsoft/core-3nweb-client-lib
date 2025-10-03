@@ -565,8 +565,9 @@ class EventsSendingSide extends ReplyingSide {
 		subscriptionHandler: SubscriptionHandler,
 		unsubscriptionHandler?: UnsubscriptionHandler
 	): void {
-		if (this.findGroup(group)) { throw new Error(
-			`Event subscription group ${group} is already present`); }
+		if (this.findGroup(group)) {
+			throw new Error(`Event subscription group ${group} is already present`);
+		}
 		const gr: GroupInfo = {
 			name: group,
 			subscribe: subscriptionHandler,
@@ -636,9 +637,10 @@ export function makeEventfulServer(
 
 class EventListener<T> {
 	constructor(
-			private channel: string,
-			public observer: Observer<T>,
-			public detach: () => void) {
+		private channel: string,
+		public observer: Observer<T>,
+		public detach: () => void
+	) {
 		Object.freeze(this);
 	}
 	processNext(o: T): boolean {

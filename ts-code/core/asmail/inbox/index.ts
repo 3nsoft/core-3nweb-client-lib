@@ -359,9 +359,7 @@ export class InboxOnServer {
 			const keying = msgIds.map(msgId =>
 				this.startCachingAndAddKeyToIndex(msgId)
 				.catch(async (exc) => {
-					await this.logError(
-						exc, `Failed to start caching message ${msgId}`
-					);
+					await this.logError(exc, `Failed to start caching message ${msgId}`);
 				}));
 			await Promise.all(keying);
 			return this.index.listMsgs(fromTS);

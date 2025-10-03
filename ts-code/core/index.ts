@@ -475,6 +475,10 @@ export class Core {
 		return this.storages.wrap();
 	}
 
+	async onDeviceSystemSuspend(): Promise<void> {}
+
+	async onDeviceSystemResume(): Promise<void> {}
+
 }
 Object.freeze(Core.prototype);
 Object.freeze(Core);
