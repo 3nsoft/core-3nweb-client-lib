@@ -32,7 +32,7 @@ export class ServerEvents<N extends string, T> {
 	
 	constructor(
 		private readonly subscribeToServer: () => Promise<SubscribingClient>,
-		private restartWaitSecs: number,
+		// private restartWaitSecs: number,
 		private readonly logError: LogError
 	) {
 		Object.seal(this);
@@ -43,7 +43,7 @@ export class ServerEvents<N extends string, T> {
 	 * @param event is an event on server, to which to subscribe.
 	 */
 	observe(event: N): Observable<T> {
-		const event$ = new Observable<T>(observer => {
+		return new Observable<T>(observer => {
 			// simple sync creation of detach function
 			if (this.server) {
 				return this.server.subscribe(event, observer);
@@ -65,9 +65,7 @@ export class ServerEvents<N extends string, T> {
 				obs = undefined;
 			})
 			.catch(err => {
-				if (obs) {
-					obs.error(err);
-				}
+				obs?.error(err);
 				obs = undefined;
 			});
 
@@ -79,23 +77,7 @@ export class ServerEvents<N extends string, T> {
 					obs = undefined;
 				}
 			};
-		})
-		.pipe(
-			// XXX tap to log more details
-			tap({
-				complete: () => this.logError(null, `ServerEvents.observe('${event}') stream completes`),
-				error: err => this.logError(err, `ServerEvents.observe('${event}') stream has error`)
-			}),
-			catchError(err => {
-				if (this.shouldRestartAfterErr(err)) {
-					// console.error(stringifyErr(err));
-					return this.restartObservation(event);
-				} else {
-					return throwError(() => err);
-				}
-			})
-		);
-		return event$;
+		});
 	}
 
 	private setServer(server: SubscribingClient): void {
@@ -122,16 +104,16 @@ export class ServerEvents<N extends string, T> {
 		}
 	}
 
-	private restartObservation(event: N): Observable<T> {
-		return from(sleep(this.restartWaitSecs * 1000))
-		.pipe(
-			// XXX tap to log more details
-			tap({
-				next: () => this.logError(null, `ServerEvents.restartObservation of ${event} events`)
-			}),
-			mergeMap(() => this.observe(event))
-		);
-	}
+	// private restartObservation(event: N): Observable<T> {
+	// 	return from(sleep(this.restartWaitSecs * 1000))
+	// 	.pipe(
+	// 		// XXX tap to log more details
+	// 		tap({
+	// 			next: () => this.logError(null, `ServerEvents.restartObservation of ${event} events`)
+	// 		}),
+	// 		mergeMap(() => this.observe(event))
+	// 	);
+	// }
 
 }
 Object.freeze(ServerEvents.prototype);

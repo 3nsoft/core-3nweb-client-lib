@@ -18,7 +18,7 @@
 export * from "./core";
 export { SignUp, CreatedUser } from './core/startup/sign-up';
 export { IdManager } from './core/id-manager';
-export { Storages, FactoryOfFSs, reverseDomain, PerAppStorage } from './core/storage';
+export { Storages, FactoryOfFSs, reverseDomain } from './core/storage';
 export { SignIn, GenerateKey, CompleteInitWithoutCache } from './core/startup/sign-in';
 export { ASMail } from './core/asmail';
 

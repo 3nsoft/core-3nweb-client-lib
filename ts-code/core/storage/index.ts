@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -503,6 +503,14 @@ export class Storages implements FactoryOfFSs {
 		}
 	}
 
+	suspendNetworkActivity(): void {
+		this.synced?.storage.suspendNetworkActivity();
+	}
+
+	resumeNetworkActivity(): void {
+		this.synced?.storage.resumeNetworkActivity();
+	}
+
 }
 Object.freeze(Storages.prototype);
 Object.freeze(Storages);
@@ -524,7 +532,7 @@ type Service = web3n.storage.Service;
 type StoragePolicy = web3n.caps.common.StoragePolicy;
 
 
-export class PerAppStorage {
+class PerAppStorage {
 
 	private readonly appFSs = new Map<string, WritableFS>();
 	private readonly revAppDomain: string;

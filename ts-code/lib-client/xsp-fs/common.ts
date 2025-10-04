@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -263,6 +263,10 @@ export interface SyncedStorage extends Storage {
 
 	status(objId: ObjId): Promise<SyncedObjStatus>;
 
+	suspendNetworkActivity(): void;
+
+	resumeNetworkActivity(): void;
+
 }
 
 export interface SyncedObjStatus extends LocalObjStatus {
@@ -301,6 +305,8 @@ export function wrapSyncStorageImplementation(
 	wrap.dropCachedLocalObjVersionsLessOrEqual = impl.dropCachedLocalObjVersionsLessOrEqual.bind(impl);
 	wrap.adoptRemote = impl.adoptRemote.bind(impl);
 	wrap.updateStatusInfo = impl.updateStatusInfo.bind(impl);
+	wrap.suspendNetworkActivity = impl.suspendNetworkActivity.bind(impl);
+	wrap.resumeNetworkActivity = impl.resumeNetworkActivity.bind(impl);
 	return Object.freeze(wrap);
 }
 

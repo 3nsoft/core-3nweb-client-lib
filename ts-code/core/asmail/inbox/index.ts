@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -145,7 +145,7 @@ export class InboxOnServer {
 		private readonly logError: LogError
 	) {
 		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.logError
+			this.msgReceiver, this.getMsg.bind(this), this.removeMsg.bind(this), this.logError
 		);
 		Object.seal(this);
 	}
@@ -179,6 +179,7 @@ export class InboxOnServer {
 
 	async close(): Promise<void> {
 		this.index.stopSyncing();
+		this.inboxEvents.close();
 	}
 
 	makeCAP(): InboxService {
@@ -447,6 +448,14 @@ export class InboxOnServer {
 			);
 		}
 		return m;
+	}
+
+	suspendNetworkActivity(): void {
+		this.inboxEvents.suspendNetworkActivity();
+	}
+
+	resumeNetworkActivity(): void {
+		this.inboxEvents.resumeNetworkActivity();
 	}
 
 }

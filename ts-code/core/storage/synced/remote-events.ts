@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2019 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -50,14 +50,18 @@ export class RemoteEvents {
 			events.EventNameType, events.AllTypes
 		>(
 			() => this.remoteStorage.openEventSource(this.logError),
-			SERVER_EVENTS_RESTART_WAIT_SECS,
+			// SERVER_EVENTS_RESTART_WAIT_SECS,
 			this.logError
 		);
 
 		this.absorbingRemoteEventsProc = merge(
 			this.absorbObjChange(serverEvents),
 			this.absorbObjRemoval(serverEvents),
-			this.absorbObjVersionArchival(serverEvents),
+
+			// XXX commenting out to see if unknownEvent exception goes away
+			//     Is server doesn't know it?
+			// this.absorbObjVersionArchival(serverEvents),
+
 			this.absorbArchVersionRemoval(serverEvents)
 		)
 		.subscribe({
@@ -157,6 +161,18 @@ export class RemoteEvents {
 				});
 			}, 1)
 		);
+	}
+
+	suspendNetworkActivity(): void {
+		// XXX
+		// - set haveNetwork flag to false
+		// - press breaks on events from server
+	}
+
+	resumeNetworkActivity(): void {
+		// XXX
+		// - set haveNetwork flag to true
+		// - restart watching events from server
 	}
 
 }

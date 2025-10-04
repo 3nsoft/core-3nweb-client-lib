@@ -475,9 +475,15 @@ export class Core {
 		return this.storages.wrap();
 	}
 
-	async onDeviceSystemSuspend(): Promise<void> {}
+	async onDeviceSystemSuspend(): Promise<void> {
+		this.asmail.suspendNetworkActivity();
+		this.storages.suspendNetworkActivity();
+	}
 
-	async onDeviceSystemResume(): Promise<void> {}
+	async onDeviceSystemResume(): Promise<void> {
+		this.storages.resumeNetworkActivity();
+		this.asmail.resumeNetworkActivity();
+	}
 
 }
 Object.freeze(Core.prototype);

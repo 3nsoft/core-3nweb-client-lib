@@ -178,6 +178,14 @@ export class ASMail {
 		await this.sendingParams.close();
 	}
 
+	suspendNetworkActivity(): void {
+		this.inbox.suspendNetworkActivity();
+	}
+
+	resumeNetworkActivity(): void {
+		this.inbox.resumeNetworkActivity();
+	}
+
 }
 Object.freeze(ASMail.prototype);
 Object.freeze(ASMail);
