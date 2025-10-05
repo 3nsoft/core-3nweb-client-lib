@@ -116,10 +116,11 @@ export class InboxEvents {
 			return await this.getMsg(msgId)
 		} catch (err) {
 
-			// XXX we need to skip, if it is a connectivity error here
+			// XXX we need to skip, if it is a connectivity error here;
+			//     should we remove on non-connectivity error
+			// await this.rmMsg(msgId).catch(noop);
 
-			// await this.rmMsg(msgId);
-			await this.logError(err, `Cannot get message ${msgId}, and removing it as a result`);
+			await this.logError(err, `Cannot get message ${msgId}`);
 		}
 	}
 
@@ -180,30 +181,15 @@ export class InboxEvents {
 	}
 
 	private async listMsgsFromDisconnectedPeriod(): Promise<void> {
-		// DEBUG log
-		await this.logError(null, `entering listMsgsFromDisconnectedPeriod at ${Date.now()}, this.disconnectedAt is ${this.disconnectedAt}`);
-
 		if (!this.disconnectedAt) {
 			return;
 		}
 		const fromTS = this.disconnectedAt - BUFFER_MILLIS_FOR_LISTING;
-
-		// DEBUG log
-		await this.logError(null, `starting listMsgsFromDisconnectedPeriod process with fromTS ${fromTS}`);
-
 		let msgInfos = (await this.listMsgs(fromTS))
 		.filter(info => (fromTS <= info.deliveryTS))
 		.sort((a, b) => (a.deliveryTS - b.deliveryTS));
-
-		// DEBUG log
-		await this.logError(null, ` ... filtered list has ${msgInfos.length} number of items`);
-
 		for (const info of msgInfos) {
 			const msg = await this.getMessage(info.msgId);
-
-			// DEBUG log
-			await this.logError(null, ` ... msg ${msg?.msgId} found`);
-
 			if (msg) {
 				this.newMsgs.next(msg);
 			} else if (!this.networkActive) {
