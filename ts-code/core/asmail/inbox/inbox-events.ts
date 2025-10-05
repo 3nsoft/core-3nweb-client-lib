@@ -34,7 +34,7 @@ type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
 type MsgInfo = web3n.asmail.MsgInfo;
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
-
+const BUFFER_MILLIS_FOR_LISTING = 2*60*1000;
 
 /**
  * Instance of this class handles event subscription from UI side. It observes
@@ -53,7 +53,7 @@ export class InboxEvents {
 	private listeningProc: Subscription|undefined = undefined;
 	private readonly makeServerEvents: () => ServerEvents<EventNames, Events>;
 	private networkActive = true;
-	private listMsgsFrom: number|undefined = undefined;
+	private disconnectedAt: number|undefined = undefined;
 
 	constructor(
 		msgReceiver: MailRecipient,
@@ -73,9 +73,12 @@ export class InboxEvents {
 		if (this.listeningProc || !this.networkActive) {
 			return;
 		}
-		function clearListeningProc() {
+		const clearListeningProc = () => {
 			if (this.listeningProc === sub) {
 				this.listeningProc = undefined;
+			}
+			if (!this.disconnectedAt) {
+				this.disconnectedAt = Date.now();
 			}
 		}
 		const sub = this.makeServerEvents()
@@ -95,12 +98,17 @@ export class InboxEvents {
 			error: async exc => {
 				clearListeningProc();
 				if (this.shouldRestartAfterErr(exc)) {
-					await sleep(SERVER_EVENTS_RESTART_WAIT_SECS);
-					this.startListening();
+					this.sleepAndRestart();
 				}
 			}
 		});
 		this.listeningProc = sub;
+		this.listMsgsFromDisconnectedPeriod();
+	}
+
+	private async sleepAndRestart(): Promise<void> {
+		await sleep(SERVER_EVENTS_RESTART_WAIT_SECS);
+		this.startListening();
 	}
 
 	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {
@@ -110,7 +118,7 @@ export class InboxEvents {
 
 			// XXX we need to skip, if it is a connectivity error here
 
-			await this.rmMsg(msgId);
+			// await this.rmMsg(msgId);
 			await this.logError(err, `Cannot get message ${msgId}, and removing it as a result`);
 		}
 	}
@@ -157,8 +165,8 @@ export class InboxEvents {
 	suspendNetworkActivity(): void {
 		this.networkActive = false;
 		if (this.isListening) {
-			if (!this.listMsgsFrom) {
-				this.listMsgsFrom = Date.now();
+			if (!this.disconnectedAt) {
+				this.disconnectedAt = Date.now();
 			}
 			this.stopListening();
 		}
@@ -168,31 +176,41 @@ export class InboxEvents {
 		this.networkActive = true;
 		if (!this.isListening) {
 			this.startListening();
-			this.startListingOfDisconnectedPeriod();
 		}
 	}
 
-	private async startListingOfDisconnectedPeriod(): Promise<void> {
-		if (!this.listMsgsFrom) {
+	private async listMsgsFromDisconnectedPeriod(): Promise<void> {
+		// DEBUG log
+		await this.logError(null, `entering listMsgsFromDisconnectedPeriod at ${Date.now()}, this.disconnectedAt is ${this.disconnectedAt}`);
+
+		if (!this.disconnectedAt) {
 			return;
 		}
-		const fromTS = this.listMsgsFrom + 2*60*1000;
+		const fromTS = this.disconnectedAt - BUFFER_MILLIS_FOR_LISTING;
+
+		// DEBUG log
+		await this.logError(null, `starting listMsgsFromDisconnectedPeriod process with fromTS ${fromTS}`);
+
 		let msgInfos = (await this.listMsgs(fromTS))
 		.filter(info => (fromTS <= info.deliveryTS))
 		.sort((a, b) => (a.deliveryTS - b.deliveryTS));
+
+		// DEBUG log
+		await this.logError(null, ` ... filtered list has ${msgInfos.length} number of items`);
+
 		for (const info of msgInfos) {
 			const msg = await this.getMessage(info.msgId);
+
+			// DEBUG log
+			await this.logError(null, ` ... msg ${msg?.msgId} found`);
+
 			if (msg) {
 				this.newMsgs.next(msg);
 			} else if (!this.networkActive) {
 				return;
-			} else {
-
-				// XXX
-
 			}
 		}
-		this.listMsgsFrom = undefined;
+		this.disconnectedAt = undefined;
 	}
 
 	// XXX we may expose health info that can be used elsewhere in the system;
