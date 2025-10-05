@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2019 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2019, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -54,9 +54,19 @@ export namespace closeSession {
 }
 Object.freeze(closeSession);
 
+export interface ListMsgsOpts {
+	from?: number;
+	to?: number;
+}
+
 export namespace listMsgs {
 
-	export const URL_END = 'msg/ids';
+	export const EXPRESS_URL_END = 'msg/ids';
+
+	export function genUrlEnd(opts?: ListMsgsOpts): string {
+		let optStr = (opts ? '?'+stringifyOpts(opts as any) : '');
+		return `msg/ids${optStr}`;
+	}
 
 	export interface Reply extends Array<string> {}
 

@@ -145,7 +145,7 @@ export class InboxOnServer {
 		private readonly logError: LogError
 	) {
 		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.removeMsg.bind(this), this.logError
+			this.msgReceiver, this.getMsg.bind(this), this.listMsgs.bind(this), this.removeMsg.bind(this), this.logError
 		);
 		Object.seal(this);
 	}
@@ -357,12 +357,12 @@ export class InboxOnServer {
 				}
 			}
 			if (msgIds.length === 0) { return indexedMsgs; }
-			const keying = msgIds.map(msgId =>
+			await Promise.all(msgIds.map(msgId =>
 				this.startCachingAndAddKeyToIndex(msgId)
 				.catch(async (exc) => {
 					await this.logError(exc, `Failed to start caching message ${msgId}`);
-				}));
-			await Promise.all(keying);
+				})
+			));
 			return this.index.listMsgs(fromTS);
 		});
 	}

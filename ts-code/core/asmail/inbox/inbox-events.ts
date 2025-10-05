@@ -31,6 +31,7 @@ type InboxEventType = web3n.asmail.InboxEventType;
 type Observer<T> = web3n.Observer<T>;
 type Events = msgRecievedCompletely.Event;
 type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
+type MsgInfo = web3n.asmail.MsgInfo;
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 
@@ -52,16 +53,17 @@ export class InboxEvents {
 	private listeningProc: Subscription|undefined = undefined;
 	private readonly makeServerEvents: () => ServerEvents<EventNames, Events>;
 	private networkActive = true;
+	private listMsgsFrom: number|undefined = undefined;
 
 	constructor(
 		msgReceiver: MailRecipient,
 		private readonly getMsg: (msgId: string) => Promise<IncomingMessage>,
+		private readonly listMsgs: (fromTS: number) => Promise<MsgInfo[]>,
 		private readonly rmMsg: (msgId: string) => Promise<void>,
 		private readonly logError: LogError
 	) {
 		this.makeServerEvents = () => new ServerEvents<EventNames, Events>(
-			() => msgReceiver.openEventSource(this.logError),
-			this.logError
+			() => msgReceiver.openEventSource(this.logError)
 		);
 		this.startListening();
 		Object.seal(this);
@@ -79,14 +81,7 @@ export class InboxEvents {
 		const sub = this.makeServerEvents()
 		.observe(msgRecievedCompletely.EVENT_NAME)
 		.pipe(
-			mergeMap(async ev => {
-				try {
-					return await this.getMsg(ev.msgId)
-				} catch (err) {
-					await this.rmMsg(ev.msgId);
-					await this.logError(err, `Cannot get message ${ev.msgId}, and removing it as a result`);
-				}
-			}, 5)
+			mergeMap(async ev => this.getMessage(ev.msgId), 5)
 		)
 		.subscribe({
 			next: msg => {
@@ -106,6 +101,18 @@ export class InboxEvents {
 			}
 		});
 		this.listeningProc = sub;
+	}
+
+	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {
+		try {
+			return await this.getMsg(msgId)
+		} catch (err) {
+
+			// XXX we need to skip, if it is a connectivity error here
+
+			await this.rmMsg(msgId);
+			await this.logError(err, `Cannot get message ${msgId}, and removing it as a result`);
+		}
 	}
 
 	subscribe<T>(event: InboxEventType, observer: Observer<T>): () => void {
@@ -150,6 +157,9 @@ export class InboxEvents {
 	suspendNetworkActivity(): void {
 		this.networkActive = false;
 		if (this.isListening) {
+			if (!this.listMsgsFrom) {
+				this.listMsgsFrom = Date.now();
+			}
 			this.stopListening();
 		}
 	}
@@ -158,7 +168,31 @@ export class InboxEvents {
 		this.networkActive = true;
 		if (!this.isListening) {
 			this.startListening();
+			this.startListingOfDisconnectedPeriod();
 		}
+	}
+
+	private async startListingOfDisconnectedPeriod(): Promise<void> {
+		if (!this.listMsgsFrom) {
+			return;
+		}
+		const fromTS = this.listMsgsFrom + 2*60*1000;
+		let msgInfos = (await this.listMsgs(fromTS))
+		.filter(info => (fromTS <= info.deliveryTS))
+		.sort((a, b) => (a.deliveryTS - b.deliveryTS));
+		for (const info of msgInfos) {
+			const msg = await this.getMessage(info.msgId);
+			if (msg) {
+				this.newMsgs.next(msg);
+			} else if (!this.networkActive) {
+				return;
+			} else {
+
+				// XXX
+
+			}
+		}
+		this.listMsgsFrom = undefined;
 	}
 
 	// XXX we may expose health info that can be used elsewhere in the system;

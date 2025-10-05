@@ -334,7 +334,7 @@ export function serviceWithMailerIdLogin(): {
 	const net = makeNetClient();
 	async function isSessionValid(sessionId: string) {
 		const rep = await net.doBodylessRequest<listMsgsAPI.Reply>({
-			url: `https://${testSrv}/asmail/retrieval/${listMsgsAPI.URL_END}`,
+			url: `https://${testSrv}/asmail/retrieval/${listMsgsAPI.genUrlEnd()}`,
 			method: 'GET',
 			responseType: 'json',
 			sessionId

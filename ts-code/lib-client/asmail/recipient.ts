@@ -82,11 +82,8 @@ export class MailRecipient extends ServiceUser {
 	}
 
 	async listMsgs(fromTS: number|undefined): Promise<api.listMsgs.Reply> {
-		
-		// XXX modify request to take fromTS parameter to limit number of msgs
-		
 		const rep = await this.doBodylessSessionRequest<api.listMsgs.Reply>({
-			appPath: api.listMsgs.URL_END,
+			appPath: api.listMsgs.genUrlEnd(fromTS ? { from: fromTS } : undefined),
 			method: 'GET',
 			responseType: 'json'
 		});

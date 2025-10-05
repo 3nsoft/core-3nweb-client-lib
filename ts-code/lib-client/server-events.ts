@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019, 2022 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,14 +16,8 @@
 */
 
 import { SubscribingClient } from '../lib-common/ipc/generic-ipc';
-import { Observable, from, throwError } from 'rxjs';
+import { Observable } from 'rxjs';
 import { SingleProc } from '../lib-common/processes/synced';
-import { sleep } from '../lib-common/processes/sleep';
-import { catchError, mergeMap, tap } from 'rxjs/operators';
-import { WSException } from '../lib-common/ipc/ws-ipc';
-import { ConnectException, HTTPException } from '../lib-common/exceptions/http';
-import { stringifyErr } from '../lib-common/exceptions/error';
-import { LogError } from './logging/log-to-file';
 
 export class ServerEvents<N extends string, T> {
 
@@ -32,8 +26,6 @@ export class ServerEvents<N extends string, T> {
 	
 	constructor(
 		private readonly subscribeToServer: () => Promise<SubscribingClient>,
-		// private restartWaitSecs: number,
-		private readonly logError: LogError
 	) {
 		Object.seal(this);
 	}
@@ -88,32 +80,6 @@ export class ServerEvents<N extends string, T> {
 			}
 		});
 	}
-
-	private shouldRestartAfterErr(
-		exc: WSException|ConnectException|HTTPException
-	): boolean {
-		if (!exc.runtimeException) { return false; }
-		if (exc.type === 'connect') {
-			return true;
-		} else if (exc.type === 'http-request') {
-			return false;
-		} else if (exc.type === 'websocket') {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	// private restartObservation(event: N): Observable<T> {
-	// 	return from(sleep(this.restartWaitSecs * 1000))
-	// 	.pipe(
-	// 		// XXX tap to log more details
-	// 		tap({
-	// 			next: () => this.logError(null, `ServerEvents.restartObservation of ${event} events`)
-	// 		}),
-	// 		mergeMap(() => this.observe(event))
-	// 	);
-	// }
 
 }
 Object.freeze(ServerEvents.prototype);
