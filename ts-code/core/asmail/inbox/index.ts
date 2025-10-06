@@ -145,7 +145,7 @@ export class InboxOnServer {
 		private readonly logError: LogError
 	) {
 		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.listMsgs.bind(this), this.removeMsg.bind(this), this.logError
+			this.msgReceiver, this.getMsg.bind(this), this.listNewMsgs.bind(this), this.removeMsg.bind(this), this.logError
 		);
 		Object.seal(this);
 	}
@@ -367,9 +367,27 @@ export class InboxOnServer {
 		});
 	}
 
+	private async listNewMsgs(fromTS: number): Promise<MsgInfo[]> {
+		const msgIds = await this.msgReceiver.listMsgs(fromTS);
+		// remove from listing messages already in index
+		const indexedMsgs = await this.index.listMsgs(fromTS);
+		for (const info of indexedMsgs) {
+			const ind = msgIds.indexOf(info.msgId);
+			if (ind >= 0) {
+				msgIds.splice(ind, 1);
+			}
+		}
+		if (msgIds.length === 0) { return []; }
+		// cache and index these
+		await Promise.all(msgIds.map(msgId => this.startCachingAndAddKeyToIndex(msgId)));
+		// get info's from index, focusing on specific messages only
+		return (await this.index.listMsgs(fromTS)).filter(({ msgId }) => msgIds.includes(msgId));
+	}
+
 	private async getMsg(msgId: string): Promise<IncomingMessage> {
 		if (!msgId || (typeof msgId !== 'string')) {
-			throw `Given message id is not a non-empty string`; }
+			throw `Given message id is not a non-empty string`;
+		}
 		const procId = `get msg #${msgId}`;
 		const promise = this.procs.latestTaskAtThisMoment<IncomingMessage>(procId);
 		if (promise) { return promise; }

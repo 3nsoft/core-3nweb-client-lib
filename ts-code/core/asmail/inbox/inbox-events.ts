@@ -56,9 +56,9 @@ export class InboxEvents {
 	private disconnectedAt: number|undefined = undefined;
 
 	constructor(
-		msgReceiver: MailRecipient,
+		private readonly msgReceiver: MailRecipient,
 		private readonly getMsg: (msgId: string) => Promise<IncomingMessage>,
-		private readonly listMsgs: (fromTS: number) => Promise<MsgInfo[]>,
+		private readonly listNewMsgs: (fromTS: number) => Promise<MsgInfo[]>,
 		private readonly rmMsg: (msgId: string) => Promise<void>,
 		private readonly logError: LogError
 	) {
@@ -184,19 +184,25 @@ export class InboxEvents {
 		if (!this.disconnectedAt) {
 			return;
 		}
-		const fromTS = this.disconnectedAt - BUFFER_MILLIS_FOR_LISTING;
-		let msgInfos = (await this.listMsgs(fromTS))
-		.filter(info => (fromTS <= info.deliveryTS))
-		.sort((a, b) => (a.deliveryTS - b.deliveryTS));
-		for (const info of msgInfos) {
-			const msg = await this.getMessage(info.msgId);
-			if (msg) {
-				this.newMsgs.next(msg);
-			} else if (!this.networkActive) {
-				return;
+		try {
+			const fromTS = this.disconnectedAt - BUFFER_MILLIS_FOR_LISTING;
+			const msgInfos = (await this.listNewMsgs(fromTS))
+			.sort((a, b) => (a.deliveryTS - b.deliveryTS));
+			for (const info of msgInfos) {
+				const msg = await this.getMessage(info.msgId);
+				if (msg) {
+					this.newMsgs.next(msg);
+					this.disconnectedAt = msg.deliveryTS;
+				} else if (!this.networkActive) {
+					return;
+				}
+			}
+			this.disconnectedAt = undefined;
+		} catch (err) {
+			if ((err as ConnectException).type !== 'connect') {
+				await this.logError(err, `Error while retrieving messages, from disconnected period`);
 			}
 		}
-		this.disconnectedAt = undefined;
 	}
 
 	// XXX we may expose health info that can be used elsewhere in the system;
@@ -205,6 +211,9 @@ export class InboxEvents {
 }
 Object.freeze(InboxEvents.prototype);
 Object.freeze(InboxEvents);
+
+
+
 
 
 Object.freeze(exports);
