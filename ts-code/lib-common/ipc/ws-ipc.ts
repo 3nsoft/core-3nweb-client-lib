@@ -45,7 +45,7 @@ function makeJsonCommPoint(ws: WebSocket): {
 	
 	const observers = new MultiObserverWrap<Envelope>();
 
-	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat();
+	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat(ws.url);
 
 	ws.on('message', data => {
 		if (typeof data !== 'string') { return; }
@@ -67,7 +67,7 @@ function makeJsonCommPoint(ws: WebSocket): {
 
 	ws.on('close', (code, reason) => {
 		if (code === 1000) {
-			otherBeat(undefined, true);
+			otherBeat({ socketClosed: true }, true);
 			observers.complete();
 		} else {
 			otherBeat({ error: { code, reason } }, true);
@@ -103,7 +103,7 @@ function makeJsonCommPoint(ws: WebSocket): {
 	return { comm, heartbeat };
 }
 
-function makeHeartbeat() {
+function makeHeartbeat(url: string) {
 
 	const status = new Subject<ConnectionStatus>();
 
@@ -112,19 +112,18 @@ function makeHeartbeat() {
 	function healthyBeat(): void {
 		const now = Date.now();
 		status.next({
+			url,
 			ping: now - lastInfo
 		});
 		lastInfo = now;
 	}
 
-	function otherBeat(beat: ConnectionStatus|undefined, end = false): void {
-		if (beat) {
-			status.next(beat);
-		}
+	function otherBeat(params: Partial<ConnectionStatus>, end = false): void {
+		status.next({
+			url,
+			...params				
+		});
 		if (end) {
-			status.next({
-				socketClosed: true
-			});
 			status.complete();
 		}
 	}
@@ -137,6 +136,9 @@ function makeHeartbeat() {
 }
 
 export interface ConnectionStatus {
+
+	url: string;
+
 	/**
 	 * ping number is a number of millisecond between previous and current data receiving from server.
 	 */
