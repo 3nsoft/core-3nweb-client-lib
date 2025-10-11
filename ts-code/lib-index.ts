@@ -32,5 +32,6 @@ export { DeviceFS } from './lib-client/local-files/device-fs';
 
 export { makeLogger } from './lib-client/logging/log-to-file';
 
+export const SYSTEM_DOMAIN = '3nweb.computer';
 
 Object.freeze(exports);

@@ -15,7 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export const CORE_APPS_PREFIX = 'computer.3nweb.core';
+export const SYSTEM_PREFIX = 'computer.3nweb';
+const CORE_APPS_PREFIX = `${SYSTEM_PREFIX}.core`;
 export const ASMAIL_APP_NAME = `${CORE_APPS_PREFIX}.asmail`;
 export const KEYRINGS_APP_NAME = `${CORE_APPS_PREFIX}.keyrings`;
 export const MAILERID_APP_NAME = `${CORE_APPS_PREFIX}.mailerid`;

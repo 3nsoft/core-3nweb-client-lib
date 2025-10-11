@@ -79,7 +79,7 @@ it.func = async function(s) {
 	// user 1 sends message to user 2
 	const recipient = u2.userId;
 	// make fs objects for attachment
-	const appFS = await u1_w3n.storage!.getAppSyncedFS('computer.3nweb.test');
+	const appFS = await u1_w3n.storage!.getAppSyncedFS('app.3nweb.test');
 	const filesToAttach: File[] = [];
 	for (const fp of files) {
 		const path = fp.name;
@@ -231,7 +231,7 @@ it.func = async function(s) {
 	// user 1 sends message to user 2
 	const recipient = u2.userId;
 	// make big file for attachment
-	const appFS = await u1_w3n.storage!.getAppSyncedFS('computer.3nweb.test');
+	const appFS = await u1_w3n.storage!.getAppSyncedFS('app.3nweb.test');
 	// fingerprint bytes at the end
 	const endBytes = new Uint8Array(txtBody.split('').map(
 		char => char.charCodeAt(0)));

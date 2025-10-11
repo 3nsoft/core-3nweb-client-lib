@@ -362,10 +362,10 @@ export class StorageOwner extends ServiceUser {
 		}
 	}
 
-	async openEventSource(log: LogError): Promise<SubscribingClient> {
+	async openEventSource(): Promise<ReturnType<typeof makeSubscriber>> {
 		const rep = await this.openWS(api.wsEventChannel.URL_END);
 		if (rep.status === api.wsEventChannel.SC.ok) {
-			return makeSubscriber(rep.data, undefined, log);
+			return makeSubscriber(rep.data, undefined);
 		} else {
 			throw makeException(rep, 'Unexpected status');
 		}

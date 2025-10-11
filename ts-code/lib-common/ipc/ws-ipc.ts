@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { LogError } from '../../lib-client/logging/log-to-file';
+import { Observable, share, Subject } from 'rxjs';
 import { makeRuntimeException } from '../exceptions/runtime';
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
 import * as WebSocket from 'ws';
@@ -39,38 +39,15 @@ const MAX_TXT_BUFFER = 64*1024;
  * messages.
  * @param ws 
  */
-function makeJsonCommPoint(ws: WebSocket, log: LogError): RawDuplex<Envelope> {
+function makeJsonCommPoint(ws: WebSocket): {
+	comm: RawDuplex<Envelope>; heartbeat: Observable<ConnectionStatus>;
+ } {
 	
 	const observers = new MultiObserverWrap<Envelope>();
 
-	const resetTimer = makeSignalsTimeObserver(ws.url, log);
+	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat();
 
-	ws.on('message', onTxtMessage(ws, observers, resetTimer));
-	ws.on('close', onClose(observers, resetTimer));
-	ws.on('error', onError(ws, observers, resetTimer));
-	ws.on('ping', onPing(ws, resetTimer));
-
-	const commPoint: RawDuplex<Envelope> = {
-		subscribe: obs => observers.add(obs),
-		postMessage(env: Envelope): void {
-			if ((ws as any).bufferedAmount > MAX_TXT_BUFFER) {
-				throw makeWSException({ socketSlow: true });
-			}
-			ws.send(JSON.stringify(env));
-		}
-	};
-	return commPoint;
-}
-
-/**
- * This generates an on-message callback for text messages in a web socket.
- * @param ws 
- * @param observers 
- */
-function onTxtMessage(
-	ws: WebSocket, observers: MultiObserverWrap<Envelope>, resetTimer: () => void
-): (data: any) => void {
-	return (data: any): void => {
+	ws.on('message', data => {
 		if (typeof data !== 'string') { return; }
 		if (observers.done) { return; }
 		
@@ -79,96 +56,117 @@ function onTxtMessage(
 			env = JSON.parse(data);
 		} catch (err) {
 			ws.close();
+			otherBeat(err, true);
 			observers.error(err);
 			return;
 		}
 
 		observers.next(env);
-		resetTimer();
-	};
-}
+		healthyBeat();
+	});
 
-/**
- * This generates an on-close callback for a web socket.
- * @param observers 
- */
-function onClose(
-	observers: MultiObserverWrap<any>, resetTimer: (done: true, err?: any) => void
-): (code: number, reason: string) => void {
-	return (code, reason) => {
+	ws.on('close', (code, reason) => {
 		if (code === 1000) {
-			resetTimer(true);
+			otherBeat(undefined, true);
 			observers.complete();
 		} else {
-			resetTimer(true, { code, reason });
+			otherBeat({ error: { code, reason } }, true);
 			observers.error(makeWSException({
 				socketClosed: true,
 				cause: { code, reason }
 			}));
 		}
-	};
-}
+	});
 
-/**
- * This generates an on-error callback for a web socket.
- * @param ws 
- * @param observers 
- */
-function onError(
-	ws: WebSocket, observers: MultiObserverWrap<any>, closeTimer: (done: true, err: any) => void
-): ((err: any) => void) {
-	return (err?: any): void => {
-		closeTimer(true, err);
+	ws.on('error', (err?: any): void => {
+		otherBeat(err, true);
 		observers.error(makeWSException({ cause: err }));
 		ws.close();
-	};
-}
+	});
 
-function onPing(ws: WebSocket, resetTimer: () => void): () => void {
-	return () => {
-		resetTimer();
+	ws.on('ping', () => {
 		ws.pong();
+		healthyBeat();
+	});
+
+	const comm: RawDuplex<Envelope> = {
+		subscribe: obs => observers.add(obs),
+		postMessage(env: Envelope): void {
+			if ((ws as any).bufferedAmount > MAX_TXT_BUFFER) {
+				otherBeat({ slowSocket: true });
+				throw makeWSException({ socketSlow: true });
+			}
+			ws.send(JSON.stringify(env));
+		}
 	};
+
+	return { comm, heartbeat };
 }
 
-function makeSignalsTimeObserver(
-	url: string, log: LogError
-): (done?: true, err?: any) => void {
-	const serverPingSettings = 2*60*1000;
-	let lastMoment = Date.now();
-	let int: ReturnType<typeof setInterval>|undefined = undefined;
-	function resetWait(setNew = true) {
-		lastMoment = Date.now();
-		if (int) {
-			clearInterval(int);
-			int = undefined;
+function makeHeartbeat() {
+
+	const status = new Subject<ConnectionStatus>();
+
+	let lastInfo = Date.now();
+
+	function healthyBeat(): void {
+		const now = Date.now();
+		status.next({
+			ping: now - lastInfo
+		});
+		lastInfo = now;
+	}
+
+	function otherBeat(beat: ConnectionStatus|undefined, end = false): void {
+		if (beat) {
+			status.next(beat);
 		}
-		if (setNew) {
-			int = setInterval(() => {
-				log(`Ping/data from ${url} is not observed in last ${Math.floor((Date.now() - lastMoment)/1000)} seconds`);
-			}, serverPingSettings*1.5).unref();
+		if (end) {
+			status.next({
+				socketClosed: true
+			});
+			status.complete();
 		}
 	}
 
-	return (done, err) => {
-		if (done) {
-			if (err) {
-				log(err, `WebSocket to ${url} closed with error`);
-			} else {
-				log(null, `WebSocket to ${url} closed`);
-			}
-			resetWait(false);
-		} else {
-			resetWait();
-		}
+	return {
+		heartbeat: status.asObservable().pipe(share()),
+		healthyBeat,
+		otherBeat
 	};
 }
 
+export interface ConnectionStatus {
+	/**
+	 * ping number is a number of millisecond between previous and current data receiving from server.
+	 */
+	ping?: number;
+
+	/**
+	 * This mirrors a "slow socket" exception, thrown to data sending process.
+	 */
+	slowSocket?: true;
+
+	socketClosed?: true;
+
+	error?: any;
+}
+
 export function makeSubscriber(
-	ws: WebSocket, ipcChannel: string|undefined, log: LogError
-): SubscribingClient {
-	const comm = makeJsonCommPoint(ws, log);
-	return makeSubscribingClient(ipcChannel, comm);
+	ws: WebSocket, ipcChannel: string|undefined
+): { client: SubscribingClient; heartbeat: Observable<ConnectionStatus>; } {
+	const { comm, heartbeat } = makeJsonCommPoint(ws);
+	return {
+		client: makeSubscribingClient(ipcChannel, comm),
+		heartbeat
+	};
+}
+
+export function addToStatus<T extends ConnectionStatus>(status: ConnectionStatus, params: Partial<T>): T {
+	for (const [ field, value ] of Object.values(params)) {
+		(status as T)[field] = value;
+	}
+	return status as T;
 }
 
 Object.freeze(exports);

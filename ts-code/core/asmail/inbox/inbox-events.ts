@@ -16,13 +16,12 @@
 */
 
 import { MailRecipient } from '../../../lib-client/asmail/recipient';
-import { Observable, Subject, Subscription } from 'rxjs';
+import { from, Observable, Subject, Subscription } from 'rxjs';
 import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
-import { ServerEvents } from '../../../lib-client/server-events';
 import { mergeMap, share } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
-import { WSException } from '../../../lib-common/ipc/ws-ipc';
+import { addToStatus, ConnectionStatus, WSException } from '../../../lib-common/ipc/ws-ipc';
 import { ConnectException, HTTPException } from '../../../lib-common/exceptions/http';
 import { sleep } from '../../../lib-common/processes/sleep';
 
@@ -30,8 +29,20 @@ type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxEventType = web3n.asmail.InboxEventType;
 type Observer<T> = web3n.Observer<T>;
 type Events = msgRecievedCompletely.Event;
-type EventNames = (typeof msgRecievedCompletely.EVENT_NAME);
 type MsgInfo = web3n.asmail.MsgInfo;
+
+export interface InboxConnectionStatus extends ConnectionStatus {
+	service: 'inbox';
+}
+
+function toInboxConnectionStatus(
+	status: ConnectionStatus, params?: Partial<InboxConnectionStatus>
+): InboxConnectionStatus {
+	return addToStatus<InboxConnectionStatus>(status, {
+		service: 'inbox',
+		...params
+	});
+}
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 const BUFFER_MILLIS_FOR_LISTING = 2*60*1000;
@@ -50,8 +61,9 @@ export class InboxEvents {
 
 	private readonly newMsgs = new Subject<IncomingMessage>();
 	private readonly newMsg$ = this.newMsgs.asObservable().pipe(share());
+	private readonly connectionEvents = new Subject<InboxConnectionStatus>();
+	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private listeningProc: Subscription|undefined = undefined;
-	private readonly makeServerEvents: () => ServerEvents<EventNames, Events>;
 	private networkActive = true;
 	private disconnectedAt: number|undefined = undefined;
 
@@ -62,9 +74,6 @@ export class InboxEvents {
 		private readonly rmMsg: (msgId: string) => Promise<void>,
 		private readonly logError: LogError
 	) {
-		this.makeServerEvents = () => new ServerEvents<EventNames, Events>(
-			() => msgReceiver.openEventSource(this.logError)
-		);
 		this.startListening();
 		Object.seal(this);
 	}
@@ -81,9 +90,15 @@ export class InboxEvents {
 				this.disconnectedAt = Date.now();
 			}
 		}
-		const sub = this.makeServerEvents()
-		.observe(msgRecievedCompletely.EVENT_NAME)
+		const sub = from(this.msgReceiver.openEventSource().then(({ client, heartbeat }) => {
+			const channel = msgRecievedCompletely.EVENT_NAME;
+			heartbeat.subscribe({
+				next: ev => this.connectionEvents.next(toInboxConnectionStatus(ev))
+			});
+			return new Observable<Events>(obs => client.subscribe(channel, obs));
+		}))
 		.pipe(
+			mergeMap(events => events),
 			mergeMap(async ev => this.getMessage(ev.msgId), 5)
 		)
 		.subscribe({
@@ -205,15 +220,9 @@ export class InboxEvents {
 		}
 	}
 
-	// XXX we may expose health info that can be used elsewhere in the system;
-	//     server ping timing info can be taken from used websocket, etc.
-
 }
 Object.freeze(InboxEvents.prototype);
 Object.freeze(InboxEvents);
-
-
-
 
 
 Object.freeze(exports);

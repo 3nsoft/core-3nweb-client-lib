@@ -186,6 +186,10 @@ export class ASMail {
 		this.inbox.resumeNetworkActivity();
 	}
 
+	get connectivityEvent$() {
+		return this.inbox.connectivityEvent$;
+	}
+
 }
 Object.freeze(ASMail.prototype);
 Object.freeze(ASMail);

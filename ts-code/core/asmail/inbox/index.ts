@@ -476,6 +476,10 @@ export class InboxOnServer {
 		this.inboxEvents.resumeNetworkActivity();
 	}
 
+	get connectivityEvent$() {
+		return this.inboxEvents.connectionEvent$
+	}
+
 }
 Object.freeze(InboxOnServer.prototype);
 Object.freeze(InboxOnServer);

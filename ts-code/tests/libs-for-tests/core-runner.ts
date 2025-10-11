@@ -29,7 +29,7 @@ import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
 
 export const testApp = {
-	appDomain: 'test.3nweb.computer',
+	appDomain: 'test.3nweb.app',
 	capsRequested: {
 		keyrings: 'all',
 		mailerid: true,
@@ -40,13 +40,13 @@ export const testApp = {
 		storage: {
 			appFS: [
 				{
-					domain: "test.3nweb.computer",
+					domain: "test.3nweb.app",
 					storage: "synced-n-local"
 				}, {
-					domain: "mail.test.3nweb.computer",
+					domain: "mail.test.3nweb.app",
 					storage: "synced-n-local"
 				}, {
-					domain: "contacts.test.3nweb.computer",
+					domain: "contacts.test.3nweb.app",
 					storage: "synced-n-local"
 				}
 			],

@@ -15,14 +15,27 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription, merge, Observable } from 'rxjs';
+import { Subscription, merge, Observable, Subject, from } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';
-import { ServerEvents } from '../../../lib-client/server-events';
 import { events } from '../../../lib-common/service-api/3nstorage/owner';
-import { mergeMap, filter } from 'rxjs/operators';
+import { mergeMap, filter, share, map } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
+import { addToStatus, ConnectionStatus, SubscribingClient } from '../../../lib-common/ipc/ws-ipc';
+
+export interface StorageConnectionStatus extends ConnectionStatus {
+	service: 'storage';
+}
+
+function toStorageConnectionStatus(
+	status: ConnectionStatus, params?: Partial<StorageConnectionStatus>
+): StorageConnectionStatus {
+	return addToStatus<StorageConnectionStatus>(status, {
+		service: 'storage',
+		...params
+	});
+}
 
 const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 
@@ -32,6 +45,9 @@ const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
  * events. Someone down the stream can react to these changes from remote.
  */
 export class RemoteEvents {
+
+	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
+	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -46,21 +62,24 @@ export class RemoteEvents {
 
 	startAbsorbingRemoteEvents(): void {
 
-		const serverEvents = new ServerEvents<
-			events.EventNameType, events.AllTypes
-		>(
-			() => this.remoteStorage.openEventSource(this.logError)
-		);
+		this.absorbingRemoteEventsProc = from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
+			heartbeat.subscribe({
+				next: ev => this.connectionEvents.next(toStorageConnectionStatus(ev))
+			});
+			return client;
+		}))
+		.pipe(
+			map(client => merge(
+				this.absorbObjChange(client),
+				this.absorbObjRemoval(client),
 
-		this.absorbingRemoteEventsProc = merge(
-			this.absorbObjChange(serverEvents),
-			this.absorbObjRemoval(serverEvents),
+				// XXX commenting out to see if unknownEvent exception goes away
+				//     Is server doesn't know it?
+				// this.absorbObjVersionArchival(client),
 
-			// XXX commenting out to see if unknownEvent exception goes away
-			//     Is server doesn't know it?
-			// this.absorbObjVersionArchival(serverEvents),
-
-			this.absorbArchVersionRemoval(serverEvents)
+				this.absorbArchVersionRemoval(client)
+			)),
+			mergeMap(event$ => event$)
 		)
 		.subscribe({
 			next: noop,
@@ -81,12 +100,12 @@ export class RemoteEvents {
 		}
 	}
 
-	private absorbObjChange(
-		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
-	): Observable<void> {
-		return serverEvents.observe(events.objChanged.EVENT_NAME)
+	private absorbObjChange(client: SubscribingClient): Observable<void> {
+		return (new Observable<events.objChanged.Event>(
+			obs => client.subscribe(events.objChanged.EVENT_NAME, obs)
+		))
 		.pipe(
-			mergeMap(async ({ newVer, objId }: events.objChanged.Event) => {
+			mergeMap(async ({ newVer, objId }) => {
 				if (!Number.isInteger(newVer) || (newVer < 1)) { return; }
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
@@ -100,12 +119,12 @@ export class RemoteEvents {
 		);
 	}
 
-	private absorbObjRemoval(
-		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
-	): Observable<void> {
-		return serverEvents.observe(events.objRemoved.EVENT_NAME)
+	private absorbObjRemoval(client: SubscribingClient): Observable<void> {
+		return (new Observable<events.objRemoved.Event>(
+			obs => client.subscribe(events.objRemoved.EVENT_NAME, obs)
+		))
 		.pipe(
-			filter((objRm: events.objRemoved.Event) => !!objRm.objId),
+			filter(objRmEvent => !!objRmEvent.objId),
 			mergeMap(async ({ objId }: events.objRemoved.Event) => {
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
@@ -118,10 +137,10 @@ export class RemoteEvents {
 		);
 	}
 
-	private absorbObjVersionArchival(
-		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
-	): Observable<void> {
-		return serverEvents.observe(events.objVersionArchived.EVENT_NAME)
+	private absorbObjVersionArchival(client: SubscribingClient): Observable<void> {
+		return (new Observable<events.objVersionArchived.Event>(
+			obs => client.subscribe(events.objVersionArchived.EVENT_NAME, obs)
+		))
 		.pipe(
 			mergeMap(async ({
 				objId, archivedVer
@@ -138,12 +157,10 @@ export class RemoteEvents {
 		);
 	}
 
-	private absorbArchVersionRemoval(
-		serverEvents: ServerEvents<events.EventNameType, events.AllTypes>
-	): Observable<void> {
-		return serverEvents.observe(
-			events.objArchivedVersionRemoved.EVENT_NAME
-		)
+	private absorbArchVersionRemoval(client: SubscribingClient): Observable<void> {
+		return (new Observable<events.objArchivedVersionRemoved.Event>(
+			obs => client.subscribe(events.objArchivedVersionRemoved.EVENT_NAME, obs)
+		))
 		.pipe(
 			mergeMap(async ({
 				objId, archivedVer

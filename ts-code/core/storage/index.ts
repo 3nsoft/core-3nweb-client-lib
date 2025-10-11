@@ -35,7 +35,7 @@ import { LogError } from '../../lib-client/logging/log-to-file';
 import { MakeNet } from '..';
 import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from './system-folders';
 import { AppDataFolders } from './system-folders/apps-data';
-import { CORE_APPS_PREFIX } from './common/constants';
+import { SYSTEM_PREFIX } from './common/constants';
 import { assert } from '../../lib-common/assert';
 
 type EncryptionException = web3n.EncryptionException;
@@ -233,8 +233,8 @@ class StorageAndFS<T extends Storage> {
 	 */
 	async migrateCoreAppDataOnFirstRun(src: string, dst: string): Promise<void> {
 		assert(
-			src.startsWith(CORE_APPS_PREFIX) && !src.includes('..') &&
-			dst.startsWith(CORE_APPS_PREFIX) && !dst.includes('..'),
+			src.startsWith(SYSTEM_PREFIX) && !src.includes('..') &&
+			dst.startsWith(SYSTEM_PREFIX) && !dst.includes('..'),
 			`Invalid core app data migration paths`
 		);
 		if (!(await this.rootFS.checkFolderPresence(src))
@@ -592,7 +592,7 @@ class PerAppStorage {
 	 */
 	private ensureAppFSAllowed(appFolder: string, type: 'local'|'synced'): void {
 		if (typeof appFolder !== 'string') { throw makeBadAppNameExc(appFolder); }
-		if (appFolder.startsWith(CORE_APPS_PREFIX)) {
+		if (appFolder.startsWith(SYSTEM_PREFIX)) {
 			throw makeNotAllowedToOpenAppFSExc(appFolder);
 		}
 		if (!this.policy.canOpenAppFS(appFolder, type)) {

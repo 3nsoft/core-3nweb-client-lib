@@ -485,6 +485,12 @@ export class Core {
 		this.asmail.resumeNetworkActivity();
 	}
 
+	get connectivityEvents() {
+		return {
+			inbox$: this.asmail.connectivityEvent$
+		};
+	}
+
 }
 Object.freeze(Core.prototype);
 Object.freeze(Core);
