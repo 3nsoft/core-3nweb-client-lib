@@ -52,8 +52,7 @@ export class CachedMessages {
 			const msgFolder = await this.folders.getFolderAccessFor(msgId);
 			if (!msgFolder) { return; }
 
-			msg = await MsgOnDisk.forExistingMsg(
-				msgId, msgFolder, this.downloader);
+			msg = await MsgOnDisk.forExistingMsg(msgId, msgFolder, this.downloader);
 			this.msgFiles.set(msgId, msg);
 			return msg;
 		});
@@ -61,15 +60,13 @@ export class CachedMessages {
 	
 	async deleteMsg(msgId: string): Promise<void> {
 		this.msgFiles.delete(msgId);
-		return this.syncProc.startOrChain(
-			msgId, () => this.folders.removeFolderOf(msgId));
+		return this.syncProc.startOrChain(msgId, () => this.folders.removeFolderOf(msgId));
 	}
 
 	addMsg(msgId: string, meta: MsgMeta): Promise<MsgOnDisk> {
 		return this.syncProc.startOrChain(msgId, async () => {
 			const msgFolder = await this.folders.getFolderAccessFor(msgId, true);
-			const msg = await MsgOnDisk.createOnDisk(
-				msgFolder!, msgId, meta, this.downloader);
+			const msg = await MsgOnDisk.createOnDisk(msgFolder!, msgId, meta, this.downloader);
 			this.msgFiles.set(msgId, msg);
 			return msg;
 		});

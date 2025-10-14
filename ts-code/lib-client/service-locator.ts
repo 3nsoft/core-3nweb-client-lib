@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 - 2021, 2024 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021, 2024 - 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -270,7 +270,8 @@ interface DnsError extends Error {
 const DNS_ERR_CODE = {
 	NODATA: 'ENODATA',
 	NOTFOUND: 'ENOTFOUND',
-	ESERVFAIL: 'ESERVFAIL'
+	ESERVFAIL: 'ESERVFAIL',
+	ECONNREFUSED: 'ECONNREFUSED'
 };
 Object.freeze(DNS_ERR_CODE);
 
@@ -299,7 +300,7 @@ export function makeServiceLocator(
 			const { code, hostname, message } = (err as DnsError);
 			if (code === DNS_ERR_CODE.NODATA) {
 				throw noServiceRecordExc(address);
-			} else if (code === DNS_ERR_CODE.ESERVFAIL) {
+			} else if ((code === DNS_ERR_CODE.ESERVFAIL) || (code === DNS_ERR_CODE.ECONNREFUSED)) {
 				throw noConnectionExc({ code, hostname, message });
 			} else if (hostname) {
 				throw domainNotFoundExc(address, { code, hostname, message });
