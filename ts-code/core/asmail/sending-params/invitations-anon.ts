@@ -55,8 +55,11 @@ export class AnonymousInvites {
 	): Promise<AnonymousInvites> {
 		const anonInvites = new AnonymousInvites(anonInvitesOnServer);
 		await anonInvites.fileProc.start(file, () => anonInvites.toFileJSON());
-		await anonInvites.absorbRemoteChanges();
-		await anonInvites.syncServiceSetting();
+
+		// XXX these are part of proper syncing logic
+		// await anonInvites.absorbRemoteChanges();
+		// await anonInvites.syncServiceSetting();
+
 		return anonInvites;
 	}
 

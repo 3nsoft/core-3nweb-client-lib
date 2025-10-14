@@ -72,18 +72,17 @@ export class Delivery {
 		private readonly r: ResourcesForSending
 	) {
 		ensureCorrectFS(fs, 'local', true);
-		this.r.notifyMsgProgress = (
-			id, progress
-		) => this.allDeliveries.next({ id, progress });
+		this.r.notifyMsgProgress = (id, progress) => this.allDeliveries.next({ id, progress });
 		Object.freeze(this.r);
 		Object.freeze(this);
 	}
-	
+
 	static async makeAndStart(
 		fs: WritableFS, r: ResourcesForSending
 	): Promise<Delivery> {
 		const delivery = new Delivery(fs, r);
-		await delivery.restartDeliveryOfMsgsAtStartup();
+		delivery.restartDeliveryOfMsgsAtStartup()
+		.catch(err => delivery.r.logError(err));
 		return delivery;
 	}
 

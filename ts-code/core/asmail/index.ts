@@ -67,7 +67,8 @@ export class ASMail {
 		try {
 			this.address = address;
 
-			await getRemoteFolderChanges(syncedFS);
+			// XXX this should be part of proper syncing logic
+			// await getRemoteFolderChanges(syncedFS);
 
 			this.config = config;
 
