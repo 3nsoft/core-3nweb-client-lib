@@ -347,7 +347,15 @@ export class Storages implements FactoryOfFSs {
 		const params = await readRootKeyDerivParamsFromCache(storageDir);
 		if (!params) { return; }
 		const key = await deriveStorageSKey(cryptor, pass, params, storeKeyProgressCB);
-		return ((await this.local?.canKeyOpenRootObj(key)) ? key : undefined);
+		const indicatorStore = await StorageAndFS.existing(
+			await LocalStorage.makeAndStart(
+				join(storageDir, LOCAL_STORAGE_DIR),
+				this.storageGetterForLocalStorage,
+				this.cryptor, async () => {}
+			),
+			key
+		)
+		return (indicatorStore ? key : undefined);
 	}
 
 	async startInitFromCache(
