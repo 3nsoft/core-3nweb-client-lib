@@ -41,6 +41,7 @@ type W3N = web3n.caps.common.W3N;
 type BootProcessObserver = web3n.startup.BootProcessObserver;
 type BootEvent = web3n.startup.BootEvent;
 type ConnectException = web3n.ConnectException;
+type ProgressCB = web3n.startup.ProgressCB;
 
 export interface CoreConf {
 	dataDir: string;
@@ -69,14 +70,9 @@ export class Core {
 		private readonly signUpUrl: string
 	) {
 		this.cryptor = makeCryptor(this.logger.logError, this.logger.logWarning);
-		this.storages = new Storages(
-			this.cryptor.cryptor.sbox, this.appDirs.storagePathFor
-		);
+		this.storages = new Storages(this.cryptor.cryptor.sbox, this.appDirs.storagePathFor);
 		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox, this.logger);
-		this.asmail = new ASMail(
-			this.cryptor.cryptor.sbox, this.makeNet,
-			this.appDirs.inboxPathFor, this.logger
-		);
+		this.asmail = new ASMail(this.cryptor.cryptor.sbox, this.makeNet, this.appDirs.inboxPathFor, this.logger);
 		Object.seal(this);
 	}
 
@@ -110,7 +106,7 @@ export class Core {
 
 		const signIn = new SignIn(
 			this.cryptor.cryptor,
-			addr  => this.initForExistingUserWithoutCache(addr, midDone, emitBootEvent),
+			addr => this.initForExistingUserWithoutCache(addr, midDone, emitBootEvent),
 			(addr, storageKey) => this.initForExistingUserWithCache(addr, storageKey, midDone, emitBootEvent),
 			this.appDirs.getUsersOnDisk,
 			watchBoot,
@@ -141,6 +137,27 @@ export class Core {
 
 		return { coreInit, coreAppsInit, capsForStartup };
 	};
+
+	async startDirectlyFromCache(userId: string, storageKey: Uint8Array): Promise<{
+		watchBoot: (obs: web3n.startup.BootProcessObserver) => (() => void);
+		coreInit: Promise<void>;
+	}|undefined> {
+		const { promise: midPromise, resolve: midDone } = defer<IdManager>();
+		const { watchBoot, emitBootEvent } = makeForBootEvents();
+		const keyOpened = await this.initForExistingUserWithCache(
+			userId, async () => storageKey, midDone, emitBootEvent
+		);
+		if (keyOpened) {
+			const coreInit = midPromise.then(idManager => {
+				this.idManager = idManager;
+			});
+			return { coreInit, watchBoot };
+		}
+	}
+
+	getRootKey(user: string, pass: string, progressCB: ProgressCB): Promise<Uint8Array|undefined> {
+		return this.storages.getRootKey(user, pass, progressCB, this.cryptor.cryptor);
+	}
 
 	private async initForNewUser(
 		u: CreatedUser, done: Deferred<IdManager>['resolve'], emitBootEvent: (ev: BootEvent) => void

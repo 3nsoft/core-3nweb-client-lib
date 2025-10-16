@@ -16,13 +16,13 @@
 */
 
 import { GetSigner } from '../id-manager';
-import { GenerateKey } from '../startup/sign-in';
+import { GenerateKey, makeKeyGenProgressCB } from '../startup/sign-in';
 import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/xsp-fs/common';
 import { XspFS as xspFS } from '../../lib-client/xsp-fs/fs';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
 import { ServiceLocator } from '../../lib-client/service-locator';
-import { ScryptGenParams } from '../../lib-client/key-derivation';
+import { deriveStorageSKey, ScryptGenParams } from '../../lib-client/key-derivation';
 import { FileException, makeFileException } from '../../lib-common/exceptions/file';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { makeFSCollection, readonlyWrapFSCollection } from '../../lib-client/fs-utils/fs-collection';
@@ -37,6 +37,7 @@ import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from 
 import { AppDataFolders } from './system-folders/apps-data';
 import { SYSTEM_PREFIX } from './common/constants';
 import { assert } from '../../lib-common/assert';
+import { Cryptor } from '../../cryptors';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -46,6 +47,7 @@ type StorageType = web3n.storage.StorageType;
 type FSCollection = web3n.files.FSCollection;
 type FSItem = web3n.files.FSItem;
 type StorageException = web3n.storage.StorageException;
+type ProgressCB = web3n.startup.ProgressCB;
 
 function makeBadAppNameExc(appName: string): StorageException {
 	return {
@@ -175,6 +177,19 @@ class StorageAndFS<T extends Storage> {
 			s.syncedAppDataRoots = await AppDataFolders.make(s.rootFS);
 		}
 		return s;
+	}
+
+	async canKeyOpenRootObj(key: Uint8Array): Promise<boolean> {
+		try {
+			await xspFS.fromExistingRoot(this.storage, key);
+			return true;
+		} catch (err) {
+			if ((err as EncryptionException).failedCipherVerification) {
+				return false;
+			} else {
+				throw err;
+			}
+		}
 	}
 
 	/**
@@ -323,6 +338,17 @@ export class Storages implements FactoryOfFSs {
 			throw new Error(`Cannot provide ${type} storage via synced storage`);
 		}
 	};
+
+	async getRootKey(
+		user: string, pass: string, progressCB: ProgressCB, cryptor: Cryptor
+	): Promise<Uint8Array|undefined> {
+		const storeKeyProgressCB = makeKeyGenProgressCB(0, 99, progressCB);
+		const storageDir = this.storageDirForUser(user);
+		const params = await readRootKeyDerivParamsFromCache(storageDir);
+		if (!params) { return; }
+		const key = await deriveStorageSKey(cryptor, pass, params, storeKeyProgressCB);
+		return (this.local?.canKeyOpenRootObj(key) ? key : undefined);
+	}
 
 	async startInitFromCache(
 		user: string, keyGen: GenerateKey,
