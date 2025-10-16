@@ -103,7 +103,6 @@ function completionAndObsOfProgress(progressCB: (p: number) => void): {
 	promise: Promise<boolean>;
 } {
 	let completion: Deferred<boolean>|undefined = defer();
-	// let doneRes: boolean|undefined;
 	const obs: Observer<ProgressValue> = {
 		next: ({ p, decrResult }) => {
 			if (typeof decrResult === 'boolean') {
