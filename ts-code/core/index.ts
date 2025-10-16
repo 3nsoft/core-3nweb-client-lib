@@ -124,16 +124,7 @@ export class Core {
 			return this.idManager.getId();
 		});
 
-		const coreAppsInit = coreInit.then(async () => {
-
-			// XXX This should be removed, at some point, as there will be no more
-			//     users with very old data folders.
-			await this.performDataMigrationsAtInit();
-
-			await this.initCoreApps(emitBootEvent);
-
-			this.isInitialized = true;
-		});
+		const coreAppsInit = coreInit.then(() => this.initCoreApps(emitBootEvent));
 
 		return { coreInit, coreAppsInit, capsForStartup };
 	};
@@ -148,9 +139,11 @@ export class Core {
 			userId, async () => storageKey, midDone, emitBootEvent
 		);
 		if (keyOpened) {
-			const coreInit = midPromise.then(idManager => {
+			const coreInit = midPromise
+			.then(idManager => {
 				this.idManager = idManager;
-			});
+			})
+			.then(() => this.initCoreApps(emitBootEvent));
 			return { coreInit, watchBoot };
 		}
 	}
@@ -449,6 +442,11 @@ export class Core {
 	}
 
 	private async initCoreApps(emitBootEvent: (ev: BootEvent|true) => void): Promise<void> {
+
+		// XXX This should be removed, at some point, as there will be no more
+		//     users with very old data folders.
+		await this.performDataMigrationsAtInit();
+
 		try {
 			const address = this.idManager!.getId();
 			const getSigner = this.idManager!.getSigner;
@@ -486,6 +484,8 @@ export class Core {
 			throw errWithCause(err, 'Failed to initialize core apps');
 		}
 		emitBootEvent(true);
+
+		this.isInitialized = true;
 	}
 
 	getStorages(): FactoryOfFSs {
