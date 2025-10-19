@@ -34,4 +34,6 @@ export { makeLogger } from './lib-client/logging/log-to-file';
 
 export const SYSTEM_DOMAIN = '3nweb.computer';
 
+export { checkServicesStartingFromSignup } from './lib-client/service-checks';
+
 Object.freeze(exports);
