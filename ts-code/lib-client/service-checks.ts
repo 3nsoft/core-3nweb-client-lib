@@ -66,7 +66,7 @@ export async function checkServicesStartingFromSignup(
 	}
 
 	async function checkFstServiceEndpoint(service: ServiceTypeDNSLabel, serviceUrl: string): Promise<void> {
-		progress?.({ start: true, service: 'mailerid', serviceUrl });
+		progress?.({ start: true, service, serviceUrl });
 		try{
 			if (service === 'mailerid') {
 				await mailerIdInfoAt(client, serviceUrl);
