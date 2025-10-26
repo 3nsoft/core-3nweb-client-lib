@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2023 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2023, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
 import { MsgPacker, PackJSON } from '../msg/packer';
-import { SingleProc } from '../../../lib-common/processes/synced';
+import { NamedProcs, SingleProc } from '../../../lib-common/processes/synced';
 import { utf8 } from '../../../lib-common/buffer-utils';
 import { ResourcesForSending, Attachments, SavedMsgToSend, SEG_SIZE_IN_K_QUATS, estimatePackedSizeOf } from './common';
 import { WIP, WIPstate } from './per-recipient-wip';
@@ -65,9 +65,11 @@ async function estimatedPackedSize(msgToSend: OutgoingMessage,
 
 export class Msg {
 
+	private static readonly progressSavingProcs = new NamedProcs();
+
 	private readonly sendingProc = new SingleProc();
 	private completionPromise: Deferred<DeliveryProgress>|undefined = undefined;
-	private readonly progressSavingProc = new SingleProc();
+	// private readonly progressSavingProc = new SingleProc();
 	private cancelled = false;
 	private sender: string = (undefined as any);
 	private recipients: string[] = (undefined as any);
@@ -123,9 +125,9 @@ export class Msg {
 	static async forRestart(
 		id: string, msgFS: WritableFS, r: ResourcesForSending
 	): Promise<Msg> {
-		const progress = await msgFS.readJSONFile<DeliveryProgress>(
-			PROGRESS_INFO_FILE_NAME
-		);
+		const progress = await Msg.progressSavingProcs.startOrChain(id, async () => {
+			return await msgFS.readJSONFile<DeliveryProgress>(PROGRESS_INFO_FILE_NAME);
+		});
 		if (progress.allDone) {
 			return new Msg(id, (undefined as any), progress, (undefined as any));
 		}
@@ -181,24 +183,21 @@ export class Msg {
 		this.r.notifyMsgProgress(this.id, jsonCopy(this.progress));
 		this.progressPublisher.next(jsonCopy(this.progress));
 		if (saveProgress) {
-			this.progressSavingProc.startOrChain(
-				() => this.msgFS.writeJSONFile(
-					PROGRESS_INFO_FILE_NAME, this.progress, {}
-				)
-			);
+			Msg.progressSavingProcs.startOrChain(this.id, async () => {
+				await this.msgFS.writeJSONFile(PROGRESS_INFO_FILE_NAME, this.progress, {});
+			});
 		}
 		if (this.isDone()) {
 			this.progressPublisher.complete();
-			this.progressSavingProc.startOrChain(async () => {
+			Msg.progressSavingProcs.startOrChain(this.id, async () => {
 				await this.msgFS.deleteFile(WIPS_INFO_FILE_NAME).catch(noop);
 				if (this.attachments) {
 					await this.attachments.deleteFrom(this.msgFS);
 				}
 			});
 		} else if (saveWIPs) {
-			this.progressSavingProc.startOrChain(async () => {
-				await this.msgFS.writeJSONFile(
-					WIPS_INFO_FILE_NAME, this.wipsInfo);
+			Msg.progressSavingProcs.startOrChain(this.id, async () => {
+				await this.msgFS.writeJSONFile(WIPS_INFO_FILE_NAME, this.wipsInfo);
 			});
 		}
 	}
@@ -262,7 +261,7 @@ export class Msg {
 	async cancelSending(): Promise<void> {
 		if (this.cancelled) { return; }
 		this.cancelled = true;
-		const filesProc = this.progressSavingProc.latestTaskAtThisMoment();
+		const filesProc = Msg.progressSavingProcs.latestTaskAtThisMoment(this.id);
 		if (!filesProc) { return; }
 		await filesProc.catch(() => {});
 		const exc: web3n.asmail.ASMailSendException = {

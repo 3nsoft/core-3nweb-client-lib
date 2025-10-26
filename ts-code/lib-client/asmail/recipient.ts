@@ -104,8 +104,10 @@ export class MailRecipient extends ServiceUser {
 			responseType: 'json'
 		});
 		if (rep.status === api.msgMetadata.SC.ok) {
-			const meta = api.sanitizedMeta(rep.data);
-			if (!meta) { throw makeException(rep, 'Malformed response'); }
+			const { meta, errMsg } = api.sanitizedMeta(rep.data);
+			if (!meta) {
+				throw makeException(rep, `Malformed message metadata in a server response: ${errMsg}`);
+			}
 			return meta;
 		} else if (rep.status === api.msgMetadata.SC.unknownMsg) {
 			throw makeMsgNotFoundException(msgId);
