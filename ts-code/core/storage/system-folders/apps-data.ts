@@ -90,7 +90,7 @@ export class AppDataFolders {
 	}
 
 	private async syncBeforeChange(): Promise<void> {
-		const { state } = await this.fs.v!.sync!.updateStatusInfo('');
+		const { state } = await this.fs.v!.sync!.status('');
 		if (state === 'behind') {
 			await this.fs.v!.sync!.adoptRemote('');
 		}

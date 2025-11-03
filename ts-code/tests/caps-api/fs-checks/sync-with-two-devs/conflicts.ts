@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -48,7 +48,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	// and upload changes from dev1
 	await dev1FS().v!.sync!.upload(file);
 	await dev1FS().v!.sync!.upload('');
-	folderStatus = await dev2FS().v!.sync!.updateStatusInfo('');
+	folderStatus = await dev2FS().v!.sync!.status('');
 	expect(folderStatus.state).toBe('conflicting');
 
 	expect(await dev2FS().readTxtFile(file))
@@ -135,7 +135,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await dev2FS().v!.sync!.upload(file);
 	await dev2FS().v!.sync!.upload(fileFromDev2);
 
-	folderStatus = await dev2FS().v!.sync!.updateStatusInfo('');
+	folderStatus = await dev2FS().v!.sync!.status('');
 	expect(folderStatus.state).toBe('conflicting');
 	expect(folderStatus.remote?.latest).toBe(2);
 
@@ -189,9 +189,9 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
 	await dev1FS().v!.sync!.upload(file);
 	await dev1FS().v!.sync!.upload('');
-	await dev2FS().v!.sync!.updateStatusInfo('');
+	await dev2FS().v!.sync!.status('');	// implicit check of server
 	await dev2FS().v!.sync!.adoptRemote('');
-	let fileStatus = await dev2FS().v!.sync!.updateStatusInfo(file);
+	let fileStatus = await dev2FS().v!.sync!.status(file);
 	expect(fileStatus.state).withContext(`when a file system item is brought the first time from a server, its state should necessarily be synced`)
 	.toBe('synced');
 	const fstObservedVersion = fileStatus.synced!.latest!;
@@ -199,7 +199,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	// change file on dev1 and propagate
 	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(200));
 	await dev1FS().v!.sync!.upload(file);
-	fileStatus = await dev2FS().v!.sync!.updateStatusInfo(file);
+	fileStatus = await dev2FS().v!.sync!.status(file);
 	expect(fileStatus.state).withContext(`changes to a file system item that come from a server can be adopted only explicitly, and state should indicate that current version is behind remote one`).toBe('behind');
 	expect(fileStatus.remote!.latest!).toBeGreaterThan(fstObservedVersion);
 
@@ -246,7 +246,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
 	await dev1FS().v!.sync!.upload(file);
 	await dev1FS().v!.sync!.upload('');
-	await dev2FS().v!.sync!.updateStatusInfo('');
+	await dev2FS().v!.sync!.status('');	// implicit check of server
 	await dev2FS().v!.sync!.adoptRemote('');
 
 	// change file on dev1 and dev2
@@ -255,7 +255,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	// and upload changes from dev1 to reach conflict on dev2
 	await dev1FS().v!.sync!.upload(file);
-	let fileStatusOnDev2 = await dev2FS().v!.sync!.updateStatusInfo(file);
+	let fileStatusOnDev2 = await dev2FS().v!.sync!.status(file);
 	expect(fileStatusOnDev2.state).toBe('conflicting');
 
 	// push version on dev2 higher to see it going down to uploaded level
@@ -272,7 +272,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(fileStatusOnDev2.state).toBe('synced');
 	expect(fileStatusOnDev2.synced!.latest!).toBe(remoteVersionBeforeUpload+1);
 
-	await dev1FS().v!.sync!.updateStatusInfo(file);
+	await dev1FS().v!.sync!.status(file);	// implicit check of server
 	await dev1FS().v!.sync!.adoptRemote(file);
 	expect(await dev2FS().readTxtFile(file))
 	.toBe(await dev1FS().readTxtFile(file));
@@ -289,7 +289,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
 	await dev1FS().v!.sync!.upload(file);
 	await dev1FS().v!.sync!.upload('');
-	await dev2FS().v!.sync!.updateStatusInfo('');
+	await dev2FS().v!.sync!.status('');	// implicit check of server
 	await dev2FS().v!.sync!.adoptRemote('');
 
 	// change file on dev1 and dev2
@@ -298,7 +298,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	// and upload changes from dev1 to reach conflict on dev2
 	await dev1FS().v!.sync!.upload(file);
-	let fileStatusOnDev2 = await dev2FS().v!.sync!.updateStatusInfo(file);
+	let fileStatusOnDev2 = await dev2FS().v!.sync!.status(file);
 	expect(fileStatusOnDev2.state).toBe('conflicting');
 	expect(fileStatusOnDev2.remote!.latest!).toBe(2);
 
@@ -324,7 +324,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(fileStatusOnDev2.synced!.latest!).toBe(3);
 	expect(fileStatusOnDev2.local!.latest!).toBe(longWrite.version);
 
-	await dev1FS().v!.sync!.updateStatusInfo(file);
+	await dev1FS().v!.sync!.status(file);
 	await dev1FS().v!.sync!.adoptRemote(file);
 	expect(await dev1FS().readTxtFile(file)).toBe(contentBeforeUpload);
 
@@ -333,7 +333,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(fileStatusOnDev2.state).toBe('synced');
 	expect(fileStatusOnDev2.synced!.latest!).toBe(4);
 
-	await dev1FS().v!.sync!.updateStatusInfo(file);
+	await dev1FS().v!.sync!.status(file);
 	await dev1FS().v!.sync!.adoptRemote(file);
 	expect(await dev2FS().readTxtFile(file))
 	.toBe(await dev1FS().readTxtFile(file));

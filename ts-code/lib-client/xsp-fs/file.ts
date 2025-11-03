@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -333,10 +333,9 @@ class S implements WritableFileSyncAPI {
 		return uploadVersion;
 	}
 
-	async status(): Promise<SyncStatus> {
+	async status(skipServerCheck = false): Promise<SyncStatus> {
 		const node = await this.n.getNode();
-		const status = await node.syncStatus();
-		return status;
+		return await (skipServerCheck ? node.syncStatus() : node.updateStatusInfo());
 	}
 
 	async updateStatusInfo(): Promise<SyncStatus> {

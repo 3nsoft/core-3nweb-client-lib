@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -116,7 +116,6 @@ function wrapWritableFileSyncAPI(
 	if (!sImpl) { return; }
 	const w: WritableFileSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
@@ -172,7 +171,6 @@ function wrapReadonlyFileSyncAPI(
 	if (!sImpl) { return; }
 	const w: ReadonlyFileSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
@@ -271,7 +269,6 @@ function wrapWritableFSSyncAPI(
 	if (!sImpl) { return; }
 	const w: WritableFSSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
@@ -336,7 +333,6 @@ function wrapReadonlyFSSyncAPI(
 	if (!sImpl) { return; }
 	const w: ReadonlyFSSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		updateStatusInfo: sImpl.updateStatusInfo.bind(sImpl),
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),

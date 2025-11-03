@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -88,10 +88,10 @@ it.func = async function({ dev1FS, dev2FS, dev2 }) {
 	await dev2.start();
 	fs2 = dev2FS();
 
-	status = await fs2.v!.sync!.status('');
+	status = await fs2.v!.sync!.status('', true);
 	expect(status.state).toBe('synced');
 
-	status = await fs2.v!.sync!.updateStatusInfo('');
+	status = await fs2.v!.sync!.status('');
 
 	expect(status.state).toBe('behind');
 
@@ -258,7 +258,6 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	// and on the second device
 
-	await fs2.v!.sync!.updateStatusInfo('');
 	expect((await fs2.v!.sync!.status('')).state).toBe('behind');
 	await fs2.v!.sync!.adoptRemote('');
 

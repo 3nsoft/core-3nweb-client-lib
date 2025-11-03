@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf, methodPathFor } from "../ipc-via-protobuf/protobuf-msg";
+import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf, methodPathFor, boolValType } from "../ipc-via-protobuf/protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
@@ -93,9 +93,7 @@ export function makeFileCaller(
 			const vsPath = methodPathFor<ReadonlyFileVersionedAPI>(vPath, 'sync');
 			file.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
-				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
-				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(
-					caller, vsPath),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				download: vsDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
 			} as WritableFileSyncAPI;
@@ -122,22 +120,16 @@ export function exposeFileService(
 		stat: stat.wrapService(file.stat)
 	} as ExposedObj<WritableFile>;
 	if (file.writable) {
-		implExp.copy = copy.wrapService(
-			(file as WritableFile).copy, expServices);
-		implExp.getByteSink = getByteSink.wrapService(
-			(file as WritableFile).getByteSink, expServices);
-		implExp.updateXAttrs = updateXAttrs.wrapService(
-			(file as WritableFile).updateXAttrs);
-		implExp.writeBytes = writeBytes.wrapService(
-			(file as WritableFile).writeBytes);
-		implExp.writeJSON = writeJSON.wrapService(
-			(file as WritableFile).writeJSON);
+		implExp.copy = copy.wrapService((file as WritableFile).copy, expServices);
+		implExp.getByteSink = getByteSink.wrapService((file as WritableFile).getByteSink, expServices);
+		implExp.updateXAttrs = updateXAttrs.wrapService((file as WritableFile).updateXAttrs);
+		implExp.writeBytes = writeBytes.wrapService((file as WritableFile).writeBytes);
+		implExp.writeJSON = writeJSON.wrapService((file as WritableFile).writeJSON);
 		implExp.writeTxt = writeTxt.wrapService((file as WritableFile).writeTxt);
 	}
 	if (file.v) {
 		implExp.v = {
-			getByteSource: vGetByteSource.wrapService(
-				file.v.getByteSource, expServices),
+			getByteSource: vGetByteSource.wrapService(file.v.getByteSource, expServices),
 			getXAttr: vGetXAttr.wrapService(file.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(file.v.listXAttrs),
 			readBytes: vReadBytes.wrapService(file.v.readBytes),
@@ -146,34 +138,27 @@ export function exposeFileService(
 			listVersions: vListVersions.wrapService(file.v.listVersions)
 		} as ExposedObj<WritableFileVersionedAPI>;
 		if (file.writable) {
-			implExp.v.copy = vCopy.wrapService(
-				(file.v as WritableFileVersionedAPI).copy, expServices);
+			implExp.v.copy = vCopy.wrapService((file.v as WritableFileVersionedAPI).copy, expServices);
 			implExp.v.getByteSink = vGetByteSink.wrapService(
-				(file.v as WritableFileVersionedAPI).getByteSink, expServices);
-			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService(
-				(file.v as WritableFileVersionedAPI).updateXAttrs);
-			implExp.v.writeBytes = vWriteBytes.wrapService(
-				(file.v as WritableFileVersionedAPI).writeBytes);
-			implExp.v.writeJSON = vWriteJSON.wrapService(
-				(file.v as WritableFileVersionedAPI).writeJSON);
-			implExp.v.writeTxt = vWriteTxt.wrapService(
-				(file.v as WritableFileVersionedAPI).writeTxt);
+				(file.v as WritableFileVersionedAPI).getByteSink, expServices
+			);
+			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService((file.v as WritableFileVersionedAPI).updateXAttrs);
+			implExp.v.writeBytes = vWriteBytes.wrapService((file.v as WritableFileVersionedAPI).writeBytes);
+			implExp.v.writeJSON = vWriteJSON.wrapService((file.v as WritableFileVersionedAPI).writeJSON);
+			implExp.v.writeTxt = vWriteTxt.wrapService((file.v as WritableFileVersionedAPI).writeTxt);
 			implExp.v.archiveCurrent = vArchiveCurrent.wrapService(
-				(file.v as WritableFileVersionedAPI).archiveCurrent);
+				(file.v as WritableFileVersionedAPI).archiveCurrent
+			);
 		}
 		if (file.v.sync) {
 			implExp.v.sync = {
 				status: vsStatus.wrapService(file.v.sync.status),
-				updateStatusInfo: vsUpdateStatusInfo.wrapService(
-					file.v.sync.updateStatusInfo),
-				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(
-					file.v.sync.isRemoteVersionOnDisk),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(file.v.sync.isRemoteVersionOnDisk),
 				download: vsDownload.wrapService(file.v.sync.download),
 				adoptRemote: vsAdoptRemote.wrapService(file.v.sync.adoptRemote),
 			} as ExposedObj<WritableFileSyncAPI>;
 			if (file.writable) {
-				implExp.v.sync.upload = vsUpload.wrapService(
-					(file.v.sync as WritableFileSyncAPI).upload);
+				implExp.v.sync.upload = vsUpload.wrapService((file.v.sync as WritableFileSyncAPI).upload);
 			}
 		}
 	}
@@ -1487,8 +1472,8 @@ Object.freeze(vGetByteSink);
 namespace vsStatus {
 
 	export function wrapService(fn: ReadonlyFileSyncAPI['status']): ExposedFn {
-		return () => {
-			const promise = fn()
+		return buf => {
+			const promise = fn(boolValType.unpack(buf).value)
 			.then(packSyncStatus);
 			return { promise };
 		};
@@ -1498,40 +1483,13 @@ namespace vsStatus {
 		caller: Caller, objPath: string[]
 	): ReadonlyFileSyncAPI['status'] {
 		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'status');
-		return () => caller
-		.startPromiseCall(path, undefined)
+		return (skipServerCheck) => caller
+		.startPromiseCall(path, boolValType.pack(toVal(!!skipServerCheck)))
 		.then(unpackSyncStatus);
 	}
 
 }
 Object.freeze(vsStatus);
-
-
-namespace vsUpdateStatusInfo {
-
-	export function wrapService(
-		fn: ReadonlyFileSyncAPI['updateStatusInfo']
-	): ExposedFn {
-		return () => {
-			const promise = fn()
-			.then(packSyncStatus);
-			return { promise };
-		};
-	}
-
-	export function makeCaller(
-		caller: Caller, objPath: string[]
-	): ReadonlyFileSyncAPI['updateStatusInfo'] {
-		const path = methodPathFor<ReadonlyFileSyncAPI>(
-			objPath, 'updateStatusInfo'
-		);
-		return () => caller
-		.startPromiseCall(path, undefined)
-		.then(unpackSyncStatus);
-	}
-
-}
-Object.freeze(vsUpdateStatusInfo);
 
 
 namespace vsIsRemoteVersionOnDisk {

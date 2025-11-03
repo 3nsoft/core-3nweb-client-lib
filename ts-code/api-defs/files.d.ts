@@ -574,12 +574,11 @@ declare namespace web3n.files {
 	interface ReadonlyFileSyncAPI {
 
 		/**
-		 * Returns synchronization status of this object, as is currently known
-		 * here without checking remote server.
+		 * Returns synchronization status of this object.
+		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
+		 * situations. Default is false.
 		 */
-		status(): Promise<SyncStatus>;
-
-		updateStatusInfo(): Promise<SyncStatus>;
+		status(skipServerCheck?: boolean): Promise<SyncStatus>;
 
 		isRemoteVersionOnDisk(
 			version: number
@@ -1177,12 +1176,12 @@ declare namespace web3n.files {
 	interface ReadonlyFSSyncAPI {
 
 		/**
-		 * Returns synchronization status of this object, as is currently known
-		 * here without checking remote server.
+		 * Returns synchronization status of item at given path.
+		 * @param path
+		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
+		 * situations. Default is false.
 		 */
-		status(path: string): Promise<SyncStatus>;
-
-		updateStatusInfo(path: string): Promise<SyncStatus>;
+		status(path: string, skipServerCheck?: boolean): Promise<SyncStatus>;
 
 		isRemoteVersionOnDisk(
 			path: string, version: number

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -77,7 +77,10 @@ export class IdKeysStorage {
 			return json.keys[0];
 		} catch (exc) {
 			if (!(exc as FileException).notFound) { throw exc; }
-			await this.fs.v.sync.updateStatusInfo('');
+
+			// XXX this isn't a complete story, and needs proper implementation
+
+			await this.fs.v.sync.status('');
 			await this.fs.v.sync.adoptRemote('');
 			if (await this.fs.checkFilePresence(LOGIN_KEY_FILE_NAME)) {
 				return this.getSavedKey();

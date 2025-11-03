@@ -464,12 +464,11 @@ message ArchiveCurrentRequestBody {
 // ==== ReadonlyFSSyncAPI referable object ====
 
 // --- ReadonlyFSSyncAPI.status ---
-// Request body is PathOnlyRequestBody
-// Reply body is file.SyncState
-
-// --- ReadonlyFSSyncAPI.updateStatusInfo ---
-// Request body is PathOnlyRequestBody
-// Reply body is file.SyncState
+// Reply body is file.SyncStatusMsg
+message FSSyncStatusRequestBody {
+	string path = 1;
+	bool skip_server_check = 2;
+}
 
 // --- ReadonlyFSSyncAPI.isRemoteVersionOnDisk ---
 message FSSyncIsOnDiskRequestBody {

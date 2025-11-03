@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -49,7 +49,7 @@ it.func = async function(s) {
 	const file1 = 'some folder/file 1';
 
 	const v1 = await testFS.v!.writeBytes(file1, await randomBytes(10));
-	let syncStatus = await testFS.v!.sync!.status(file1);
+	let syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.state).toBe('unsynced');
 	expect(syncStatus.synced).toBeUndefined();
 	expect(syncStatus.local).toBeDefined();
@@ -57,7 +57,7 @@ it.func = async function(s) {
 
 	// file version written as a whole
 	const v2 = await testFS.v!.writeBytes(file1, await randomBytes(10));
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.local!.latest).toBe(v2);
 
 	try {
@@ -74,7 +74,7 @@ it.func = async function(s) {
 	.withContext(`first uploaded version should be equal to 1`)
 	.toBe(1);
 
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.state).toBe('synced');
 	expect(syncStatus.synced).toBeDefined();
 	expect(syncStatus.local).toBeUndefined();
@@ -88,7 +88,7 @@ it.func = async function(s) {
 	expect(v3).withContext(`normal increase of version by 1`).toBe(2);
 	await sink3.splice(10, 0, await randomBytes(10));
 	await sink3.done();
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.local!.latest).toBe(v3);
 
 	// note upload of latest version, when version isn't given
@@ -104,21 +104,21 @@ it.func = async function(s) {
 	sink = (await testFS.v!.getByteSink(file1, { truncate: false })).sink;
 	await sink.splice(25, 0, await randomBytes(10));
 	await sink.done();
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.local!.latest).toBe(v3 + 2);
 
 	uploadedVersion = await testFS.v!.sync!.upload(file1);
 	expect(uploadedVersion)
 	.withContext(`next uploaded version increases by 1`)
 	.toBe(3);
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 
 	// upload of uploaded is a noop
 	uploadedVersion = await testFS.v!.sync!.upload(file1);
 	expect(uploadedVersion)
 	.withContext(`noop returns no version, as nothing was uploaded`)
 	.toBeUndefined();
-	expect(deepEqual(syncStatus, await testFS.v!.sync!.status(file1)))
+	expect(deepEqual(syncStatus, await testFS.v!.sync!.status(file1, true)))
 	.withContext(`nothing changed with noop`)
 	.toBeTrue();
 
@@ -135,7 +135,7 @@ it.func = async function(s) {
 	// file version written as a whole
 	await testFS.v!.writeBytes(file1, await randomBytes(3*mb));
 	await testFS.v!.sync!.upload(file1);
-	let syncStatus = await testFS.v!.sync!.status(file1);
+	let syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.synced!.latest)
 	.withContext(`first uploaded version should be equal to 1`).toBe(1);
 	expect((await testFS.stat(file1)).version!).toBe(1);
@@ -148,7 +148,7 @@ it.func = async function(s) {
 	await sinkForV2.splice(2*mb, 0, await randomBytes(2*mb));
 	await sinkForV2.done();
 	await testFS.v!.sync!.upload(file1);
-	syncStatus = await testFS.v!.sync!.status(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.synced!.latest)
 	.withContext(`next uploaded version increases by 1`).toBe(2);
 
@@ -165,7 +165,7 @@ it.func = async function(s) {
 	expect(await testFS.checkFolderPresence(folder)).toBeFalse();
 	await testFS.writeBytes(childPath, await randomBytes(10));
 	expect(await testFS.checkFolderPresence(folder)).toBeTrue();
-	let syncStatus = await testFS.v!.sync!.status(childPath);
+	let syncStatus = await testFS.v!.sync!.status(childPath, true);
 	expect(syncStatus.synced).toBeUndefined();
 	expect(syncStatus.existsInSyncedParent).toBeFalsy();
 
@@ -181,21 +181,21 @@ it.func = async function(s) {
 
 	// upload child and update into unsynced state
 	await testFS.v!.sync!.upload(childPath);
-	syncStatus = await testFS.v!.sync!.status(childPath);
+	syncStatus = await testFS.v!.sync!.status(childPath, true);
 	expect(syncStatus.state).toBe('synced');
 	expect(syncStatus.existsInSyncedParent).toBeFalsy();
 	await testFS.writeBytes(childPath, await randomBytes(20));
-	syncStatus = await testFS.v!.sync!.status(childPath);
+	syncStatus = await testFS.v!.sync!.status(childPath, true);
 	expect(syncStatus.synced).toBeDefined();
 	expect(syncStatus.state).toBe('unsynced');
 	expect(syncStatus.existsInSyncedParent).toBeFalsy();
 
 	await testFS.v!.sync!.upload(folder);
-	syncStatus = await testFS.v!.sync!.status(folder);
+	syncStatus = await testFS.v!.sync!.status(folder, true);
 	expect(syncStatus.state).toBe('synced');
 
 	// note again that upload is not uploading children
-	syncStatus = await testFS.v!.sync!.status(childPath);
+	syncStatus = await testFS.v!.sync!.status(childPath, true);
 	expect(syncStatus.state).toBe('unsynced');
 	expect(syncStatus.existsInSyncedParent).toBeTruthy();
 

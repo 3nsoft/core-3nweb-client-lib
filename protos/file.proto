@@ -266,12 +266,8 @@ message ArchiveCurrentRequestBody {
 // ==== ReadonlyFileSyncAPI referable object ====
 
 // --- ReadonlyFileSyncAPI.status ---
-// Request body is empty
+// Request body is common.BooleanValue
 // Reply body is SyncStatusMsg
-
-// --- ReadonlyFileSyncAPI.updateStatusInfo ---
-// Request body is PathOnlyRequestBody
-// Reply body is SyncState
 
 // --- ReadonlyFileSyncAPI.isRemoteVersionOnDisk ---
 message FileSyncIsOnDiskRequestBody {

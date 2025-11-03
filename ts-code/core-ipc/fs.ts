@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -123,18 +123,14 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 			const vsPath = methodPathFor<ReadonlyFSVersionedAPI>(vPath, 'sync');
 			fs.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
-				updateStatusInfo: vsUpdateStatusInfo.makeCaller(caller, vsPath),
-				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(
-					caller, vsPath),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				download: vsDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
-				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(
-					caller, vsPath)
+				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(caller, vsPath)
 			} as WritableFSSyncAPI;
 			if (fs.writable) {
 				fs.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
-				fs.v.sync!.adoptRemoteFolderItem =
-					vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
+				fs.v.sync!.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
 			}
 		}
 	}
@@ -157,8 +153,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 		readJSONFile: readJSONFile.wrapService(fs.readJSONFile),
 		readTxtFile: readTxtFile.wrapService(fs.readTxtFile),
 		readonlyFile: readonlyFile.wrapService(fs.readonlyFile, expServices),
-		readonlySubRoot: readonlySubRoot.wrapService(
-			fs.readonlySubRoot, expServices),
+		readonlySubRoot: readonlySubRoot.wrapService(fs.readonlySubRoot, expServices),
 		select: select.wrapService(fs.select, expServices),
 		stat: stat.wrapService(fs.stat),
 		watchFolder: watch.wrapService(fs.watchFolder, packFSEvent),
@@ -167,41 +162,26 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 	} as ExposedObj<WritableFS>;
 	if (fs.writable) {
 		implExp.copyFile = copyFile.wrapService((fs as WritableFS).copyFile);
-		implExp.copyFolder = copyFolder.wrapService(
-			(fs as WritableFS).copyFolder);
-		implExp.deleteFile = deleteFile.wrapService(
-			(fs as WritableFS).deleteFile);
-		implExp.deleteFolder = deleteFolder.wrapService(
-			(fs as WritableFS).deleteFolder);
-		implExp.deleteLink = deleteLink.wrapService(
-			(fs as WritableFS).deleteLink);
-		implExp.getByteSink = getByteSink.wrapService(
-			(fs as WritableFS).getByteSink, expServices);
+		implExp.copyFolder = copyFolder.wrapService((fs as WritableFS).copyFolder);
+		implExp.deleteFile = deleteFile.wrapService((fs as WritableFS).deleteFile);
+		implExp.deleteFolder = deleteFolder.wrapService((fs as WritableFS).deleteFolder);
+		implExp.deleteLink = deleteLink.wrapService((fs as WritableFS).deleteLink);
+		implExp.getByteSink = getByteSink.wrapService((fs as WritableFS).getByteSink, expServices);
 		implExp.link = link.wrapService((fs as WritableFS).link, expServices);
-		implExp.makeFolder = makeFolder.wrapService(
-			(fs as WritableFS).makeFolder);
+		implExp.makeFolder = makeFolder.wrapService((fs as WritableFS).makeFolder);
 		implExp.move = move.wrapService((fs as WritableFS).move);
-		implExp.saveFile = saveFile.wrapService(
-			(fs as WritableFS).saveFile, expServices);
-		implExp.saveFolder = saveFolder.wrapService(
-			(fs as WritableFS).saveFolder, expServices);
-		implExp.updateXAttrs = updateXAttrs.wrapService(
-			(fs as WritableFS).updateXAttrs);
-		implExp.writableFile = writableFile.wrapService(
-			(fs as WritableFS).writableFile, expServices);
-		implExp.writableSubRoot = writableSubRoot.wrapService(
-			(fs as WritableFS).writableSubRoot, expServices);
-		implExp.writeBytes = writeBytes.wrapService(
-			(fs as WritableFS).writeBytes);
-		implExp.writeJSONFile = writeJSONFile.wrapService(
-			(fs as WritableFS).writeJSONFile);
-		implExp.writeTxtFile = writeTxtFile.wrapService(
-			(fs as WritableFS).writeTxtFile);
+		implExp.saveFile = saveFile.wrapService((fs as WritableFS).saveFile, expServices);
+		implExp.saveFolder = saveFolder.wrapService((fs as WritableFS).saveFolder, expServices);
+		implExp.updateXAttrs = updateXAttrs.wrapService((fs as WritableFS).updateXAttrs);
+		implExp.writableFile = writableFile.wrapService((fs as WritableFS).writableFile, expServices);
+		implExp.writableSubRoot = writableSubRoot.wrapService((fs as WritableFS).writableSubRoot, expServices);
+		implExp.writeBytes = writeBytes.wrapService((fs as WritableFS).writeBytes);
+		implExp.writeJSONFile = writeJSONFile.wrapService((fs as WritableFS).writeJSONFile);
+		implExp.writeTxtFile = writeTxtFile.wrapService((fs as WritableFS).writeTxtFile);
 	}
 	if (fs.v) {
 		implExp.v = {
-			getByteSource: vGetByteSource.wrapService(
-				fs.v.getByteSource, expServices),
+			getByteSource: vGetByteSource.wrapService(fs.v.getByteSource, expServices),
 			getXAttr: vGetXAttr.wrapService(fs.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(fs.v.listXAttrs),
 			listFolder: vListFolder.wrapService(fs.v.listFolder),
@@ -212,37 +192,29 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 		} as ExposedObj<WritableFSVersionedAPI>;
 		if (fs.writable) {
 			implExp.v.getByteSink = vGetByteSink.wrapService(
-				(fs.v as WritableFSVersionedAPI).getByteSink, expServices);
-			implExp.v.writeBytes = vWriteBytes.wrapService(
-				(fs.v as WritableFSVersionedAPI).writeBytes);
-			implExp.v.writeJSONFile = vWriteJSONFile.wrapService(
-				(fs.v as WritableFSVersionedAPI).writeJSONFile);
-			implExp.v.writeTxtFile = vWriteTxtFile.wrapService(
-				(fs.v as WritableFSVersionedAPI).writeTxtFile);
-			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService(
-				(fs.v as WritableFSVersionedAPI).updateXAttrs);
-			implExp.v.archiveCurrent = vArchiveCurrent.wrapService(
-				(fs.v as WritableFSVersionedAPI).archiveCurrent);
+				(fs.v as WritableFSVersionedAPI).getByteSink, expServices
+			);
+			implExp.v.writeBytes = vWriteBytes.wrapService((fs.v as WritableFSVersionedAPI).writeBytes);
+			implExp.v.writeJSONFile = vWriteJSONFile.wrapService((fs.v as WritableFSVersionedAPI).writeJSONFile);
+			implExp.v.writeTxtFile = vWriteTxtFile.wrapService((fs.v as WritableFSVersionedAPI).writeTxtFile);
+			implExp.v.updateXAttrs = vUpdateXAttrs.wrapService((fs.v as WritableFSVersionedAPI).updateXAttrs);
+			implExp.v.archiveCurrent = vArchiveCurrent.wrapService((fs.v as WritableFSVersionedAPI).archiveCurrent);
 		}
 		if (fs.v.sync) {
 			implExp.v.sync = {
 				status: vsStatus.wrapService(fs.v.sync.status),
-				updateStatusInfo: vsUpdateStatusInfo.wrapService(
-					fs.v.sync.updateStatusInfo),
-				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(
-					fs.v.sync.isRemoteVersionOnDisk),
+				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(fs.v.sync.isRemoteVersionOnDisk),
 				download: vsDownload.wrapService(fs.v.sync.download),
 				adoptRemote: vsAdoptRemote.wrapService(fs.v.sync.adoptRemote),
-				diffCurrentAndRemoteFolderVersions:
-					vsDiffCurrentAndRemoteFolderVersions.wrapService(
-						fs.v.sync.diffCurrentAndRemoteFolderVersions)
+				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.wrapService(
+					fs.v.sync.diffCurrentAndRemoteFolderVersions
+				)
 			} as ExposedObj<WritableFSSyncAPI>;
 			if (fs.writable) {
-				implExp.v.sync.upload = vsUpload.wrapService(
-					(fs.v.sync as WritableFSSyncAPI).upload);
-				implExp.v.sync.adoptRemoteFolderItem =
-					vsAdoptRemoteFolderItem.wrapService(
-						(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem);
+				implExp.v.sync.upload = vsUpload.wrapService((fs.v.sync as WritableFSSyncAPI).upload);
+				implExp.v.sync.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.wrapService(
+					(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem
+				);
 			}
 		}
 	}
@@ -2604,10 +2576,15 @@ Object.freeze(vGetByteSink);
 
 namespace vsStatus {
 
+	const requestType = ProtoType.for<{
+		path: string;
+		skipServerCheck: boolean;
+	}>(pb.FSSyncStatusRequestBody);
+
 	export function wrapService(fn: ReadonlyFSSyncAPI['status']): ExposedFn {
 		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
+			const { path, skipServerCheck } = requestType.unpack(buf);
+			const promise = fn(path, skipServerCheck)
 			.then(file.packSyncStatus);
 			return { promise };
 		};
@@ -2617,41 +2594,13 @@ namespace vsStatus {
 		caller: Caller, objPath: string[]
 	): ReadonlyFSSyncAPI['status'] {
 		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'status');
-		return (path) => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
+		return (path, skipServerCheck) => caller
+		.startPromiseCall(ipcPath, requestType.pack({ path, skipServerCheck: !!skipServerCheck }))
 		.then(file.unpackSyncStatus);
 	}
 
 }
 Object.freeze(vsStatus);
-
-
-namespace vsUpdateStatusInfo {
-
-	export function wrapService(
-		fn: ReadonlyFSSyncAPI['updateStatusInfo']
-	): ExposedFn {
-		return buf => {
-			const { path } = reqWithPathType.unpack(buf);
-			const promise = fn(path)
-			.then(file.packSyncStatus);
-			return { promise };
-		};
-	}
-
-	export function makeCaller(
-		caller: Caller, objPath: string[]
-	): ReadonlyFSSyncAPI['updateStatusInfo'] {
-		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(
-			objPath, 'updateStatusInfo'
-		);
-		return (path) => caller
-		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
-		.then(file.unpackSyncStatus);
-	}
-
-}
-Object.freeze(vsUpdateStatusInfo);
 
 
 namespace vsIsRemoteVersionOnDisk {

@@ -1,5 +1,5 @@
 /*
- Copyright 2022 3NSoft Inc.
+ Copyright 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -82,7 +82,7 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 			await dev1AppFS.v!.sync!.upload(testFolder);
 			await dev1AppFS.v!.sync!.upload('');
 			const d2AppFS = await dev2AppFS();
-			const status =  await d2AppFS.v!.sync!.updateStatusInfo('');
+			const status =  await d2AppFS.v!.sync!.status('');
 			if (status.state === 'behind') {
 				await d2AppFS.v!.sync!.adoptRemote('');
 			} else if (status.state === 'conflicting') {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -46,7 +46,7 @@ it.func = async function(s) {
 	const { testFS } = s;
 	const file1 = 'some folder/file 1';
 	const v1 = await testFS.v!.writeBytes(file1, await randomBytes(10));
-	const syncStatus = await testFS.v!.sync!.status(file1);
+	const syncStatus = await testFS.v!.sync!.status(file1, true);
 	expect(syncStatus.state).toBe('unsynced');
 	expect(syncStatus.local!.latest).toBe(v1);
 	expect(syncStatus.synced).toBeUndefined();

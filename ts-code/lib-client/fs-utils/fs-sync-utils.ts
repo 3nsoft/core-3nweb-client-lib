@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,18 +24,11 @@ type FileException = web3n.files.FileException;
 type RemoteEvent = web3n.files.RemoteEvent;
 type FileEvent = web3n.files.FileEvent;
 type FolderEvent = web3n.files.FolderEvent;
+type ConnectException = web3n.ConnectException;
 
-export async function getRemoteFolderChanges(
-	fs: WritableFS, forceServerCheck = false
-): Promise<void> {
-	if (forceServerCheck) {
-		await fs.v!.sync!.updateStatusInfo('');
-	}
+export async function getRemoteFolderChanges(fs: WritableFS): Promise<void> {
 	let { state } = await fs.v!.sync!.status('');
 	if (state === 'behind') {
-		if (!forceServerCheck) {
-			await fs.v!.sync!.updateStatusInfo('');
-		}
 		await fs.v!.sync!.adoptRemote('');
 	} else if (state === 'conflicting') {
 		const path = ((typeof fs.name === 'string') ? fs.name : '');
@@ -64,11 +57,21 @@ export async function getOrMakeAndUploadFolderIn(
 	}
 }
 
+// XXX conflicts are app(let)-specific, hence, we can't have this "general" functionality.
 export async function uploadFolderChangesIfAny(fs: WritableFS): Promise<void> {
-	const { state } = await fs.v!.sync!.status('');
-	if (state === 'unsynced') {
-		await fs.v!.sync!.updateStatusInfo('');
-		await fs.v!.sync!.upload('');
+	try {
+		const { state } = await fs.v!.sync!.status('');
+		if (state === 'unsynced') {
+			await fs.v!.sync!.upload('');
+		} else if (state === 'conflicting') {
+			// XXX log conflicts error
+			
+		}
+	} catch (exc) {
+		if ((exc as ConnectException).type !== 'connect') {
+			// XXX log generic error
+
+		}
 	}
 }
 
