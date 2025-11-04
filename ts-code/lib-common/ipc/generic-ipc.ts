@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -77,6 +77,7 @@ interface EventException extends web3n.RuntimeException {
 	channel?: string;
 	duplexDisconnected?: true;
 	request?: string;
+	failToSubscribe?: true;
 }
 
 function makeEventException(params: Partial <EventException>): EventException {
@@ -773,8 +774,20 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 			}
 		}
 		const listener = new EventListener<T>(channel, observer, detach);
-		this.listeners.add(ipcChannel, listener);
-		this.channels.subscribeTo(ipcChannel);
+		this.channels.subscribeTo(ipcChannel).then(
+			() => this.listeners.add(ipcChannel, listener),
+			err => {
+				if (observer.error) {
+					observer.error(makeEventException({
+						cause: err,
+						failToSubscribe: true,
+						channel: ipcChannel
+					}));
+				} else {
+					observer.complete?.();
+				}
+			}
+		);
 		return detach;
 	}
 
@@ -809,9 +822,9 @@ class IpcEventChannels {
 		Object.freeze(this);
 	}
 
-	subscribeTo(ipcChannel: string): void {
+	async subscribeTo(ipcChannel: string): Promise<void> {
 		if (this.subscribedIpcChannels.has(ipcChannel)) { return; }
-		this.subscriptionProcs.startOrChain(ipcChannel, async () => {
+		await this.subscriptionProcs.startOrChain(ipcChannel, async () => {
 			if (this.subscribedIpcChannels.has(ipcChannel)) { return; }
 			this.subscribedIpcChannels.add(ipcChannel);
 			await this.subscribe(ipcChannel);

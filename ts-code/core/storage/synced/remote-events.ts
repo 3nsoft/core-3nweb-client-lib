@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription, merge, Observable, Subject, from } from 'rxjs';
+import { Subscription, merge, Observable, Subject, from, catchError } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';
@@ -66,20 +66,18 @@ export class RemoteEvents {
 			heartbeat.subscribe({
 				next: ev => this.connectionEvents.next(toStorageConnectionStatus(ev))
 			});
-			return client;
-		}))
-		.pipe(
-			map(client => merge(
+			return [
 				this.absorbObjChange(client),
 				this.absorbObjRemoval(client),
 
-				// XXX commenting out to see if unknownEvent exception goes away
-				//     Is server doesn't know it?
+				// XXX commenting out these for now, as server hasn't implemented these
 				// this.absorbObjVersionArchival(client),
-
-				this.absorbArchVersionRemoval(client)
-			)),
-			mergeMap(event$ => event$)
+				// this.absorbArchVersionRemoval(client)
+			];
+		}))
+		.pipe(
+			mergeMap(event$ => event$),
+			mergeMap(event$ => event$),
 		)
 		.subscribe({
 			next: noop,
