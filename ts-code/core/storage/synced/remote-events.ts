@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription, merge, Observable, Subject, from, catchError } from 'rxjs';
+import { Subscription, Observable, Subject, from } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';

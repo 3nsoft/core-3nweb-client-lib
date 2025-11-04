@@ -686,9 +686,7 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 	constructor(channel: string|undefined, comm: RawDuplex<Envelope>) {
 		super(channel, comm);
 		this.channels = new IpcEventChannels(
-			ipcChannel => this.makeRequest<void>(SUBSCRIBE_REQ_NAME, ipcChannel).catch(
-				err => this.completeEvent(ipcChannel, err)
-			),
+			ipcChannel => this.makeRequest<void>(SUBSCRIBE_REQ_NAME, ipcChannel),
 			ipcChannel => this.makeRequest<void>(UNSUBSCRIBE_REQ_NAME, ipcChannel).catch(_ => {})
 		);
 	}
@@ -827,7 +825,12 @@ class IpcEventChannels {
 		await this.subscriptionProcs.startOrChain(ipcChannel, async () => {
 			if (this.subscribedIpcChannels.has(ipcChannel)) { return; }
 			this.subscribedIpcChannels.add(ipcChannel);
-			await this.subscribe(ipcChannel);
+			try {
+				await this.subscribe(ipcChannel);
+			} catch (err) {
+				this.subscribedIpcChannels.delete(ipcChannel);
+				throw err;
+			}
 		});
 	}
 
