@@ -17,7 +17,7 @@
 import * as WebSocket from 'ws';
 import { IncomingMessage, OutgoingHttpHeaders } from 'http';
 import { SESSION_ID_HEADER, Reply } from './request-utils';
-import { defer } from '../lib-common/processes/deferred';
+import { defer, Deferred } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
 import { globalAgent as agent } from 'https';
 
@@ -30,11 +30,13 @@ export function openSocket(
 	const headers: OutgoingHttpHeaders = {};
 	headers[SESSION_ID_HEADER] = sessionId;
 	const ws = new WebSocket(url, { headers, agent });
-	const opening = defer<Reply<WebSocket>>();
-	const initOnError = (err: any) => opening.reject(makeConnectionException(
-		url, undefined,
-		`Cannot open websocket connection due to error: ${err.message}`
-	));
+	let opening: Deferred<Reply<WebSocket>>|undefined = defer<Reply<WebSocket>>();
+	const initOnError = (err: any) => {
+		opening?.reject(makeConnectionException(
+			url, undefined, `WebSocket connection error: ${err.message}`
+		));
+		opening = undefined;
+	};
 	const onNonOkReply = (req, res: IncomingMessage) => {
 		const errReply: Reply<WebSocket> = {
 			url,
@@ -42,7 +44,8 @@ export function openSocket(
 			status: res.statusCode!,
 			data: (undefined as any)
 		};
-		opening.resolve(errReply);
+		opening?.resolve(errReply);
+		opening = undefined;
 	};
 	ws.on('error', initOnError);
 	ws.on('unexpected-response', onNonOkReply);
@@ -53,10 +56,15 @@ export function openSocket(
 			status: 200,
 			data: ws
 		};
-		opening.resolve(okReply);
+		opening?.resolve(okReply);
+		opening = undefined;
 		ws.removeListener('error', initOnError);
 		ws.removeListener('unexpected-response', onNonOkReply);
 	});
+	ws.on('error', err => {
+		// XXX we need 
+		console.error(`Error in ${ws.url} connection`, err);
+	})
 	return opening.promise;
 }
 

@@ -202,5 +202,29 @@ it.func = async function(s) {
 };
 specs.its.push(it);
 
+it = { expectation: `can push operations concurrently` };
+it.func = async function(s) {
+	const { testFS } = s;
+
+	// let's make and upload folder
+	const folder = await testFS.writableSubRoot('folder-to-upload');
+	await folder.v!.sync!.upload('');
+
+	// let's make child entries and upload them, one-by-one
+	const children = [1, 2, 3, 4, 5].map(i => `child-file-${i}`);
+	const someContent = await randomBytes(50);
+	await Promise.all(children.map(child => folder.writeBytes(child, someContent)));
+	await Promise.all(children.map(child => folder.v!.sync!.upload(child)));
+	await folder.v!.sync!.upload('');
+	expect(((await folder.listFolder('')).length)).toBe(children.length);
+
+	// this used to produce errors
+	await Promise.all(children.map(child => folder.deleteFile(child)));
+	await folder.v!.sync!.upload('');
+	expect(((await folder.listFolder('')).length)).toBe(0);
+
+};
+specs.its.push(it);
+
 
 Object.freeze(exports);

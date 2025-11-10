@@ -48,12 +48,11 @@ function makeJsonCommPoint(ws: WebSocket): {
 	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat(ws.url);
 
 	ws.on('message', data => {
-		if (typeof data !== 'string') { return; }
 		if (observers.done) { return; }
-		
+
 		let env: Envelope;
 		try {
-			env = JSON.parse(data);
+			env = JSON.parse((data as Buffer).toString('utf8'));
 		} catch (err) {
 			ws.close();
 			otherBeat(err, true);
