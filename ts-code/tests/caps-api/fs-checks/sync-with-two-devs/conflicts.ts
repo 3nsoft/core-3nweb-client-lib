@@ -162,8 +162,19 @@ it.func = async function({ dev1FS, dev2FS }) {
 	.toBe(await dev1FS().readTxtFile(fileFromDev1));
 	expect(await dev1FS().checkFilePresence(fileFromDev2)).toBeFalse();
 
+	// note need of explicit parameters when uploading from conflict state
+	folderStatus = await dev2FS().v!.sync!.status('');
+	expect(folderStatus.state).toBe('conflicting');
+	await dev2FS().v!.sync!.upload('').then(
+		() => fail(`Upload in conflict must require explicit parameters`),
+		(exc: FSSyncException) => {
+			expect(exc.type).toBe('fs-sync');
+			expect(exc.versionMismatch).toBeTrue();
+		}
+	);
+
 	// upload new version, now from dev2
-	await dev2FS().v!.sync!.upload('');
+	await dev2FS().v!.sync!.upload('', { uploadVersion: folderStatus.remote!.latest! + 1 });
 	folderStatus = await dev2FS().v!.sync!.status('');
 	expect(folderStatus.state).toBe('synced');
 	expect(folderStatus.synced?.latest).toBe(3);
@@ -266,7 +277,13 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect((await dev2FS().stat(file)).version!)
 	.toBeGreaterThan(remoteVersionBeforeUpload+1);
 
-	await dev2FS().v!.sync!.upload(file);
+	await dev2FS().v!.sync!.upload(file).then(
+		() => fail(`Upload in conflicting state should require explicit versioning`),
+		(exc: FSSyncException) => {
+			expect(exc.versionMismatch).toBeTrue();
+		}
+	);
+	await dev2FS().v!.sync!.upload(file, { uploadVersion: fileStatusOnDev2.remote!.latest! + 1 });
 
 	fileStatusOnDev2 = await dev2FS().v!.sync!.status(file);
 	expect(fileStatusOnDev2.state).toBe('synced');
@@ -312,7 +329,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	// start long write to run concurrent with upload
 	const longWrite = await dev2FS().v!.getByteSink(file);
 	// make concurrent upload
-	const uploadCompletion = dev2FS().v!.sync!.upload(file);
+	const uploadCompletion = dev2FS().v!.sync!.upload(file, { uploadVersion: fileStatusOnDev2.remote!.latest! + 1 });
 	await longWrite.sink.truncate(20);
 	// complete the write
 	await longWrite.sink.done();

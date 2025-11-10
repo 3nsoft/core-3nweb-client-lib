@@ -294,7 +294,8 @@ describe(`3NStorage`, () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/sync-with-two-devs'));
+			resolve(__dirname, 'fs-checks/sync-with-two-devs')
+		);
 
 	});
 

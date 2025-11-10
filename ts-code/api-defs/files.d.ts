@@ -77,6 +77,7 @@ declare namespace web3n.files {
 		removedOnServer?: true;
 		versionMismatch?: true;
 		conflict?: true;
+		isBehind?: true;
 		notSynced?: true;
 		remoteIsArchived?: true;
 		remoteFolderItemNotFound?: true;
@@ -497,6 +498,9 @@ declare namespace web3n.files {
 			flags?: VersionedReadFlags
 		): Promise<{ current?: number; archived?: number[]; }>;
 
+		/**
+		 * File from synced storage has this api
+		 */
 		sync?: ReadonlyFileSyncAPI;
 
 	}
@@ -567,6 +571,9 @@ declare namespace web3n.files {
 
 		archiveCurrent(version?: number): Promise<number>;
 
+		/**
+		 * File from synced storage has this api
+		 */
 		sync?: WritableFileSyncAPI;
 
 	}
@@ -580,12 +587,24 @@ declare namespace web3n.files {
 		 */
 		status(skipServerCheck?: boolean): Promise<SyncStatus>;
 
+		/**
+		 * Returns a state of on-disk cache.
+		 * @param version 
+		 */
 		isRemoteVersionOnDisk(
 			version: number
 		): Promise<'partial'|'complete'|'none'>;
 
+		/**
+		 * This downloads bytes onto disk, skipping decryption, as file content isn't read here.
+		 * @param version 
+		 */
 		download(version: number): Promise<void>;
 
+		/**
+		 * Adopts remote version.
+		 * @param opts options let one to pass exact remote version, to trigger download.
+		 */
 		adoptRemote(opts?: OptionsToAdopteRemote): Promise<void>;
 
 	}
@@ -598,6 +617,10 @@ declare namespace web3n.files {
 
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
 
+		/**
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * @param opts 
+		 */
 		upload(opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 	}
@@ -1106,6 +1129,9 @@ declare namespace web3n.files {
 			path: string
 		): Promise<{ current?: number; archived?: number[]; }>;
 
+		/**
+		 * Folder/FS from synced storage has this api
+		 */
 		sync?: ReadonlyFSSyncAPI;
 
 	}
@@ -1169,6 +1195,9 @@ declare namespace web3n.files {
 
 		archiveCurrent(path: string, version?: number): Promise<number>;
 
+		/**
+		 * Folder/FS from synced storage has this api
+		 */
 		sync?: WritableFSSyncAPI;
 
 	}
@@ -1183,14 +1212,33 @@ declare namespace web3n.files {
 		 */
 		status(path: string, skipServerCheck?: boolean): Promise<SyncStatus>;
 
+		/**
+		 * Returns a state of on-disk cache of an item in fs.
+		 * @param version 
+		 */
 		isRemoteVersionOnDisk(
 			path: string, version: number
 		): Promise<'partial'|'complete'|'none'>;
 
+		/**
+		 * This downloads bytes onto disk, skipping decryption, as item's content isn't read here.
+		 * @param path 
+		 * @param version 
+		 */
 		download(path: string, version: number): Promise<void>;
 
+		/**
+		 * Adopts remote version of fs object at given path
+		 * @param path 
+		 * @param opts options let one to pass exact remote version, to trigger download.
+		 */
 		adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void>;
 
+		/**
+		 * Calculates diff between current local and remote states of folder at given path.
+		 * @param path 
+		 * @param remoteVersion 
+		 */
 		diffCurrentAndRemoteFolderVersions(
 			path: string, remoteVersion?: number
 		): Promise<FolderDiff|undefined>;
@@ -1222,10 +1270,22 @@ declare namespace web3n.files {
 
 	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
 
+		/**
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * @param path 
+		 * @param opts 
+		 */
 		upload(
 			path: string, opts?: OptionsToUploadLocal
 		): Promise<number|undefined>;
 
+		/**
+		 * This method is for resolving conflicts on folders.
+		 * It adopts some folder items, and not the whole folder state.
+		 * @param path 
+		 * @param itemName 
+		 * @param opts 
+		 */
 		adoptRemoteFolderItem(
 			path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
 		): Promise<number>;

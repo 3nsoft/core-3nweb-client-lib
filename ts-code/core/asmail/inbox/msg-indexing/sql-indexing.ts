@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2022 - 2023, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -282,7 +282,7 @@ class SqliteFiles implements DBsFiles {
 		ensureCorrectFS(syncedFS, 'synced', true);
 		const files = new SqliteFiles(syncedFS);
 		const records = await files.makeRecords();
-		files.startSyncing();
+		// files.startSyncing();
 		return { files, records };
 	}
 

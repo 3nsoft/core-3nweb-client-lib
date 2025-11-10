@@ -128,22 +128,24 @@ export function observeFolderForOneEvent<T>(
 	fs: ReadonlyFS, path = ''
 ): Promise<T> {
 	return lastValueFrom(
-	(new Observable(
-		obs => fs.watchFolder(path, obs))
-	)
-	.pipe(
-		take(1)
-	)) as Promise<T>;
+		(new Observable(
+			obs => fs.watchTree(path, 1, obs)
+		))
+		.pipe(
+			take(1)
+		)
+	) as Promise<T>;
 }
 
 export function observeFileForOneEvent<T>(
 	fs: ReadonlyFS, path: string
 ): Promise<T> {
 	return lastValueFrom(
-	(new Observable(
-		obs => fs.watchFile(path, obs))
-	)
-	.pipe(
-		take(1)
-	)) as Promise<T>;
+		(new Observable(
+			obs => fs.watchFile(path, obs)
+		))
+		.pipe(
+			take(1)
+		)
+	) as Promise<T>;
 }

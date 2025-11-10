@@ -958,7 +958,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		opts: OptionsToUploadLocal|undefined
 	): Promise<number|undefined> {
 		try {
-			const toUpload = await this.needUpload(opts?.localVersion);
+			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
 			if (toUpload.createOnRemote) {
 				return await super.upload(opts);
@@ -1024,10 +1024,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		}
 	}
 
-	protected async needUpload(localVersion: number|undefined): Promise<{
+	protected async needUpload(opts: OptionsToUploadLocal|undefined): Promise<{
 		localVersion: number; uploadVersion: number; createOnRemote: boolean;
 	}|undefined> {
-		const toUpload = await super.needUpload(localVersion);
+		const toUpload = await super.needUpload(opts);
 		if (!toUpload) { return; }
 		const storage = this.syncedStorage();
 		if (toUpload.localVersion === this.version) {

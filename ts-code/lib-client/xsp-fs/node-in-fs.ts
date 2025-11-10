@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -397,10 +397,11 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		});
 	}
 
-	protected async needUpload(localVersion: number|undefined): Promise<{
+	protected async needUpload(opts: OptionsToUploadLocal|undefined): Promise<{
 		localVersion: number; uploadVersion: number; createOnRemote: boolean;
 	}|undefined> {
-		const { local, remote, synced } = await this.syncStatus();
+		const { local, remote, synced, state } = await this.syncStatus();
+		let localVersion = opts?.localVersion;
 		if (localVersion) {
 			if (localVersion !== this.currentVersion) {
 				throw makeFSSyncException(this.name, {
@@ -411,54 +412,82 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			}
 			if (!local || (local.latest !== localVersion)) {
 				throw makeFSSyncException(this.name, {
-					versionMismatch: true,
-					message: `No local version ${localVersion} to upload`
+					versionNotFound: true,
+					message: `There is no local version ${localVersion} to upload`
 				});
 			}
 		} else {
 			if (!local || !this.currentVersion) { return; }
 			localVersion = this.currentVersion;
 		}
-		if (remote) {
-			if (remote.latest) {
-				const uploadVersion = remote.latest+1;
-				return { createOnRemote: false, localVersion, uploadVersion };
-			} else {
-				throw makeFSSyncException(this.name, {
-					versionMismatch: true,
-					removedOnServer: true
-				});
-			}
-		} else if (synced) {
-			if (synced.latest) {
-				const uploadVersion = synced.latest+1;
-				return { createOnRemote: false, localVersion, uploadVersion };
-			} else {
-				throw makeFSSyncException(this.name, {
-					versionMismatch: true,
-					removedOnServer: true
-				});
-			}
-		} else {
-			const uploadVersion = 1;
-			return { createOnRemote: true, localVersion, uploadVersion };
+
+		if ((remote && !remote.latest) || (synced && !synced.latest)) {
+			throw makeFSSyncException(this.name, {
+				versionMismatch: true,
+				removedOnServer: true
+			});
 		}
+
+		let uploadVersion = opts?.uploadVersion;
+		if (state === 'unsynced') {
+			if (uploadVersion) {
+				if ((synced?.latest && ((synced.latest + 1) !== uploadVersion))) {
+					throw makeFSSyncException(this.name, {
+						versionMismatch: true,
+						message: `Given uploadVersion is ${uploadVersion} is not a +1 increment over synced version ${synced.latest ?? 0}, in unsynced state.`
+					});
+				}
+			} else {
+				uploadVersion = synced?.latest ? (synced?.latest + 1) : 1;
+			}
+		} else if (state === 'conflicting') {
+			if (uploadVersion) {
+				if (uploadVersion <= remote!.latest!) {
+					throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					conflict: true,
+					message: `Given upload version ${uploadVersion} is not greater than remote version ${remote?.latest}.`
+				});
+				}
+			} else {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					conflict: true,
+					message: `Upload version is not given during upload from conflicting state.`
+				});
+			}
+		} else if (state === 'behind') {
+			if (uploadVersion) {
+				if (uploadVersion <= remote!.latest!) {
+					throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					isBehind: true,
+					message: `Given upload version ${uploadVersion} is not greater than remote version ${remote?.latest}.`
+				});
+				}
+			} else {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					isBehind: true,
+					message: `Upload version is not given during upload when synced state is behind remote.`
+				});
+			}
+		} else if (state === 'synced') {
+			return;
+		} else {
+			throw new Error(`Unrecognized sync state ${state}`);
+		}
+		return { createOnRemote: (uploadVersion === 1), localVersion, uploadVersion };
 	}
 
-	async upload(
-		opts: OptionsToUploadLocal|undefined
-	): Promise<number|undefined> {
+	async upload(opts: OptionsToUploadLocal|undefined): Promise<number|undefined> {
 		try {
-			const toUpload = await this.needUpload(opts?.localVersion);
+			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
 			const { localVersion, createOnRemote, uploadVersion } = toUpload;
-			const uploadHeader = await this.uploadHeaderChange(
-				localVersion, uploadVersion);
+			const uploadHeader = await this.uploadHeaderChange(localVersion, uploadVersion);
 			const storage = this.syncedStorage();
-			await storage.upload(
-				this.objId, localVersion, uploadVersion, uploadHeader,
-				createOnRemote
-			);
+			await storage.upload(this.objId, localVersion, uploadVersion, uploadHeader, createOnRemote);
 			return await this.doChange(true, async () => {
 				storage.dropCachedLocalObjVersionsLessOrEqual(
 					this.objId, localVersion
@@ -490,9 +519,7 @@ Object.freeze(NodeInFS.prototype);
 Object.freeze(NodeInFS);
 
 
-function copyWithPathIfRemoteEvent(
-	e: RemoteEvent|FSEvent, path: string
-): RemoteEvent {
+function copyWithPathIfRemoteEvent(e: RemoteEvent|FSEvent, path: string): RemoteEvent {
 	switch (e.type) {
 		case 'remote-change':
 			return { type: e.type, path, newVersion: e.newVersion };
