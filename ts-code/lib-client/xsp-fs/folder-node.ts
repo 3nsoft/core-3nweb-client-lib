@@ -523,12 +523,11 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		// do action within transition state
 		const changeEvents = await change(state, version);
 
-		// save transition state
-		const encSub = await this.crypto.write(
-			state, version, attrs, this.xattrs);
+		// save new state
+		const encSub = await this.crypto.write(state, version, attrs, this.xattrs);
 		await this.storage.saveObj(this.objId, version, encSub);
 
-		// complete transition
+		// apply new state to in-memory object
 		this.currentState = state;
 		this.setCurrentVersion(version);
 		this.attrs = attrs;
@@ -851,20 +850,14 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		src: FSChangeSrc, passIdsForRmUpload = false
 	): Promise<ObjId[]|undefined> {
 		const childrenNodes = await this.doChange(true, async () => {
-			if (this.version < 0) { return; }
+			if (this.isMarkedRemoved) { return; }
 			const childrenNodes = await this.getAllNodes();
 			await this.removeThisFromStorageNodes(src);
 			return childrenNodes;
 		});
 		if (!childrenNodes || (childrenNodes.length === 0)) { return; }
 		if (this.isInSyncedStorage) {
-			if (passIdsForRmUpload) {
-				return this.removeChildrenObjsInSyncedStorage(
-					childrenNodes, src, true
-				);
-			} else {
-				this.removeChildrenObjsInSyncedStorage(childrenNodes, src, false);
-			}
+			return await this.removeChildrenObjsInSyncedStorage(childrenNodes, src, passIdsForRmUpload);
 		} else {
 			this.callRemoveObjOnAll(src, childrenNodes);
 		}
@@ -880,7 +873,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		childrenNodes: NodeInFS<NodePersistance>[], src: FSChangeSrc,
 		passIdsForRmUpload: boolean
 	): Promise<ObjId[]|undefined> {
-		if (this.version < 0) { return; }
+		if (this.isMarkedRemoved) { return; }
 		let uploadRmsHere: boolean;
 		let collectedIds: ObjId[]|undefined;
 		if (passIdsForRmUpload) {
@@ -915,8 +908,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				collectedIds!.push(child.objId);
 			}
 			if (child.type === 'folder') {
-				const ids = await (child as FolderNode).removeFolderObj(
-					src, passIdsForRmUpload);
+				const ids = await (child as FolderNode).removeFolderObj(src, passIdsForRmUpload);
 				if (ids) {
 					collectedIds!.push(...ids);
 				}				
@@ -1170,8 +1162,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			];
 		});
 		const origChild = await this.getOrMakeChildNodeForInfo(origChildNode!);
-		const removalsToUpload = (await this.removeChildrenObjsInSyncedStorage(
-			[ origChild ], 'sync', true))!;		
+		const removalsToUpload = (await this.removeChildrenObjsInSyncedStorage([ origChild ], 'sync', true))!;
 		this.uploadRemovalOfObjs(removalsToUpload);
 		return newVersion!;
 	}

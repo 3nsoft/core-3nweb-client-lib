@@ -139,15 +139,7 @@ export class SyncedStore implements ISyncedStorage {
 	): Promise<number|undefined> {
 		const obj = await this.getObjOrThrow(objId);
 		const objStatus = obj.statusObj();
-		await objStatus.adoptRemoteVersion(
-			opts?.remoteVersion, opts?.dropLocalVer
-		);
-		if (opts && opts.download) {
-
-			// XXX this needs implementation
-
-			throw new Error('SyncedStore.adoptRemote() with download option needs implementation, probably using SyncedStore.download().');
-		}
+		await objStatus.adoptRemoteVersion(opts?.remoteVersion);
 		this.files.scheduleGC(obj);
 		return objStatus.syncStatus().synced!.latest!;
 	}

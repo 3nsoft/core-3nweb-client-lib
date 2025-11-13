@@ -630,14 +630,12 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		}
 	}
 
-	async adoptRemoteVersion(
-		version?: number, dropLocalVer = false
-	): Promise<void> {
+	async adoptRemoteVersion(version?: number): Promise<void> {
 		const { local, remote } = this.status;
 		if (this.stateIndicator !== 'behind') {
 			if (this.stateIndicator === 'synced') {
 				return;
-			} else if (!dropLocalVer) {
+			} else if ((this.stateIndicator === 'conflicting') && !version) {
 				throw makeFSSyncException('', {
 					localVersion: local?.current,
 					remoteVersion: remote.current,

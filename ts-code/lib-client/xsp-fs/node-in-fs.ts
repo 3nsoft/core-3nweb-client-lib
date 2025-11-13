@@ -61,10 +61,17 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	get version(): number {
 		return this.currentVersion;
 	}
-	protected setCurrentVersion(newVersion: number) {
-		if (!Number.isInteger(newVersion)) { throw new TypeError(
-			`Version parameter must be an integer, but ${newVersion} is given`); }
+	protected setCurrentVersion(newVersion: number): void {
+		if (!Number.isInteger(newVersion) || (newVersion < 0)) {
+			throw new TypeError(`Version parameter must be a non-negative integer, but ${newVersion} is given`);
+		}
 		this.currentVersion = newVersion;
+	}
+	private markRemoved(): void {
+		this.currentVersion = -1;
+	}
+	protected get isMarkedRemoved(): boolean {
+		return (this.currentVersion < 0);
 	}
 
 	readonly isInSyncedStorage: boolean;
@@ -217,10 +224,10 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	}
 
 	protected async removeThisFromStorageNodes(src: FSChangeSrc): Promise<void> {
-		if (this.currentVersion < 0) { return; }
+		if (this.isMarkedRemoved) { return; }
 		await this.storage.removeObj(this.objId);
 		this.storage.nodes.delete(this);
-		this.currentVersion = -1;
+		this.markRemoved();
 		const event: RemovedEvent = {
 			type: 'removed',
 			path: this.name,
@@ -254,7 +261,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			);
 		}
 		const res = await this.writeProc.startOrChain(async () => {
-			if (this.currentVersion < 0) {
+			if (this.isMarkedRemoved) {
 				throw makeRuntimeException<FileException>(
 					'file', {
 						path: this.name, fsEtityType: this.type,

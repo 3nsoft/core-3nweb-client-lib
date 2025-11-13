@@ -1626,7 +1626,7 @@ export function remoteAdoptionOptsToMsg(
 ): OptionsToAdopteRemoteMsg|undefined {
 	if (!opts) { return; }
 	return {
-		dropLocalVer: toOptVal(opts.dropLocalVer),
+		// dropLocalVer: toOptVal(opts.dropLocalVer),
 		remoteVersion: toOptVal(opts.remoteVersion)
 	};
 }
@@ -1636,7 +1636,7 @@ export function remoteAdoptionOptsFromMsg(
 ): OptionsToAdopteRemote|undefined {
 	if (!msg) { return; }
 	return {
-		dropLocalVer: valOfOpt(msg.dropLocalVer),
+		// dropLocalVer: valOfOpt(msg.dropLocalVer),
 		remoteVersion: valOfOptInt(msg.remoteVersion)
 	}
 }

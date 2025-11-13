@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -57,6 +57,29 @@ it.func = async function(s) {
 		await testFS.deleteFile(fName);
 		expect(await testFS.checkFilePresence(fName)).toBe(false);
 	}
+};
+specs.its.push(it);
+
+it = { expectation: 'deletes files concurrently from fs objects that point to same node' };
+it.func = async function(s) {
+	const { testFS } = s;
+
+	// folder objects should have the same underlying fs node
+	const folders = await Promise.all([1, 2, 3, 4, 5].map(
+		() => testFS.writableSubRoot('folder')
+	));
+	expect(folders.length).toBe(5);
+
+	const file1Name = 'file1';
+	await folders[0].writeTxtFile(file1Name, 'blah');
+	for (let i=1; i<folders.length; i+=1) {
+		expect(await folders[i].checkFilePresence(file1Name)).toBeTrue();
+	}
+	await folders[0].deleteFile(file1Name);
+	for (let i=1; i<folders.length; i+=1) {
+		expect(await folders[i].checkFilePresence(file1Name)).toBeFalse();
+	}
+
 };
 specs.its.push(it);
 

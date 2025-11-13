@@ -80,7 +80,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 			expect(exc.conflict).toBeTrue();
 		}
 	);
-	await dev2FS().v!.sync!.adoptRemote('', { dropLocalVer: true });
+	await dev2FS().v!.sync!.adoptRemote('', { remoteVersion: folderStatus.remote!.latest });
 
 	await syncEvents.completion;
 	expect(syncEvents.collectedEvents.find(ev => (
@@ -233,7 +233,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 			expect(exc.conflict).toBeTrue();
 		}
 	);
-	await dev2FS().v!.sync!.adoptRemote(file, { dropLocalVer: true });
+	await dev2FS().v!.sync!.adoptRemote(file, { remoteVersion: fileStatus.remote!.latest });
 
 	await syncEvents.completion;
 	expect(syncEvents.collectedEvents.find(ev => (ev.type === 'file-change')))

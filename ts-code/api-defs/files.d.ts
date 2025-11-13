@@ -603,16 +603,19 @@ declare namespace web3n.files {
 
 		/**
 		 * Adopts remote version.
-		 * @param opts options let one to pass exact remote version, to trigger download.
+		 * In conflicting state remote version must be present in options.
+		 * @param opts options let one to pass exact remote version.
 		 */
 		adoptRemote(opts?: OptionsToAdopteRemote): Promise<void>;
 
 	}
 
 	interface OptionsToAdopteRemote {
-		dropLocalVer?: boolean;
+		/**
+		 * Identifies remote version that should be adopted.
+		 * In conflicting state this must be present.
+		 */
 		remoteVersion?: number;
-		download?: boolean;
 	}
 
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
@@ -1228,9 +1231,10 @@ declare namespace web3n.files {
 		download(path: string, version: number): Promise<void>;
 
 		/**
-		 * Adopts remote version of fs object at given path
+		 * Adopts remote version of fs object at given path.
+		 * In conflicting state remote version must be present in options.
 		 * @param path 
-		 * @param opts options let one to pass exact remote version, to trigger download.
+		 * @param opts options let one to pass exact remote version.
 		 */
 		adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void>;
 

@@ -19,6 +19,7 @@ import { bytes as randomBytes } from '../../../../lib-common/random-node';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { SpecIt } from '../test-utils';
 import { deepEqual } from '../../../libs-for-tests/json-equal';
+import { sleep } from '../../../../lib-common/processes/sleep';
 
 type FileException = web3n.files.FileException;
 type FSSyncException = web3n.files.FSSyncException;
@@ -202,13 +203,19 @@ it.func = async function(s) {
 };
 specs.its.push(it);
 
-it = { expectation: `can push operations concurrently` };
+it = { expectation: `should do own concurrently` };
 it.func = async function(s) {
 	const { testFS } = s;
 
 	// let's make and upload folder
-	const folder = await testFS.writableSubRoot('folder-to-upload');
-	await folder.v!.sync!.upload('');
+	const folderName = 'folder-to-upload';
+	const folder = await testFS.writableSubRoot(folderName);
+	const fstUpload = folder.v!.sync!.upload('');
+	await sleep(0);
+	folder.v!.sync!.upload('').catch((exc: FSSyncException) => {
+		expect(exc.alreadyUploading).withContext(`Upload and syncing better be a single non-concurrent process, that synchronizes itself, following its own logical context.`).toBeTrue();
+	});
+	await fstUpload;
 
 	// let's make child entries and upload them, one-by-one
 	const children = [1, 2, 3, 4, 5].map(i => `child-file-${i}`);
@@ -218,7 +225,6 @@ it.func = async function(s) {
 	await folder.v!.sync!.upload('');
 	expect(((await folder.listFolder('')).length)).toBe(children.length);
 
-	// this used to produce errors
 	await Promise.all(children.map(child => folder.deleteFile(child)));
 	await folder.v!.sync!.upload('');
 	expect(((await folder.listFolder('')).length)).toBe(0);
