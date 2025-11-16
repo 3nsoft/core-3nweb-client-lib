@@ -16,14 +16,13 @@
 */
 
 import { MailRecipient } from '../../../lib-client/asmail/recipient';
-import { from, Observable, Subject, Subscription } from 'rxjs';
+import { from, Observable, Subject } from 'rxjs';
 import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
-import { mergeMap, share } from 'rxjs/operators';
+import { filter, mergeMap, share, tap } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
-import { addToStatus, ConnectionStatus, WSException } from '../../../lib-common/ipc/ws-ipc';
-import { ConnectException, HTTPException } from '../../../lib-common/exceptions/http';
-import { sleep } from '../../../lib-common/processes/sleep';
+import { addToStatus, ConnectionStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import { ConnectException } from '../../../lib-common/exceptions/http';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxEventType = web3n.asmail.InboxEventType;
@@ -63,8 +62,7 @@ export class InboxEvents {
 	private readonly newMsg$ = this.newMsgs.asObservable().pipe(share());
 	private readonly connectionEvents = new Subject<InboxConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
-	private listeningProc: Subscription|undefined = undefined;
-	private networkActive = true;
+	private readonly wsProc: WebSocketListening;
 	private disconnectedAt: number|undefined = undefined;
 
 	constructor(
@@ -74,23 +72,16 @@ export class InboxEvents {
 		private readonly rmMsg: (msgId: string) => Promise<void>,
 		private readonly logError: LogError
 	) {
-		this.startListening();
+		this.wsProc = new WebSocketListening(
+			SERVER_EVENTS_RESTART_WAIT_SECS,
+			this.makeProc.bind(this)
+		);
+		this.wsProc.startListening();
 		Object.seal(this);
 	}
 
-	private startListening(): void {
-		if (this.listeningProc || !this.networkActive) {
-			return;
-		}
-		const clearListeningProc = () => {
-			if (this.listeningProc === sub) {
-				this.listeningProc = undefined;
-			}
-			if (!this.disconnectedAt) {
-				this.disconnectedAt = Date.now();
-			}
-		}
-		const sub = from(this.msgReceiver.openEventSource().then(({ client, heartbeat }) => {
+	private makeProc(): Observable<IncomingMessage> {
+		const proc$ = from(this.msgReceiver.openEventSource().then(({ client, heartbeat }) => {
 			const channel = msgRecievedCompletely.EVENT_NAME;
 			heartbeat.subscribe({
 				next: ev => this.connectionEvents.next(toInboxConnectionStatus(ev))
@@ -99,31 +90,20 @@ export class InboxEvents {
 		}))
 		.pipe(
 			mergeMap(events => events),
-			mergeMap(async ev => this.getMessage(ev.msgId), 5)
-		)
-		.subscribe({
-			next: msg => {
-				if (msg) {
-					this.newMsgs.next(msg)
+			mergeMap(async ev => this.getMessage(ev.msgId), 5),
+			filter(msg => !!msg),
+			tap({
+				next: msg => this.newMsgs.next(msg),
+				error: () => {
+					if (!this.disconnectedAt) {
+						this.disconnectedAt = Date.now();
+					}
 				}
-			},
-			complete: () => {
-				clearListeningProc();
-			},
-			error: async exc => {
-				clearListeningProc();
-				if (this.shouldRestartAfterErr(exc)) {
-					this.sleepAndRestart();
-				}
-			}
-		});
-		this.listeningProc = sub;
+			})
+		);
+		// list messages as a side effect of starting, or at point of starting.
 		this.listMsgsFromDisconnectedPeriod();
-	}
-
-	private async sleepAndRestart(): Promise<void> {
-		await sleep(SERVER_EVENTS_RESTART_WAIT_SECS);
-		this.startListening();
+		return proc$;
 	}
 
 	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {
@@ -152,46 +132,30 @@ export class InboxEvents {
 
 	close(): void {
 		this.newMsgs.complete();
+		this.wsProc.close();
 	}
 
-	get isListening(): boolean {
-		return !!this.listeningProc;
-	}
-
-	private shouldRestartAfterErr(
-		exc: WSException|ConnectException|HTTPException
-	): boolean {
-		if (!exc.runtimeException) { return false; }
-		if (exc.type === 'connect') {
-			return true;
-		} else if (exc.type === 'http-request') {
-			return false;
-		} else if (exc.type === 'websocket') {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-	private stopListening(): void {
-		this.listeningProc?.unsubscribe();
-		this.listeningProc = undefined;
-	}
+	// XXX we should go along:
+	//  - last working connection and ping
+	//  - may be have an expect suspending of network, with less aggressive attempts to reconnect
+	//  - instead of talking about presence of network, expose methods to nudge restarting behaviour, as outside
+	//    may have better clues and able to command behaviour switch
 
 	suspendNetworkActivity(): void {
-		this.networkActive = false;
-		if (this.isListening) {
-			if (!this.disconnectedAt) {
-				this.disconnectedAt = Date.now();
-			}
-			this.stopListening();
-		}
+
+		// XXX code below shutdown for good, but restart sometimes has been failing.
+		// 
+		// if (this.isListening) {
+		// 	if (!this.disconnectedAt) {
+		// 		this.disconnectedAt = Date.now();
+		// 	}
+		// 	this.stopListening();
+		// }
 	}
 
 	resumeNetworkActivity(): void {
-		this.networkActive = true;
-		if (!this.isListening) {
-			this.startListening();
+		if (!this.wsProc.isListening) {
+			this.wsProc.startListening();
 		}
 	}
 
@@ -208,8 +172,6 @@ export class InboxEvents {
 				if (msg) {
 					this.newMsgs.next(msg);
 					this.disconnectedAt = msg.deliveryTS;
-				} else if (!this.networkActive) {
-					return;
 				}
 			}
 			this.disconnectedAt = undefined;

@@ -15,14 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Subscription, Observable, Subject, from } from 'rxjs';
+import { Observable, Subject, from } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';
 import { events } from '../../../lib-common/service-api/3nstorage/owner';
-import { mergeMap, filter, share, map } from 'rxjs/operators';
+import { mergeMap, filter, share } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
-import { addToStatus, ConnectionStatus, SubscribingClient } from '../../../lib-common/ipc/ws-ipc';
+import { addToStatus, ConnectionStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -48,6 +48,8 @@ export class RemoteEvents {
 
 	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
+	private readonly wsProc: WebSocketListening;
+	// private listeningProc: Subscription|undefined = undefined;
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -55,14 +57,15 @@ export class RemoteEvents {
 		private readonly broadcastNodeEvent: Storage['broadcastNodeEvent'],
 		private readonly logError: LogError
 	) {
+		this.wsProc = new WebSocketListening(
+			SERVER_EVENTS_RESTART_WAIT_SECS,
+			this.makeProc.bind(this)
+		);
 		Object.seal(this);
 	}
 
-	private absorbingRemoteEventsProc: Subscription|undefined = undefined;
-
-	startAbsorbingRemoteEvents(): void {
-
-		this.absorbingRemoteEventsProc = from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
+	private makeProc(): Observable<void> {
+		return from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
 			heartbeat.subscribe({
 				next: ev => this.connectionEvents.next(toStorageConnectionStatus(ev))
 			});
@@ -78,24 +81,16 @@ export class RemoteEvents {
 		.pipe(
 			mergeMap(event$ => event$),
 			mergeMap(event$ => event$),
-		)
-		.subscribe({
-			next: noop,
-			error: async err => {
-				await this.logError(err);
-				this.absorbingRemoteEventsProc = undefined;
-			},
-			complete: () => {
-				this.absorbingRemoteEventsProc = undefined;
-			}
-		});
+		);
+	}
+
+	startListening(): void {
+		this.wsProc.startListening();
 	}
 
 	async close(): Promise<void> {
-		if (this.absorbingRemoteEventsProc) {
-			this.absorbingRemoteEventsProc.unsubscribe();
-			this.absorbingRemoteEventsProc = undefined;
-		}
+		this.connectionEvents.complete();
+		this.wsProc.close();
 	}
 
 	private absorbObjChange(client: SubscribingClient): Observable<void> {
@@ -176,24 +171,26 @@ export class RemoteEvents {
 		);
 	}
 
+	// XXX we should go along:
+	//  - last working connection and ping
+	//  - may be have an expect suspending of network, with less aggressive attempts to reconnect
+	//  - instead of talking about presence of network, expose methods to nudge restarting behaviour, as outside
+	//    may have better clues and able to command behaviour switch
+
 	suspendNetworkActivity(): void {
 		// XXX
-		// - set haveNetwork flag to false
-		// - press breaks on events from server
+		// - ...
 	}
 
 	resumeNetworkActivity(): void {
-		// XXX
-		// - set haveNetwork flag to true
-		// - restart watching events from server
+		if (!this.wsProc.isListening) {
+			this.wsProc.startListening();
+		}
 	}
 
 }
 Object.freeze(RemoteEvents.prototype);
 Object.freeze(RemoteEvents);
-
-
-function noop() {}
 
 
 Object.freeze(exports);

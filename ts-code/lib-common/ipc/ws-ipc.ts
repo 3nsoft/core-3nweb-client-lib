@@ -14,10 +14,12 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { Observable, share, Subject } from 'rxjs';
+import { Observable, share, Subject, Subscription } from 'rxjs';
 import { makeRuntimeException } from '../exceptions/runtime';
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
 import * as WebSocket from 'ws';
+import type { ConnectException, HTTPException } from '../exceptions/http';
+import { sleep } from '../processes/sleep';
 
 export { RequestEnvelope, RequestHandler, EventfulServer, makeEventfulServer, SubscribingClient } from './generic-ipc';
 
@@ -169,5 +171,75 @@ export function addToStatus<T extends ConnectionStatus>(status: ConnectionStatus
 	}
 	return status as T;
 }
+
+export function shouldRestartWSAfterErr(
+	exc: WSException|ConnectException|HTTPException
+): boolean {
+	if (!exc.runtimeException) { return false; }
+	if (exc.type === 'connect') {
+		return true;
+	} else if (exc.type === 'http-request') {
+		return false;
+	} else if (exc.type === 'websocket') {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+
+export class WebSocketListening {
+
+	private listeningProc: Subscription|undefined = undefined;
+
+	constructor(
+		public readonly restartWaitSecs: number,
+		private readonly startWSProc: () => Observable<unknown>
+	) {
+		Object.seal(this);
+	}
+
+	startListening(): void {
+		if (this.listeningProc) {
+			return;
+		}
+		const clearListeningProc = () => {
+			if (this.listeningProc === sub) {
+				this.listeningProc = undefined;
+			}
+		}
+		const sub = this.startWSProc()
+		.subscribe({
+			complete: () => {
+				clearListeningProc();
+			},
+			error: async exc => {
+				clearListeningProc();
+				if (shouldRestartWSAfterErr(exc)) {
+					this.sleepAndRestart();
+				}
+			}
+		});
+		this.listeningProc = sub;
+	}
+
+	private async sleepAndRestart(): Promise<void> {
+		await sleep(this.restartWaitSecs * 1000);
+		this.startListening();
+	}
+
+	close(): void {
+		this.listeningProc?.unsubscribe();
+		this.listeningProc = undefined;	
+	}
+
+	get isListening(): boolean {
+		return !!this.listeningProc;
+	}
+
+}
+Object.freeze(WebSocketListening.prototype);
+Object.freeze(WebSocketListening);
+
 
 Object.freeze(exports);

@@ -77,7 +77,7 @@ export class SyncedStore implements ISyncedStorage {
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			startObjProcs: () => {
-				s.remoteEvents.startAbsorbingRemoteEvents();
+				s.remoteEvents.startListening();
 			}
 		};
 	}
@@ -103,7 +103,7 @@ export class SyncedStore implements ISyncedStorage {
 			setupRemoteAndStartObjProcs: getSigner => {
 				setMid(getSigner);
 				s.uploader.start();
-				s.remoteEvents.startAbsorbingRemoteEvents();
+				s.remoteEvents.startListening();
 			}
 		};
 	}
