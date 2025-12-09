@@ -233,6 +233,7 @@ interface SyncStatusMsg {
 	local?: SyncVersionsBranchMsg;
 	remote?: SyncVersionsBranchMsg;
 	existsInSyncedParent?: Value<boolean>;
+	uploading?: UploadingStateMsg;
 }
 
 interface SyncVersionsBranchMsg {
@@ -241,29 +242,34 @@ interface SyncVersionsBranchMsg {
 	isArchived?: Value<boolean>;
 }
 
-function syncStatusToMsg(
-	s: SyncStatus|undefined
-): SyncStatusMsg|undefined {
+interface UploadingStateMsg {
+	localVersion: Value<number>;
+	remoteVersion: Value<number>;
+	bytesLeftToUpload: Value<number>;
+	uploadStarted: boolean;
+}
+
+function syncStatusToMsg(s: SyncStatus|undefined): SyncStatusMsg|undefined {
 	if (!s) { return; }
 	return {
 		state: s.state,
 		local: syncBranchToMsg(s.local),
 		synced: syncBranchToMsg(s.synced),
 		remote: syncBranchToMsg(s.remote),
-		existsInSyncedParent: toOptVal(s.existsInSyncedParent)
+		existsInSyncedParent: toOptVal(s.existsInSyncedParent),
+		uploading: uploadingToMsg(s.uploading)
 	};
 }
 
-function msgToSyncStatus(
-	m: SyncStatusMsg|undefined
-): SyncStatus|undefined {
+function msgToSyncStatus(m: SyncStatusMsg|undefined): SyncStatus|undefined {
 	if (!m) { return; }
 	return {
 		state: m.state as SyncStatus['state'],
 		local: msgToSyncBranch(m.local),
 		synced: msgToSyncBranch(m.synced),
 		remote: msgToSyncBranch(m.remote),
-		existsInSyncedParent: valOfOpt(m.existsInSyncedParent)
+		existsInSyncedParent: valOfOpt(m.existsInSyncedParent),
+		uploading: msgToUploading(m.uploading)
 	};
 }
 
@@ -287,6 +293,26 @@ function msgToSyncBranch(
 		archived: ((m.archived!.length > 0) ?
 			m.archived!.map(fixInt) : undefined),
 		isArchived: valOfOpt(m.isArchived)
+	};
+}
+
+function uploadingToMsg(u: SyncStatus['uploading']): UploadingStateMsg|undefined {
+	if (!u) { return; }
+	return {
+		localVersion: toVal(u.localVersion),
+		remoteVersion: toVal(u.remoteVersion),
+		bytesLeftToUpload: toVal(u.bytesLeftToUpload),
+		uploadStarted: u.uploadStarted
+	};
+}
+
+function msgToUploading(u: UploadingStateMsg|undefined): SyncStatus['uploading'] {
+	if (!u) { return; }
+	return {
+		localVersion: intValOf(u.localVersion),
+		remoteVersion: intValOf(u.remoteVersion),
+		bytesLeftToUpload: intValOf(u.bytesLeftToUpload),
+		uploadStarted: u.uploadStarted
 	};
 }
 

@@ -169,6 +169,7 @@ declare namespace web3n.files {
 		local?: LocalVersion;
 		remote?: SyncVersionsBranch;
 		existsInSyncedParent?: boolean;
+		uploading?: UploadingState;
 	}
 
 	interface LocalVersion {
@@ -183,6 +184,24 @@ declare namespace web3n.files {
 	}
 
 	type SyncState = 'synced' | 'behind' | 'unsynced' | 'conflicting';
+
+	interface UploadingState {
+		/**
+		 * Local version that is uploaded to server.
+		 * If it is an upload of object removal, version is -1.
+		 */
+		localVersion: number;
+		/**
+		 * New remote version that is uploaded to server.
+		 * If it is an upload of object removal, version is -1.
+		 */
+		remoteVersion: number;
+		/**
+		 * Bytes left to upload.
+		 */
+		bytesLeftToUpload: number;
+		uploadStarted: boolean;
+	}
 
 	interface FileByteSource {
 

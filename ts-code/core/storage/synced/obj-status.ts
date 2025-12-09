@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -31,6 +31,7 @@ type FileException = web3n.files.FileException;
 type SyncStatus = web3n.files.SyncStatus;
 type SyncState = web3n.files.SyncState;
 type LocalVersion = web3n.files.LocalVersion;
+type UploadingState = web3n.files.UploadingState;
 type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 
 /**
@@ -83,17 +84,38 @@ export interface RemovalUpload {
 export interface WholeVerOrderedUpload {
 	type: 'ordered-whole';
 	createObj?: boolean;
+	/**
+	 * Header bytes that need to be uploaded. Undefined when header has been uploaded.
+	 */
 	header?: number;
+	/**
+	 * Segments bytes left to upload.
+	 */
 	segsLeft: number;
+	/**
+	 * Offset in segments, to which point bytes where uploaded.
+	 */
 	segsOfs: number;
+	/**
+	 * Upload transaction id.
+	 */
 	transactionId?: string;
 }
 
 export interface DiffVerOrderedUpload {
 	type: 'ordered-diff';
 	diff: DiffInfo;
+	/**
+	 * Header bytes that need to be uploaded. Undefined when header has been uploaded.
+	 */
 	header?: number;
+	/**
+	 * New chunks of segments that should be uploaded.
+	 */
 	newSegsLeft: FiniteChunk[];
+	/**
+	 * Upload transaction id.
+	 */
 	transactionId?: string;
 }
 
@@ -207,7 +229,8 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	) {
 		this.saveProc = new JSONSavingProc(
 			join(this.objFolder, STATUS_FILE_NAME),
-			() => this.status);
+			() => this.status
+		);
 		this.updateStateIndicator();
 		Object.seal(this);
 	}
@@ -612,7 +635,8 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 			state: this.stateIndicator,
 			local: localVersionFromStatus(this.status.local),
 			remote,
-			synced
+			synced,
+			uploading: uploadInStatus(this.status.upload)
 		};
 	}
 
@@ -800,6 +824,47 @@ function addArchVersionsFromList(
 function skipNotFoundExc(exc: FileException): void {
 	if (!exc.notFound) {
 		throw exc;
+	}
+}
+
+function uploadInStatus(upload: ObjStatusInfo['upload']): UploadingState|undefined {
+	if (!upload) {
+		return;
+	}
+	if (upload.type === 'new-version') {
+		const { needUpload } = upload;
+		if (!needUpload) {
+			return;
+		}
+		let bytesLeftToUpload = 0;
+		if (needUpload.type === 'ordered-whole') {
+			const { header, segsLeft } = needUpload;
+			if (header) {
+				bytesLeftToUpload += header;
+			}
+			bytesLeftToUpload += segsLeft;
+		} else if (needUpload.type === 'ordered-diff') {
+			const { header, newSegsLeft } = needUpload;
+			if (header) {
+				bytesLeftToUpload += header;
+			}
+			for (const { len: chunkLen } of newSegsLeft) {
+				bytesLeftToUpload += chunkLen;
+			}
+		}
+		return {
+			localVersion: upload.localVersion,
+			remoteVersion: upload.uploadVersion,
+			bytesLeftToUpload,
+			uploadStarted: !!needUpload.transactionId
+		};
+	} else {
+		return {
+			localVersion: -1,
+			remoteVersion: -1,
+			bytesLeftToUpload: 0,
+			uploadStarted: false
+		};
 	}
 }
 

@@ -211,9 +211,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		}
 	}
 
-	private async startOrderedUpload(
-		upload: WholeVerOrderedUpload
-	): Promise<void> {
+	private async startOrderedUpload(upload: WholeVerOrderedUpload): Promise<void> {
 		const maxSegs = this.maxUploadChunk() - upload.header!;
 		assert(maxSegs > 1);
 		const segsToUpload = Math.min(upload.segsLeft, maxSegs);
@@ -248,8 +246,7 @@ class UploadTask implements Task<UploadExecLabel> {
 	}
 
 	private async headerToUpload(): Promise<Uint8Array> {
-		return (this.uploadHeader ?
-			this.uploadHeader : await this.src.readHeader());
+		return (this.uploadHeader ? this.uploadHeader : await this.src.readHeader());
 	}
 
 	private async startOrderedDiffUpload(

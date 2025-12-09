@@ -23,6 +23,7 @@ message SyncStatusMsg {
 	SyncVersionsBranchMsg synced = 3;
 	SyncVersionsBranchMsg remote = 4;
 	common.BooleanValue exists_in_synced_parent = 5;
+	UploadingStateMsg uploading = 6;
 }
 
 message SyncVersionsBranchMsg {
@@ -31,6 +32,12 @@ message SyncVersionsBranchMsg {
 	common.BooleanValue is_archived = 3;
 }
 
+message UploadingStateMsg {
+	common.UInt64Value local_version = 1;
+	common.UInt64Value remote_version = 2;
+	common.UInt64Value bytes_left_to_upload = 3;
+	bool upload_started = 4;
+}
 
 // ==== ReadonlyFile referable as impl object ====
 
