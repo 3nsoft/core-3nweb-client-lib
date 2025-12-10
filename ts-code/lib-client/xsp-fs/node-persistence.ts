@@ -221,6 +221,11 @@ export abstract class NodePersistance {
 		);
 	}
 
+	async getAttrs(objSrc: ObjSource): Promise<Attrs> {
+		const payload = await this.readonlyPayload(objSrc);
+		return payload.getAttrs();
+	}
+
 }
 Object.freeze(NodePersistance.prototype);
 Object.freeze(NodePersistance);

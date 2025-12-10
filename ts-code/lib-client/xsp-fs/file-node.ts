@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,7 @@
  * reliance set.
  */
 
-import { NodeInFS } from './node-in-fs';
+import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
 import { LinkParameters } from '../fs-utils/files';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { base64, byteLengthIn } from '../../lib-common/buffer-utils';
@@ -29,23 +29,18 @@ import { idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import { assert } from '../../lib-common/assert';
 import { CommonAttrs, XAttrs } from './attrs';
 import { makeVersionMismatchExc } from '../../lib-common/exceptions/file';
-import { NodePersistance, ReadonlyPayload } from './node-persistence';
+import { Attrs, NodePersistance } from './node-persistence';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type Stats = web3n.files.Stats;
 
 interface FileAttrs {
 	attrs: CommonAttrs;
 	size: number;
 	xattrs?: XAttrs;
-}
-
-async function fileAttrsFrom(payload: ReadonlyPayload): Promise<FileAttrs> {
-	const attrs = payload.getAttrs();
-	const xattrs = await payload.getXAttrs();
-	return { attrs: CommonAttrs.fromAttrs(attrs), size: attrs.size, xattrs };
 }
 
 
@@ -56,9 +51,11 @@ class FilePersistance extends NodePersistance {
 		Object.seal(this);
 	}
 
-	async getAttrs(objSrc: ObjSource): Promise<FileAttrs> {
+	async getFileAttrs(objSrc: ObjSource): Promise<FileAttrs> {
 		const payload = await super.readonlyPayload(objSrc);
-		return await fileAttrsFrom(payload);
+		const attrs = payload.getAttrs();
+		const xattrs = await payload.getXAttrs();
+		return { attrs: CommonAttrs.fromAttrs(attrs), size: attrs.size, xattrs };
 	}
 
 	async getFileSource(objSrc: ObjSource): Promise<FileByteSource> {
@@ -180,7 +177,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	}
 
 	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
-		const fileAttrs = await this.crypto.getAttrs(src);
+		const fileAttrs = await this.crypto.getFileAttrs(src);
 		this.setUpdatedState(src.version, fileAttrs);
 	}
 
@@ -189,8 +186,29 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		super.setUpdatedParams(version, fileAttrs.attrs, fileAttrs.xattrs);
 	}
 
-	get size(): number {
-		return this.fileSize;
+	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
+		let attrs: CommonAttrs|Attrs;
+		let version: number;
+		let size: number;
+		if (shouldReadCurrentVersion(flags)) {
+			attrs = this.attrs;
+			version = this.version;
+			size = this.fileSize
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			const fileAttrs = await this.crypto.getFileAttrs(src);
+			attrs = fileAttrs.attrs;
+			version = src.version;
+			size = fileAttrs.size;
+		}
+		return {
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
+			version,
+			writable: false,
+			isFile: true,
+			size
+		};
 	}
 
 	async readSrc(

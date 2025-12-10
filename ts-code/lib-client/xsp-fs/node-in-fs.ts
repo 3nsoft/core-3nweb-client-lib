@@ -47,6 +47,7 @@ type FileException = web3n.files.FileException;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type Stats = web3n.files.Stats;
 
 
 export abstract class NodeInFS<P extends NodePersistance> implements Node {
@@ -178,9 +179,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 	}
 
-	getAttrs(): CommonAttrs {
-		return this.attrs;
-	}
+	abstract getStats(flags?: VersionedReadFlags): Promise<Stats>;
 
 	async listVersions(): Promise<{ current?: number; archived?: number[]; }> {
 		return (await this.storage.status(this.objId)).listVersions();

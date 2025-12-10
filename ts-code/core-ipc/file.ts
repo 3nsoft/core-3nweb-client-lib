@@ -73,6 +73,7 @@ export function makeFileCaller(
 		const vPath = methodPathFor<ReadonlyFile>(objPath, 'v');
 		file.v = {
 			getByteSource: vGetByteSource.makeCaller(caller, vPath),
+			stat: vStat.makeCaller(caller, vPath),
 			getXAttr: vGetXAttr.makeCaller(caller, vPath),
 			listXAttrs: vListXAttrs.makeCaller(caller, vPath),
 			readBytes: vReadBytes.makeCaller(caller, vPath),
@@ -130,6 +131,7 @@ export function exposeFileService(
 	if (file.v) {
 		implExp.v = {
 			getByteSource: vGetByteSource.wrapService(file.v.getByteSource, expServices),
+			stat: vStat.wrapService(file.v.stat),
 			getXAttr: vGetXAttr.wrapService(file.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(file.v.listXAttrs),
 			readBytes: vReadBytes.wrapService(file.v.readBytes),
@@ -200,7 +202,11 @@ interface StatsMsg {
 const statsMsgType = ProtoType.for<StatsMsg>(pb.StatsMsg);
 
 export function packStats(s: Stats): Buffer {
-	const msg: StatsMsg = {
+	return statsMsgType.pack(statsToMsg(s));
+}
+
+function statsToMsg(s: Stats): StatsMsg {
+	return {
 		writable: s.writable,
 		isFile: toOptVal(s.isFile),
 		isFolder: toOptVal(s.isFolder),
@@ -210,11 +216,13 @@ export function packStats(s: Stats): Buffer {
 		size: toOptVal(s.size),
 		version: toOptVal(s.version),
 	};
-	return statsMsgType.pack(msg);
 }
 
 export function unpackStats(buf: Buffer|void): Stats {
-	const m = statsMsgType.unpack(buf);
+	return msgToStats(statsMsgType.unpack(buf));
+}
+
+function msgToStats(m: StatsMsg): Stats {
 	return {
 		writable: m.writable,
 		isFile: valOfOpt(m.isFile),
@@ -243,9 +251,9 @@ interface SyncVersionsBranchMsg {
 }
 
 interface UploadingStateMsg {
-	localVersion: Value<number>;
-	remoteVersion: Value<number>;
-	bytesLeftToUpload: Value<number>;
+	localVersion: number;
+	remoteVersion: number;
+	bytesLeftToUpload: number;
 	uploadStarted: boolean;
 }
 
@@ -290,28 +298,23 @@ function msgToSyncBranch(
 	if (!m) { return; }
 	return {
 		latest: valOfOptInt(m.latest),
-		archived: ((m.archived!.length > 0) ?
-			m.archived!.map(fixInt) : undefined),
+		archived: ((m.archived!.length > 0) ? m.archived!.map(fixInt) : undefined),
 		isArchived: valOfOpt(m.isArchived)
 	};
 }
 
 function uploadingToMsg(u: SyncStatus['uploading']): UploadingStateMsg|undefined {
 	if (!u) { return; }
-	return {
-		localVersion: toVal(u.localVersion),
-		remoteVersion: toVal(u.remoteVersion),
-		bytesLeftToUpload: toVal(u.bytesLeftToUpload),
-		uploadStarted: u.uploadStarted
-	};
+	const { localVersion, remoteVersion, uploadStarted, bytesLeftToUpload } = u;
+	return { localVersion, remoteVersion, uploadStarted, bytesLeftToUpload };
 }
 
 function msgToUploading(u: UploadingStateMsg|undefined): SyncStatus['uploading'] {
 	if (!u) { return; }
 	return {
-		localVersion: intValOf(u.localVersion),
-		remoteVersion: intValOf(u.remoteVersion),
-		bytesLeftToUpload: intValOf(u.bytesLeftToUpload),
+		localVersion: fixInt(u.localVersion),
+		remoteVersion: fixInt(u.remoteVersion),
+		bytesLeftToUpload: fixInt(u.bytesLeftToUpload),
 		uploadStarted: u.uploadStarted
 	};
 }
@@ -715,6 +718,27 @@ export function versionedReadFlagsToMsg(
 }
 
 
+export namespace vStat {
+
+	export function wrapService(fn: ReadonlyFileVersionedAPI['stat']): ExposedFn {
+		return buf => {
+			const promise = fn(unpackVersionedReadFlagsRequest(buf!))
+			.then(packStats);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFileVersionedAPI['stat'] {
+		const path = methodPathFor<ReadonlyFileVersionedAPI>(objPath, 'stat');
+		return flags => caller
+		.startPromiseCall(path, packVersionedReadFlagsRequest(flags))
+		.then(unpackStats);
+	}
+
+}
+Object.freeze(vStat);
+
+
 export namespace vGetXAttr {
 
 	interface Request {
@@ -769,7 +793,7 @@ export namespace vGetXAttr {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): ReadonlyFileVersionedAPI['getXAttr'] {
-		const path = methodPathFor<ReadonlyFile>(objPath, 'getXAttr');
+		const path = methodPathFor<ReadonlyFileVersionedAPI>(objPath, 'getXAttr');
 		return (xaName, flags) => caller
 		.startPromiseCall(path, requestType.pack({
 			xaName, flags: versionedReadFlagsToMsg(flags)

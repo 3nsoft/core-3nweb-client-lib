@@ -103,6 +103,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 		const vPath = methodPathFor<ReadonlyFS>(objPath, 'v');
 		fs.v = {
 			getByteSource: vGetByteSource.makeCaller(caller, vPath),
+			stat: vStat.makeCaller(caller, vPath),
 			getXAttr: vGetXAttr.makeCaller(caller, vPath),
 			listXAttrs: vListXAttrs.makeCaller(caller, vPath),
 			listFolder: vListFolder.makeCaller(caller, vPath),
@@ -182,6 +183,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 	if (fs.v) {
 		implExp.v = {
 			getByteSource: vGetByteSource.wrapService(fs.v.getByteSource, expServices),
+			stat: vStat.wrapService(fs.v.stat),
 			getXAttr: vGetXAttr.wrapService(fs.v.getXAttr),
 			listXAttrs: vListXAttrs.wrapService(fs.v.listXAttrs),
 			listFolder: vListFolder.wrapService(fs.v.listFolder),
@@ -1545,6 +1547,28 @@ function unpackRequestWithPathAndFlags(
 }
 
 
+namespace vStat {
+
+	export function wrapService(fn: ReadonlyFSVersionedAPI['stat']): ExposedFn {
+		return buf => {
+			const { path, flags } = unpackRequestWithPathAndFlags(buf!);
+			const promise = fn(path, flags)
+			.then(file.packStats);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSVersionedAPI['stat'] {
+		const ipcPath = methodPathFor<ReadonlyFSVersionedAPI>(objPath, 'stat');
+		return (path, flags) => caller
+		.startPromiseCall(ipcPath, packRequestWithPathAndFlags(path, flags))
+		.then(file.unpackStats);
+	}
+
+}
+Object.freeze(vStat);
+
+
 namespace vGetXAttr {
 
 	const requestType = ProtoType.for<{
@@ -1553,9 +1577,7 @@ namespace vGetXAttr {
 		flags?: file.VersionedReadFlagsMsg;
 	}>(pb.VersionedGetXAttrRequestBody);
 
-	export function wrapService(
-		fn: ReadonlyFSVersionedAPI['getXAttr']
-	): ExposedFn {
+	export function wrapService(fn: ReadonlyFSVersionedAPI['getXAttr']): ExposedFn {
 		return buf => {
 			const { path, xaName, flags } = requestType.unpack(buf);
 			const promise = fn(path, xaName, file.versionedReadFlagsFromMsg(flags))
@@ -1564,9 +1586,7 @@ namespace vGetXAttr {
 		};
 	}
 
-	export function makeCaller(
-		caller: Caller, objPath: string[]
-	): ReadonlyFSVersionedAPI['getXAttr'] {
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSVersionedAPI['getXAttr'] {
 		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'getXAttr');
 		return (path, xaName, flags) => caller
 		.startPromiseCall(ipcPath, requestType.pack({

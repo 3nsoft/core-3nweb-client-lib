@@ -33,9 +33,9 @@ message SyncVersionsBranchMsg {
 }
 
 message UploadingStateMsg {
-	common.UInt64Value local_version = 1;
-	common.UInt64Value remote_version = 2;
-	common.UInt64Value bytes_left_to_upload = 3;
+	uint64 local_version = 1;
+	uint64 remote_version = 2;
+	uint64 bytes_left_to_upload = 3;
 	bool upload_started = 4;
 }
 
@@ -117,6 +117,10 @@ message VersionedReadFlags {
 message RequestWithVersionedReadFlags {
 	VersionedReadFlags flags = 1;
 }
+
+// --- ReadonlyFileVersionedAPI.stat ---
+// Request body is RequestWithVersionedReadFlags
+// Reply body is StatsMsg
 
 // --- ReadonlyFileVersionedAPI.getXAttr ---
 message VersionedGetXAttrRequestBody {

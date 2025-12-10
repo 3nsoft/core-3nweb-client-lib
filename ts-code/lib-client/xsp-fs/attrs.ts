@@ -41,8 +41,9 @@ export class CommonAttrs {
 	static readonly PACK_LEN = 6 + 6;
 
 	static parse(bytes: Uint8Array): CommonAttrs {
-		if (bytes.length < CommonAttrs.PACK_LEN) { throw parsingException(
-			`byte array is too short`); }
+		if (bytes.length < CommonAttrs.PACK_LEN) {
+			throw parsingException(`byte array is too short`);
+		}
 		const ctime = uintFrom6Bytes(bytes, 0);
 		const mtime = uintFrom6Bytes(bytes, 6);
 		return new CommonAttrs(ctime, mtime);

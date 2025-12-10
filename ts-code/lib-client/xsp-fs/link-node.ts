@@ -20,7 +20,7 @@
  * reliance set.
  */
 
-import { NodeInFS } from './node-in-fs';
+import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
 import { utf8 } from '../../lib-common/buffer-utils';
 import { LinkParameters } from '../fs-utils/files';
 import { DeviceFS } from '../local-files/device-fs';
@@ -31,7 +31,10 @@ import { FileObject } from './file';
 import { XspFS } from './fs';
 import { idToHeaderNonce, ObjSource, Subscribe } from 'xsp-files';
 import { CommonAttrs, XAttrs } from './attrs';
-import { NodePersistance } from './node-persistence';
+import { Attrs, NodePersistance } from './node-persistence';
+
+type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type Stats = web3n.files.Stats;
 
 class LinkPersistance extends NodePersistance {
 	
@@ -140,6 +143,26 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
 		const { params, attrs, xattrs } = await this.crypto.read(src);
 		this.setUpdatedState(params, src.version, attrs, xattrs);
+	}
+
+	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
+		let attrs: CommonAttrs|Attrs;
+		let version: number;
+		if (shouldReadCurrentVersion(flags)) {
+			attrs = this.attrs;
+			version = this.version;
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			attrs = await this.crypto.getAttrs(src);
+			version = src.version;
+		}
+		return {
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
+			version,
+			writable: false,
+			isLink: true,
+		};
 	}
 
 	private setUpdatedState(

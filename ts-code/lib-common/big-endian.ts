@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,10 +20,12 @@
  * 2 bytes.
  */
 export function packUintTo2Bytes(u: number, b: Buffer, i: number): void {
-	if (u > 0xffff) { throw new Error(
-		'Cannot store number bigger than 2^16-1'); }
-	if (b.length < i+2) { throw new Error(
-		'Given array has less than 2 bytes, starting with a given index.'); }
+	if (u > 0xffff) {
+		throw new Error('Cannot store number bigger than 2^16-1');
+	}
+	if (b.length < i+2) {
+		throw new Error('Given array has less than 2 bytes, starting with a given index.');
+	}
 	b[i] = u >>> 8;
 	b[i+1] = u;
 }
@@ -35,8 +37,9 @@ export function packUintTo2Bytes(u: number, b: Buffer, i: number): void {
  * in 2 bytes of x, starting at index i.
  */
 export function uintFrom2Bytes(x: Uint8Array, i = 0): number {
-	if (x.length < i+2) { throw new Error(
-		'Given array has less than 2 bytes, starting with a given index.'); }
+	if (x.length < i+2) {
+		throw new Error('Given array has less than 2 bytes, starting with a given index.');
+	}
 	return (x[i] << 8) | x[i+1];
 }
 
@@ -45,10 +48,12 @@ export function uintFrom2Bytes(x: Uint8Array, i = 0): number {
  * 3 bytes.
  */
 export function packUintTo3Bytes(u: number, b: Buffer, i: number): void {
-	if (u > 0xffffff) { throw new Error(
-		'Cannot store number bigger than 2^24-1'); }
-	if (b.length < i+3) { throw new Error(
-		'Given array has less than 3 bytes, starting with a given index.'); }
+	if (u > 0xffffff) {
+		throw new Error('Cannot store number bigger than 2^24-1');
+	}
+	if (b.length < i+3) {
+		throw new Error('Given array has less than 3 bytes, starting with a given index.');
+	}
 	b[i] = u >>> 16;
 	b[i+1] = u >>> 8;
 	b[i+2] = u;
@@ -61,8 +66,9 @@ export function packUintTo3Bytes(u: number, b: Buffer, i: number): void {
  * in 3 bytes of x, starting at index i.
  */
 export function uintFrom3Bytes(x: Uint8Array, i = 0): number {
-	if (x.length < i+3) { throw new Error(
-		'Given array has less than 3 bytes, starting with a given index.'); }
+	if (x.length < i+3) {
+		throw new Error('Given array has less than 3 bytes, starting with a given index.');
+	}
 	return (x[i] << 16) | (x[i+1] << 8) | x[i+2];
 }
 
@@ -71,10 +77,12 @@ export function uintFrom3Bytes(x: Uint8Array, i = 0): number {
  * 4 bytes.
  */
 export function packUintTo4Bytes(u: number, b: Buffer, i: number): void {
-	if (u > 0xffffffff) { throw new Error(
-		'Cannot store number bigger than 2^32-1'); }
-	if (b.length < i+4) { throw new Error(
-		'Given array has less than 4 bytes, starting with a given index.'); }
+	if (u > 0xffffffff) {
+		throw new Error('Cannot store number bigger than 2^32-1');
+	}
+	if (b.length < i+4) {
+		throw new Error('Given array has less than 4 bytes, starting with a given index.');
+	}
 	b[i] = u >>> 24;
 	b[i+1] = u >>> 16;
 	b[i+2] = u >>> 8;
@@ -101,10 +109,12 @@ export function uintFrom4Bytes(x: Uint8Array, i = 0): number {
  * 6 bytes.
  */
 export function packUintTo6Bytes(u: number, b: Buffer, i: number): void {
-	if (u > 0xffffffffffff) { throw new Error(
-		'Cannot store number bigger than 2^48-1'); }
-	if (b.length < i+6) { throw new Error(
-		'Given array has less than 6 bytes, starting with a given index.'); }
+	if (u > 0xffffffffffff) {
+		throw new Error('Cannot store number bigger than 2^48-1');
+	}
+	if (b.length < i+6) {
+		throw new Error('Given array has less than 6 bytes, starting with a given index.');
+	}
 	const h = Math.floor(u / 0x100000000);
 	const l = u % 0x100000000;
 	b[i] = h >>> 8;
@@ -122,13 +132,14 @@ export function packUintTo6Bytes(u: number, b: Buffer, i: number): void {
  * in 6 bytes of x, starting at index i.
  */
 export function uintFrom6Bytes(x: Uint8Array, i = 0): number {
-	if (x.length < i+6) { throw new Error(
-		'Given array has less than 6 bytes, starting with a given index.'); }
+	if (x.length < i+6) {
+		throw new Error('Given array has less than 6 bytes, starting with a given index.');
+	}
 	// Note that (x << 24) may produce negative number, probably due to
 	// treating intermediate integer as signed, and pulling sign to resulting
 	// float number. Hence, we need a bit different operation here.
 	const h = (x[i] << 8) | x[i+1];
-	const l = (x[i] * 0x1000000) + ((x[i+3] << 16) | (x[i+4] << 8) | x[i+5]);
+	const l = (x[i+2] * 0x1000000) + ((x[i+3] << 16) | (x[i+4] << 8) | x[i+5]);
 	return (h*0x100000000 + l);
 }
 
@@ -137,10 +148,12 @@ export function uintFrom6Bytes(x: Uint8Array, i = 0): number {
  * 8 bytes.
  */
 export function packUintTo8Bytes(u: number, b: Buffer, i: number): void {
-	if (u > Number.MAX_SAFE_INTEGER) { throw new Error(
-		'Cannot store number bigger than 2^53-1'); }
-	if (b.length < i+8) { throw new Error(
-		'Given array has less than 8 bytes, starting with a given index.'); }
+	if (u > Number.MAX_SAFE_INTEGER) {
+		throw new Error('Cannot store number bigger than 2^53-1');
+	}
+	if (b.length < i+8) {
+		throw new Error('Given array has less than 8 bytes, starting with a given index.');
+	}
 	const h = Math.floor(u / 0x100000000);
 	const l = u % 0x100000000;
 	b[i] = h >>> 24;
@@ -160,8 +173,9 @@ export function packUintTo8Bytes(u: number, b: Buffer, i: number): void {
  * in 8 bytes of x, starting at index i.
  */
 export function uintFrom8Bytes(x: Uint8Array, i = 0): number {
-	if (x.length < i+8) { throw new Error(
-		'Given array has less than 8 bytes, starting with a given index.'); }
+	if (x.length < i+8) {
+		throw new Error('Given array has less than 8 bytes, starting with a given index.');
+	}
 	// Note that (x << 24) may produce negative number, probably due to
 	// treating intermediate integer as signed, and pulling sign to resulting
 	// float number. Hence, we need a bit different operation here.

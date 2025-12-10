@@ -268,28 +268,8 @@ export class XspFS implements WritableFS {
 		}
 	}
 
-	async stat(path: string): Promise<Stats> {
-		const node = await this.v.get(path);
-		const attrs = node.getAttrs();
-		const stats: Stats = {
-			ctime: new Date(attrs.ctime),
-			mtime: new Date(attrs.mtime),
-			version: node.version,
-			writable: this.writable,
-		};
-		if (node.type === 'file') {
-			stats.size = (node as FileNode).size;
-			stats.isFile = true;
-			return stats;
-		} else if (node.type === 'folder') {
-			stats.isFolder = true;
-			return stats;
-		} else if (node.type === 'link') {
-			stats.isLink = true;
-			return stats;
-		} else {
-			throw new Error(`Unknown type of fs node`);
-		}
+	stat(path: string): Promise<Stats> {
+		return this.v.stat(path);
 	}
 
 	async updateXAttrs(path: string, changes: XAttrsChanges): Promise<void> {
@@ -691,6 +671,13 @@ class V implements WritableFSVersionedAPI, N {
 
 	ensureIsWritable(): void {
 		if (!this.writable) { throw new Error(`FS is not writable`); }
+	}
+
+	async stat(path: string, flags?: VersionedReadFlags): Promise<Stats> {
+		const node = await this.get(path);
+		const stats = await node.getStats(flags);
+		stats.writable = this.writable;
+		return stats;
 	}
 
 	async updateXAttrs(path: string, changes: XAttrsChanges): Promise<number> {

@@ -91,6 +91,7 @@ function wrapWritableFileVersionedAPI(
 ): WritableFileVersionedAPI|undefined {
 	if (!vImpl) { return; }
 	const w: WritableFileVersionedAPI = {
+		stat: vImpl.stat.bind(vImpl),
 		getXAttr: vImpl.getXAttr.bind(vImpl),
 		listXAttrs: vImpl.listXAttrs.bind(vImpl),
 		updateXAttrs: vImpl.updateXAttrs.bind(vImpl),
@@ -153,6 +154,7 @@ function wrapReadonlyFileVersionedAPI(
 ): ReadonlyFileVersionedAPI|undefined {
 	if (!vImpl) { return; }
 	const w: ReadonlyFileVersionedAPI = {
+		stat: vImpl.stat.bind(vImpl),
 		getXAttr: vImpl.getXAttr.bind(vImpl),
 		listXAttrs: vImpl.listXAttrs.bind(vImpl),
 		getByteSource: vImpl.getByteSource.bind(vImpl),
@@ -244,6 +246,7 @@ function wrapWritableFSVersionedAPI(
 ): WritableFSVersionedAPI|undefined {
 	if (!vImpl) { return; }
 	const w: WritableFSVersionedAPI = {
+		stat: vImpl.stat.bind(vImpl),
 		getXAttr: vImpl.getXAttr.bind(vImpl),
 		listXAttrs: vImpl.listXAttrs.bind(vImpl),
 		updateXAttrs: vImpl.updateXAttrs.bind(vImpl),
@@ -314,6 +317,7 @@ function wrapReadonlyFSVersionedAPI(
 ): ReadonlyFSVersionedAPI|undefined {
 	if (!vImpl) { return; }
 	const w: ReadonlyFSVersionedAPI = {
+		stat: vImpl.stat.bind(vImpl),
 		getXAttr: vImpl.getXAttr.bind(vImpl),
 		listXAttrs: vImpl.listXAttrs.bind(vImpl),
 		getByteSource: vImpl.getByteSource.bind(vImpl),

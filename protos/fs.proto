@@ -39,7 +39,7 @@ message CheckPresenceRequestBody {
 
 // --- ReadonlyFS.stat ---
 // Request body is PathOnlyRequestBody
-// Reply body is File.Stats
+// Reply body is file.StatsMsg
 
 message PathOnlyRequestBody {
 	string path = 1;
@@ -229,6 +229,10 @@ message CollectionEvent {
 
 
 // ==== ReadonlyFSVersionedAPI referable object ====
+
+// --- ReadonlyFSVersionedAPI.stat ---
+// Request body is PathAndFlagsRequestBody
+// Reply body is file.StatsMsg
 
 // --- ReadonlyFSVersionedAPI.getXAttr ---
 message VersionedGetXAttrRequestBody {

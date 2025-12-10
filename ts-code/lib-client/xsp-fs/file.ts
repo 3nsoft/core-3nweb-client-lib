@@ -93,18 +93,8 @@ export class FileObject implements WritableFile, Linkable {
 		return linkParams;
 	}
 
-	async stat(): Promise<Stats> {
-		const node = await this.v.getNode();
-		const attrs = node.getAttrs();
-		const stat: Stats = {
-			writable: this.writable,
-			size: node.size,
-			version: node.version,
-			isFile: true,
-			ctime: new Date(attrs.ctime),
-			mtime: new Date(attrs.mtime),
-		};
-		return stat;
+	stat(): Promise<Stats> {
+		return this.v.stat();
 	}
 
 	async updateXAttrs(changes: XAttrsChanges): Promise<void> {
@@ -208,6 +198,13 @@ class V implements WritableFileVersionedAPI, N {
 
 	ensureIsWritable(): void {
 		if (!this.writable) { throw new Error(`File is not writable`); }
+	}
+
+	async stat(flags?: VersionedReadFlags): Promise<Stats> {
+		const node = await this.getNode();
+		const stats = await node.getStats(flags);
+		stats.writable = this.writable;
+		return stats;
 	}
 
 	async updateXAttrs(changes: XAttrsChanges): Promise<number> {

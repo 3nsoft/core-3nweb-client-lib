@@ -464,6 +464,12 @@ declare namespace web3n.files {
 
 	interface ReadonlyFileVersionedAPI {
 
+		/**
+		 * This returns a promise, resolvable to stats of the file.
+		 * @param flags are optional flags to read archived or remote versions.
+		 */
+		stat(flags?: VersionedReadFlags): Promise<Stats>;
+
 		getXAttr(
 			xaName: string, flags?: VersionedReadFlags
 		): Promise<{ attr: any; version: number; }>;
@@ -1081,6 +1087,14 @@ declare namespace web3n.files {
 	}
 
 	interface ReadonlyFSVersionedAPI {
+
+		/**
+		 * This returns a promise, resolvable to stats of an entity at a given
+		 * path.
+		 * @param path
+		 * @param flags are optional flags to read archived or remote versions.
+		 */
+		stat(path: string, flags?: VersionedReadFlags): Promise<Stats>;
 
 		getXAttr(
 			path: string, xaName: string, flags?: VersionedReadFlags

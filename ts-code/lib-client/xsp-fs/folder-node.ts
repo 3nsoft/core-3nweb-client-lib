@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,7 +24,7 @@ import { base64 } from '../../lib-common/buffer-utils';
 import { makeFileException, FileException } from '../../lib-common/exceptions/file';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { Storage, Node, NodeType, setPathInExc, FSChangeSrc, ObjId } from './common';
-import { FSEvent, NodeInFS } from './node-in-fs';
+import { FSEvent, NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
 import { FileNode } from './file-node';
 import { LinkNode } from './link-node';
 import { LinkParameters } from '../fs-utils/files';
@@ -35,7 +35,7 @@ import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderN
 import * as random from '../../lib-common/random-node';
 import { parseFolderInfo, serializeFolderInfo } from './folder-node-serialization';
 import { CommonAttrs, XAttrs } from './attrs';
-import { NodePersistance } from './node-persistence';
+import { Attrs, NodePersistance } from './node-persistence';
 import { assert } from '../../lib-common/assert';
 import { appendArray } from './util/for-arrays';
 
@@ -49,6 +49,7 @@ type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type Stats = web3n.files.Stats;
 
 export interface NodeInfo {
 	/**
@@ -279,6 +280,26 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		rf.currentState = folderInfo;
 		rf.setUpdatedParams(0, attrs, xattrs);
 		return rf;
+	}
+
+	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
+		let attrs: CommonAttrs|Attrs;
+		let version: number;
+		if (shouldReadCurrentVersion(flags)) {
+			attrs = this.attrs;
+			version = this.version;
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			attrs = await this.crypto.getAttrs(src);
+			version = src.version;
+		}
+		return {
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
+			version,
+			writable: false,
+			isFolder: true,
+		};
 	}
 
 	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
