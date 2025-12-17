@@ -43,6 +43,7 @@ type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type UploadEvent = web3n.files.UploadEvent;
 
 
 export class FileObject implements WritableFile, Linkable {
@@ -323,10 +324,29 @@ class S implements WritableFileSyncAPI {
 		Object.freeze(this);
 	}
 
+	async startUpload(
+		opts?: OptionsToUploadLocal
+	): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined> {
+		this.n.ensureIsWritable();
+		const node = await this.n.getNode();
+		const startedUpload = await node.startUpload(opts);
+		if (startedUpload) {
+			const { uploadTaskId, uploadVersion } = startedUpload;
+			return { uploadTaskId, uploadVersion };
+		} else {
+			return;
+		}
+	}
+
 	async upload(opts?: OptionsToUploadLocal): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.getNode();
-		const uploadVersion = await node.upload(opts);
+		const startedUpload = await node.startUpload(opts);
+		if (!startedUpload) {
+			return;
+		}
+		const { uploadVersion, completion } = startedUpload;
+		await completion;
 		return uploadVersion;
 	}
 

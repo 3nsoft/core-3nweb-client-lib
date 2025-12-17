@@ -101,8 +101,7 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 
 		fsSetup.resetFS = async () => {
 			await clearFS(dev1AppFS);
-			dev1FS = await dev1AppFS.writableSubRoot(
-				testFolder, { create: true, exclusive: true });
+			dev1FS = await dev1AppFS.writableSubRoot(testFolder, { create: true, exclusive: true });
 			await dev1AppFS.v!.sync!.upload(testFolder);
 			await dev1AppFS.v!.sync!.upload('');
 			const d2AppFS = await dev2AppFS();
@@ -112,8 +111,7 @@ export function makeSetupWithTwoDevsFSs(testFolder: string): {
 			} else if (status.state === 'conflicting') {
 				throw new Error(`Test file system on a second device has inconvenient conflicting sync state`);
 			}
-			dev2FS = await d2AppFS.writableSubRoot(
-				testFolder, { create: false });
+			dev2FS = await d2AppFS.writableSubRoot(testFolder, { create: false });
 		};
 
 		await fsSetup.resetFS();

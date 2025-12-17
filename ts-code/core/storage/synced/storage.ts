@@ -36,6 +36,7 @@ type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
 type SyncStatus = web3n.files.SyncStatus;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
+type UploadEvent = web3n.files.UploadEvent;
 
 
 export class SyncedStore implements ISyncedStorage {
@@ -162,11 +163,6 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	async isObjOnDisk(objId: ObjId): Promise<boolean> {
-		const obj = await this.files.findObj(objId);
-		return !!obj;
-	}
-
 	async isRemoteVersionOnDisk(
 		objId: ObjId, version: number
 	): Promise<'complete'|'partial'|'none'> {
@@ -179,29 +175,21 @@ export class SyncedStore implements ISyncedStorage {
 		return obj.downloadRemoteVersion(version);
 	}
 
-	async upload(
+	async startUpload(
 		objId: ObjId, localVersion: number, uploadVersion: number,
-		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean
-	): Promise<void> {
+		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean,
+		eventSink: (event: UploadEvent) => void
+	): Promise<{ uploadTaskId: number; completion: Promise<void>; }> {
 		const obj = await this.getObjOrThrow(objId, true);
-		const syncedBase = await obj.combineLocalBaseIfPresent(localVersion);
-		if (uploadHeader) {
-			await obj.saveUploadHeaderFile(uploadHeader);
-		}
-		await this.uploader.uploadFromDisk(
-			obj, localVersion, uploadVersion, uploadHeader?.uploadHeader,
-			syncedBase, createOnRemote
+		const { completion, uploadTaskId } = await this.uploader.startUploadFromDisk(
+			obj, localVersion, uploadVersion, uploadHeader, createOnRemote, eventSink
 		);
-		await obj.recordUploadCompletion(
-			localVersion, uploadVersion,
-			(uploadHeader ? {
-				newHeader: uploadHeader.uploadHeader,
-				originalHeader: uploadHeader.localHeader
-			} : undefined)
-		);
-		if (localVersion > uploadVersion) {
-			await obj.removeLocalVersionFilesLessThan(localVersion);
-		}
+		return {
+			uploadTaskId,
+			completion: completion.then(() => {
+				this.dropCachedLocalObjVersionsLessOrEqual(objId, localVersion);
+			})
+		};
 	}
 
 	async uploadObjRemoval(objId: ObjId): Promise<void> {
@@ -300,6 +288,11 @@ export class SyncedStore implements ISyncedStorage {
 		});
 		if (!obj) { return; }
 		await obj.removeCurrentVersion();
+	}
+
+	async getNumOfBytesNeedingDownload(objId: string, version: number): Promise<number|'unknown'> {
+		const obj = await this.getObjOrThrow(objId);
+		return obj.getNumOfBytesNeedingDownload(version);
 	}
 
 	async close(): Promise<void> {

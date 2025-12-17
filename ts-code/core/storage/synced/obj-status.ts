@@ -868,5 +868,22 @@ function uploadInStatus(upload: ObjStatusInfo['upload']): UploadingState|undefin
 	}
 }
 
+export function countBytesIn(info: UploadInfo): number {
+	if ((info.type === 'removal') || !info.needUpload) {
+		return 0;
+	}
+	if (info.needUpload.type === 'ordered-whole') {
+		const { segsLeft, header } = info.needUpload;
+		return (segsLeft + (header ?? 0));
+	} else {
+		const { header, newSegsLeft } = info.needUpload;
+		let count = (header ?? 0);
+		for (const { len } of newSegsLeft) {
+			count += len;
+		}
+		return count;
+	}
+}
+
 
 Object.freeze(exports);

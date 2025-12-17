@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -82,16 +82,19 @@ export function loadSpecs<S extends { isUp: boolean }>(
 	const specs = readSpecs(folderWithModules);
 	specs.forEach((d) => {
 		const describeFn = (d.focused ? fdescribe : describe);
-		describeFn(d.description, () => {
-			d.its.forEach(it => {
-				const spec = specFuncFor(it, offFlags);
-				if (!spec) { return; }
-				spec(it.expectation, async function() {
-					if (!it.func || (setup && !setup.isUp)) { return; }
-					await it.func(setup!);
-				}, it.timeout);
+		const its = d.its
+		.map(it => ({ spec: specFuncFor(it, offFlags), it }))
+		.filter(({spec}) => !!spec);
+		if (its.length > 0) {
+			describeFn(d.description, () => {
+				its.forEach(({ spec, it }) => {
+					spec!(it.expectation, async function() {
+						if (!it.func || (setup && !setup.isUp)) { return; }
+						await it.func(setup!);
+					}, it.timeout);
+				});
 			});
-		});
+		}
 	});
 }
 

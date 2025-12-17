@@ -43,6 +43,7 @@ declare namespace web3n.files {
 		notImplemented?: true;
 		attrsNotEnabledInFS?: true;
 		versionMismatch?: true;
+		storageIsNotSyncedType?: true;
 		isEndless?: true;
 		storageClosed?: true;
 		remoteNotSet?: true;
@@ -71,6 +72,7 @@ declare namespace web3n.files {
 		localVersion?: number;
 		remoteVersion?: number;
 		alreadyUploading?: true;
+		uploadTaskId?: number;
 		versionNotFound?: true;
 		childNeverUploaded?: true;
 		childName?: string;
@@ -147,7 +149,17 @@ declare namespace web3n.files {
 		 */
 		version?: number;
 
+		/**
+		 * This gives a number of bytes that should be downloaded to have file
+		 * completly on a device.
+		 */
+		bytesNeedDownload?: number;
+
+		versionSyncBranch?: SyncBranch;
+
 	}
+
+	type SyncBranch = 'local' | 'synced' | 'remote';
 
 	/**
 	 * Sync status contains info about possible version branches with possible
@@ -400,7 +412,7 @@ declare namespace web3n.files {
 		 */
 		getByteSource(): Promise<FileByteSource>;
 
-		watch(observer: Observer<FileEvent|RemoteEvent>): () => void;
+		watch(observer: Observer<FileEvent|RemoteEvent|UploadEvent>): () => void;
 
 	}
 
@@ -522,6 +534,8 @@ declare namespace web3n.files {
 		listVersions(
 			flags?: VersionedReadFlags
 		): Promise<{ current?: number; archived?: number[]; }>;
+		// XXX
+		// ): Promise<{ current?: number; archived?: number[]; synced?: number; conflictingRemote?: number[]; }>;
 
 		/**
 		 * File from synced storage has this api
@@ -646,6 +660,19 @@ declare namespace web3n.files {
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
 
 		/**
+		 * This starts/schedules an upload, if it hasn't been already.
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * Undefined is returned when upload is not needed, e.g. version is already synced.
+		 * Upload version and upload task id are returned together with an indicator of whether
+		 * this call has started upload, or it has already been going on.
+		 * Upload task id can be used to watch upload process.
+		 * @param opts 
+		 */
+		startUpload(
+			opts?: OptionsToUploadLocal
+		): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined>;
+
+		/**
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
 		 * @param opts 
 		 */
@@ -736,16 +763,16 @@ declare namespace web3n.files {
 		readLink(path: string): Promise<SymLink>;
 
 		watchFolder(
-			path: string, observer: Observer<FolderEvent|RemoteEvent>
+			path: string, observer: Observer<FolderEvent|RemoteEvent|UploadEvent>
 		): () => void;
 
 		watchFile(
-			path: string, observer: Observer<FileEvent|RemoteEvent>
+			path: string, observer: Observer<FileEvent|RemoteEvent|UploadEvent>
 		): () => void;
 
 		watchTree(
 			path: string, depth: number|undefined,
-			observer: Observer<FolderEvent|FileEvent|RemoteEvent>
+			observer: Observer<FolderEvent|FileEvent|RemoteEvent|UploadEvent>
 		): () => void;
 
 		close(): Promise<void>;
@@ -1308,6 +1335,20 @@ declare namespace web3n.files {
 	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
 
 		/**
+		 * This starts/schedules an upload, if it hasn't been already.
+		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * Undefined is returned when upload is not needed, e.g. version is already synced.
+		 * Upload version and upload task id are returned together with an indicator of whether
+		 * this call has started upload, or it has already been going on.
+		 * Upload task id can be used to watch upload process.
+		 * @param path 
+		 * @param opts 
+		 */
+		startUpload(
+			path: string, opts?: OptionsToUploadLocal
+		): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined>;
+
+		/**
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
 		 * @param path 
 		 * @param opts 
@@ -1404,6 +1445,29 @@ declare namespace web3n.files {
 	interface RemoteChangeEvent extends FSEvent {
 		type: 'remote-change';
 		newVersion: number;
+	}
+
+	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDoneEvent;
+
+	interface UploadEventBase extends FSEvent {
+		uploadTaskId: number;
+		localVersion: number;
+		uploadVersion: number;
+	}
+
+	interface UploadStartEvent extends UploadEventBase {
+		type: 'upload-started';
+		totalBytesToUpload: number;
+	}
+
+	interface UploadProgressEvent extends UploadEventBase {
+		type: 'upload-progress';
+		totalBytesToUpload: number;
+		bytesLeftToUpload: number;
+	}
+
+	interface UploadDoneEvent extends UploadEventBase {
+		type: 'upload-done';
 	}
 
 }

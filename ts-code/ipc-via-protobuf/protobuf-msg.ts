@@ -28,8 +28,7 @@ export interface ObjectReference<T> {
 	objType: T;
 	path: string[];
 }
-export const objRefType = ProtoType.for<ObjectReference<any>>(
-	pb.ObjectReference);
+export const objRefType = ProtoType.for<ObjectReference<any>>(pb.ObjectReference);
 
 export interface BooleanValue {
 	value: boolean;
@@ -39,8 +38,7 @@ export const boolValType = ProtoType.for<BooleanValue>(pb.BooleanValue);
 export interface StringArrayValue {
 	values: string[];
 }
-export const strArrValType = ProtoType.for<StringArrayValue>(
-	pb.StringArrayValue);
+export const strArrValType = ProtoType.for<StringArrayValue>(pb.StringArrayValue);
 
 export function fixArray<T>(arr: T[]): T[] {
 	return (arr ? arr : []);

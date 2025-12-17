@@ -28,14 +28,14 @@ import { makeFSSyncException, StorageException } from './exceptions';
 import { Observable, Subject, Subscription } from 'rxjs';
 import { filter, map, share } from 'rxjs/operators';
 import { CommonAttrs, XAttrs } from './attrs';
-import { NodePersistance } from './node-persistence';
+import { Attrs, NodePersistance } from './node-persistence';
 import { FolderNode } from './folder-node';
 import { ObjSource } from 'xsp-files';
 import { assert } from '../../lib-common/assert';
 import { makeRuntimeException } from '../../lib-common/exceptions/runtime';
 
 
-export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent;
+export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent | web3n.files.UploadEvent;
 type RemoteEvent = web3n.files.RemoteEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
 type FileChangeEvent = web3n.files.FileChangeEvent;
@@ -180,6 +180,51 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	}
 
 	abstract getStats(flags?: VersionedReadFlags): Promise<Stats>;
+
+	protected async getStatsAndSize(flags?: VersionedReadFlags): Promise<{ stats: Stats; attrs?: Attrs; }> {
+		let attrs: CommonAttrs|Attrs;
+		let version: number;
+		if (shouldReadCurrentVersion(flags)) {
+			attrs = this.attrs;
+			version = this.version;
+		} else {
+			const src = await this.getObjSrcOfVersion(flags);
+			attrs = await this.crypto.getAttrs(src);
+			version = src.version;
+		}
+		const stats: Stats = {
+			ctime: new Date(attrs.ctime),
+			mtime: new Date(attrs.mtime),
+			version,
+			writable: false,
+		};
+		switch (this.type) {
+			case 'folder':
+				stats.isFolder = true;
+				break;
+			case 'link':
+				stats.isLink = true;
+				break;
+			case 'file':
+				stats.isFile = true;
+				break;
+		}
+		if ((this.storage.type === 'synced')
+		|| (this.storage.type === 'share')) {
+			const syncStatus = await this.syncedStorage().status(this.objId);
+			const { synced } = syncStatus.syncStatus();
+			if (synced) {
+				if (synced.latest && (version > synced.latest)) {
+					stats.versionSyncBranch = ((flags?.remoteVersion === version) ? 'remote' : 'local');
+				} else if ((version === synced.latest) || synced.archived?.includes(version)) {
+					stats.versionSyncBranch = 'synced';
+				}
+			} else {
+				stats.versionSyncBranch = ((flags?.remoteVersion === version) ? 'remote' : 'local');
+			}
+		}
+		return { stats, attrs: ((attrs as CommonAttrs).pack ? undefined : attrs as Attrs) };
+	}
 
 	async listVersions(): Promise<{ current?: number; archived?: number[]; }> {
 		return (await this.storage.status(this.objId)).listVersions();
@@ -486,37 +531,51 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return { createOnRemote: (uploadVersion === 1), localVersion, uploadVersion };
 	}
 
-	async upload(opts: OptionsToUploadLocal|undefined): Promise<number|undefined> {
+	async startUpload(
+		opts: OptionsToUploadLocal|undefined
+	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
 			const { localVersion, createOnRemote, uploadVersion } = toUpload;
-			const uploadHeader = await this.uploadHeaderChange(localVersion, uploadVersion);
-			const storage = this.syncedStorage();
-			await storage.upload(this.objId, localVersion, uploadVersion, uploadHeader, createOnRemote);
-			return await this.doChange(true, async () => {
-				storage.dropCachedLocalObjVersionsLessOrEqual(
-					this.objId, localVersion
-				);
-				if (this.currentVersion === localVersion) {
-					this.currentVersion = uploadVersion;
-				}
-				return uploadVersion;
-			});
+			return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
 		} catch (exc) {
 			throw setPathInExc(exc, this.name);
 		}
 	}
 
-	protected async uploadHeaderChange(
+	protected async startUploadProcess(
+		localVersion: number, createOnRemote: boolean, uploadVersion: number
+	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }> {
+		const uploadHeader = await this.makeHeaderForUploadIfVersionChanges(localVersion, uploadVersion);
+		const storage = this.syncedStorage();
+		const { completion, uploadTaskId } = await storage.startUpload(
+			this.objId, localVersion, uploadVersion, uploadHeader, createOnRemote,
+			event => {
+				event.path = this.name;
+				this.broadcastEvent(event);
+			}
+		);
+		return {
+			completion: completion.then(() => this.doChange(true, async () => {
+				if (this.currentVersion === localVersion) {
+					this.currentVersion = uploadVersion;
+				}
+			})).catch(exc => {
+				throw setPathInExc(exc, this.name);
+			}),
+			uploadTaskId,
+			uploadVersion
+		};
+	}
+
+	private async makeHeaderForUploadIfVersionChanges(
 		localVersion: number, uploadVersion: number
 	): Promise<UploadHeaderChange|undefined> {
 		if (localVersion === uploadVersion) { return; }
-		const currentSrc = await this.storage.getObjSrc(
-			this.objId, localVersion);
+		const currentSrc = await this.storage.getObjSrc(this.objId, localVersion);
 		const localHeader = await currentSrc.readHeader();
-		const uploadHeader = await this.crypto.reencryptHeader(
-			localHeader, uploadVersion);
+		const uploadHeader = await this.crypto.reencryptHeader(localHeader, uploadVersion);
 		return { localHeader, localVersion, uploadHeader, uploadVersion };
 	}
 

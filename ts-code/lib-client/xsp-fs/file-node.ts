@@ -187,28 +187,18 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	}
 
 	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
-		let attrs: CommonAttrs|Attrs;
-		let version: number;
-		let size: number;
-		if (shouldReadCurrentVersion(flags)) {
-			attrs = this.attrs;
-			version = this.version;
-			size = this.fileSize
-		} else {
-			const src = await this.getObjSrcOfVersion(flags);
-			const fileAttrs = await this.crypto.getFileAttrs(src);
-			attrs = fileAttrs.attrs;
-			version = src.version;
-			size = fileAttrs.size;
+		const { stats, attrs } = await this.getStatsAndSize(flags);
+		stats.size = (attrs ? attrs.size : this.fileSize);
+		if ((this.storage.type === 'synced')
+		|| (this.storage.type === 'share')) {
+			const bytesNeedDownload = await this.syncedStorage().getNumOfBytesNeedingDownload(
+				this.objId, stats.version!
+			);
+			if (typeof bytesNeedDownload === 'number') {
+				stats.bytesNeedDownload = bytesNeedDownload;
+			}
 		}
-		return {
-			ctime: new Date(attrs.ctime),
-			mtime: new Date(attrs.mtime),
-			version,
-			writable: false,
-			isFile: true,
-			size
-		};
+		return stats;
 	}
 
 	async readSrc(

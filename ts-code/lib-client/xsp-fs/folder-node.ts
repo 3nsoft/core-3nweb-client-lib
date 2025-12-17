@@ -283,23 +283,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
-		let attrs: CommonAttrs|Attrs;
-		let version: number;
-		if (shouldReadCurrentVersion(flags)) {
-			attrs = this.attrs;
-			version = this.version;
-		} else {
-			const src = await this.getObjSrcOfVersion(flags);
-			attrs = await this.crypto.getAttrs(src);
-			version = src.version;
-		}
-		return {
-			ctime: new Date(attrs.ctime),
-			mtime: new Date(attrs.mtime),
-			version,
-			writable: false,
-			isFolder: true,
-		};
+		const { stats } = await this.getStatsAndSize(flags);
+		return stats;
 	}
 
 	protected async setCurrentStateFrom(src: ObjSource): Promise<void> {
@@ -967,32 +952,32 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return linkParams;
 	}
 
-	async upload(
+	async startUpload(
 		opts: OptionsToUploadLocal|undefined
-	): Promise<number|undefined> {
+	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
+			const { localVersion, createOnRemote, uploadVersion } = toUpload;
 			if (toUpload.createOnRemote) {
-				return await super.upload(opts);
+				return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
 			}
-			const storage = this.syncedStorage();
-			const { localVersion, uploadVersion } = toUpload;
-			const removedNodes = await this.getNodesRemovedBetweenVersions(
-				localVersion, uploadVersion - 1
-			);
-			const uploadHeader = await this.uploadHeaderChange(
-				localVersion, uploadVersion
-			);
-			await storage.upload(
-				this.objId, localVersion, uploadVersion, uploadHeader, false
-			);
+			const removedNodes = await this.getNodesRemovedBetweenVersions(localVersion, uploadVersion - 1);
+			const {
+				completion, uploadTaskId
+			} = await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
 			if (removedNodes.length > 0) {
 				// start upload of children's removal after folder's upload;
-				// we also don't await for chidren removal
-				this.uploadRemovalOf(removedNodes);
+				// we also don't await for chidren removal in returned completion
+				completion.then(() => this.uploadRemovalOf(removedNodes));
 			}
-			return uploadVersion;
+			return {
+				completion: completion.catch(exc => {
+					throw setPathInExc(exc, this.name);
+				}),
+				uploadTaskId,
+				uploadVersion
+			};
 		} catch (exc) {
 			throw setPathInExc(exc, this.name);
 		}

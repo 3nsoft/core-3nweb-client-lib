@@ -119,6 +119,7 @@ function wrapWritableFileSyncAPI(
 		status: sImpl.status.bind(sImpl),
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
+		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 	};
@@ -275,8 +276,8 @@ function wrapWritableFSSyncAPI(
 		download: sImpl.download.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
-		diffCurrentAndRemoteFolderVersions:
-			sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
+		diffCurrentAndRemoteFolderVersions: sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
+		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
 		adoptRemoteFolderItem: sImpl.adoptRemoteFolderItem.bind(sImpl),
 	};

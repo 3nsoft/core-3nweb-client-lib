@@ -74,29 +74,15 @@ message SymLinkTargetReplyBody {
 
 // --- ReadonlyFS.watchFolder ---
 // Its an observable call, and initial request is PathOnlyRequestBody
-// Observer expects FSEventMsg in next.
-
-message FSEventMsg {
-	string type = 1;
-	string path = 2;
-	common.StringValue src = 3;
-	common.UInt64Value new_version = 4;
-	common.StringValue name = 5;
-	common.StringValue old_name = 6;
-	common.StringValue new_name = 7;
-	ListingEntryMsg entry = 8;
-	common.UInt64Value move_label = 9;
-	common.UInt64Value removed_arch_ver = 10;
-	common.UInt64Value archived_version = 11;
-}
+// Observer expects common.StringValue in next.
 
 // --- ReadonlyFS.watchFile ---
 // Its an observable call, and initial request is PathOnlyRequestBody
-// Observer expects FSEventMsg in next.
+// Observer expects common.StringValue in next.
 
 // --- ReadonlyFS.watchTree ---
 // Its an observable call, and initial request is PathOnlyRequestBody
-// Observer expects FSEventMsg in next.
+// Observer expects common.StringValue in next.
 message WatchTreeRequestBody {
 	string path = 1;
 	common.UInt32Value depth = 2;
@@ -530,14 +516,15 @@ message FolderDiff {
 // ==== WritableFSSyncAPI referable object ====
 
 // --- WritableFSSyncAPI.upload ---
-// Reply body is common.UInt64Value
+// Reply body is file.FileSyncUploadReplyBody
 message FSSyncUploadRequestBody {
 	string path = 1;
 	file.OptionsToUploadLocal opts = 2;
 }
-message FSSyncUploadReplyBody {
-	common.UInt64Value uploaded_version = 1;
-}
+
+// --- WritableFSSyncAPI.startUpload ---
+// Request body is FSSyncUploadRequestBody
+// Reply body is file.FileSyncStartUploadReplyBody
 
 // --- WritableFSSyncAPI.adoptRemoteFolderItem ---
 message AdoptRemoteFolderItemRequestBody {

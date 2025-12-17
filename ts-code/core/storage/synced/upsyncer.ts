@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,13 +23,14 @@ import { LabelledExecPools, Task } from "../../../lib-common/processes/labelled-
 import { LogError } from "../../../lib-client/logging/log-to-file";
 import { makeFSSyncException } from "../../../lib-client/xsp-fs/exceptions";
 import { assert } from "../../../lib-common/assert";
-import { DiffVerOrderedUpload, NewVersionUpload, WholeVerOrderedUpload } from "./obj-status";
+import { countBytesIn, DiffVerOrderedUpload, NewVersionUpload, WholeVerOrderedUpload } from "./obj-status";
 import { ObjSource } from "xsp-files";
 import { defer } from "../../../lib-common/processes/deferred";
 import { DiffInfo } from "../../../lib-common/service-api/3nstorage/owner";
 import { utf8 } from "../../../lib-common/buffer-utils";
 import { FiniteChunk } from "../../../lib-common/objs-on-disk/file-layout";
-import { ObjId } from "../../../lib-client/xsp-fs/common";
+import { ObjId, UploadHeaderChange } from "../../../lib-client/xsp-fs/common";
+import { NamedProcs } from "../../../lib-common/processes/synced";
 
 const MAX_CHUNK_SIZE = 512*1024;
 
@@ -37,6 +38,7 @@ const MAX_FAST_UPLOAD = 2*1024*1024;
 
 type UploadExecLabel = 'long' | 'fast';
 type UploadNeedInfo = NonNullable<NewVersionUpload['needUpload']>;
+type UploadEvent = web3n.files.UploadEvent;
 
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 
@@ -44,6 +46,9 @@ export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 export class UpSyncer {
 
 	private readonly execPools: LabelledExecPools<UploadExecLabel>;
+	private readonly tasksByObjIds = new Map<ObjId, UploadTask>();
+	private readonly tasksByIds = new Map<number, UploadTask>();
+	private readonly syncedUploadStarts = new NamedProcs();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -93,17 +98,59 @@ export class UpSyncer {
 		await obj.recordRemovalUploadAndGC();
 	}
 
-	async uploadFromDisk(
+	async startUploadFromDisk(
 		obj: SyncedObj, localVersion: number, uploadVersion: number,
-		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
-		createOnRemote: boolean
-	): Promise<void> {
-		const task = await UploadTask.for(
-			obj, localVersion, uploadVersion, uploadHeader, syncedBase,
-			createOnRemote,
-			this.remoteStorage, this.execPools);
-		this.execPools.add(task);
-		await task.completion();
+		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean,
+		eventSink: (event: UploadEvent) => void,
+	): Promise<{ completion: Promise<void>; uploadTaskId: number; }> {
+		const foundTask = this.tasksByObjIds.get(obj.objId);
+		if (foundTask) {
+			throw makeFSSyncException('', {
+				alreadyUploading: true,
+				uploadTaskId: foundTask.taskId
+			});
+		}
+		const uploadStart = this.syncedUploadStarts.latestTaskAtThisMoment<{
+			completion: Promise<void>; uploadTaskId: number;
+		}>(obj.objId!);
+		if (uploadStart) {
+			return uploadStart;
+		}
+		return this.syncedUploadStarts.start(obj.objId!, async () => {
+			let uploadTaskId: number;
+			do {
+				uploadTaskId = Math.floor(Number.MAX_SAFE_INTEGER * Math.random());
+			} while (this.tasksByIds.has(uploadTaskId));
+
+			const syncedBase = await obj.combineLocalBaseIfPresent(localVersion);
+			if (uploadHeader) {
+				await obj.saveUploadHeaderFile(uploadHeader);
+			}
+			const task = await UploadTask.for(
+				obj, localVersion, uploadVersion, uploadHeader?.uploadHeader, syncedBase,
+				createOnRemote, uploadTaskId, eventSink, this.remoteStorage, this.execPools,
+				async () => {
+					if (this.tasksByIds.delete(task.taskId)) {
+						this.tasksByObjIds.delete(task.objId);
+					}
+					await obj.recordUploadCompletion(
+						localVersion, uploadVersion, (uploadHeader ? {
+							newHeader: uploadHeader.uploadHeader,
+							originalHeader: uploadHeader.localHeader
+						} : undefined)
+					);
+					if (localVersion > uploadVersion) {
+						await obj.removeLocalVersionFilesLessThan(localVersion);
+					}
+				}
+			);
+			this.tasksByIds.set(uploadTaskId, task);
+			this.tasksByObjIds.set(task.objId, task);
+			const completion = task.completion();
+			completion.catch(noop);
+			this.execPools.add(task);
+			return { completion, uploadTaskId };
+		});
 	}
 
 }
@@ -122,34 +169,38 @@ class UploadTask implements Task<UploadExecLabel> {
 
 	private readonly uploadCompletion = defer<void>();
 	private readonly execLabel: UploadExecLabel;
+	private readonly totalBytesToUpload: number;
 
 	private constructor(
+		public readonly taskId: number,
 		private readonly remoteStorage: StorageOwner,
-		private readonly objId: ObjId,
+		public readonly objId: ObjId,
 		private readonly objStatus: UploadStatusRecorder,
 		private readonly src: ObjSource,
 		private readonly execPools: LabelledExecPools<UploadExecLabel>,
 		private readonly info: NewVersionUpload,
-		private readonly uploadHeader: Uint8Array|undefined
+		private readonly uploadHeader: Uint8Array|undefined,
+		private readonly doAtCompletion: () => Promise<void>,
+		private readonly eventSink: (event: UploadEvent) => void
 	) {
 		this.execLabel = executorLabelFor(this.info.needUpload!);
+		this.totalBytesToUpload = countBytesIn(this.info);
+		this.emitUploadEvent('upload-started', { totalBytesToUpload: this.totalBytesToUpload });
 		Object.seal(this);
 	}
 
 	static async for(
 		obj: SyncedObj, localVersion: number, uploadVersion: number,
 		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
-		createObj: boolean,
-		remoteStorage: StorageOwner, execPools: LabelledExecPools<UploadExecLabel>
+		createObj: boolean, taskId: number, eventSink: (event: UploadEvent) => void,
+		remoteStorage: StorageOwner, execPools: LabelledExecPools<UploadExecLabel>,
+		doAtCompletion: () => Promise<void>
 	): Promise<UploadTask> {
 		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
 		let needUpload: UploadNeedInfo;
 		if (syncedBase) {
-			const {
-				diff, newSegsPackOrder
-			} = await obj.diffForUploadOf(localVersion);
-			needUpload = await diffVerUpload(
-				src, uploadHeader, diff, newSegsPackOrder);
+			const { diff, newSegsPackOrder } = await obj.diffForUploadOf(localVersion);
+			needUpload = await diffVerUpload(src, uploadHeader, diff, newSegsPackOrder);
 		} else {
 			needUpload = await wholeVerUpload(src, uploadHeader, createObj);
 		}
@@ -163,7 +214,8 @@ class UploadTask implements Task<UploadExecLabel> {
 		const objStatus = obj.statusObj();
 		await objStatus.recordUploadStart(info);
 		return new UploadTask(
-			remoteStorage, obj.objId, objStatus, src, execPools, info, uploadHeader
+			taskId, remoteStorage, obj.objId, objStatus, src, execPools, info, uploadHeader,
+			doAtCompletion, eventSink
 		);
 	}
 
@@ -173,6 +225,17 @@ class UploadTask implements Task<UploadExecLabel> {
 
 	completion(): Promise<void> {
 		return this.uploadCompletion.promise;
+	}
+
+	private emitUploadEvent(type: UploadEvent['type'], fields: Partial<UploadEvent>): void {
+		this.eventSink({
+			type,
+			localVersion: this.info.localVersion,
+			uploadTaskId: this.taskId,
+			uploadVersion: this.info.uploadVersion,
+			path: '',
+			...fields
+		} as any);
 	}
 
 	async process(): Promise<void> {
@@ -196,9 +259,16 @@ class UploadTask implements Task<UploadExecLabel> {
 			}
 			await this.objStatus.recordUploadInterimState(this.info);
 			if (this.info.needUpload) {
+				this.emitUploadEvent('upload-progress', {
+					totalBytesToUpload: this.totalBytesToUpload,
+					bytesLeftToUpload: countBytesIn(this.info)
+				});
 				this.execPools.add(this);
 			} else {
-				this.uploadCompletion.resolve();
+				await this.doAtCompletion().finally(() => {
+					this.uploadCompletion.resolve();
+					this.emitUploadEvent('upload-done', {});
+				});
 			}
 		} catch (exc) {
 			this.info.needUpload = undefined;
@@ -285,9 +355,7 @@ class UploadTask implements Task<UploadExecLabel> {
 			this.remoteStorage.maxChunkSize : MAX_CHUNK_SIZE);
 	}
 
-	private async continueOrderedUpload(
-		upload: WholeVerOrderedUpload
-	): Promise<void> {
+	private async continueOrderedUpload(upload: WholeVerOrderedUpload): Promise<void> {
 		const segsToUpload = Math.min(upload.segsLeft, this.maxUploadChunk());
 		const segs = await this.src.segSrc.readAt(upload.segsOfs, segsToUpload);
 		assert(!!segs && (segs.length === segsToUpload));
@@ -307,9 +375,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		}
 	}
 
-	private async continueOrderedDiffUpload(
-		upload: DiffVerOrderedUpload
-	): Promise<void> {
+	private async continueOrderedDiffUpload(upload: DiffVerOrderedUpload): Promise<void> {
 		const maxSegs = this.maxUploadChunk();
 		const segInfo = upload.newSegsLeft[0];
 		assert(!!segInfo);

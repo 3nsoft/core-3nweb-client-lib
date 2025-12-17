@@ -48,6 +48,9 @@ it.func = async function(s) {
 	const file1 = 'some folder/file 1';
 	const fstSize = 10;
 	await testFS.v!.writeBytes(file1, await randomBytes(fstSize));
+	const v1stats = await testFS.stat(file1);
+	expect(v1stats.versionSyncBranch).toBe('local');
+	await sleep(10);
 	await testFS.v!.sync!.upload(file1);
 	await sleep(10);
 	const sndSize = 20;
@@ -61,9 +64,12 @@ it.func = async function(s) {
 	const statsSynced = await testFS.v!.stat(file1, { remoteVersion: syncStatus.synced?.latest });
 	expect(statsSynced.version).toBe(syncStatus.synced?.latest);
 	expect(statsSynced.size).toBe(fstSize);
+	expect(statsSynced.versionSyncBranch).toBe('synced');
 
 	expect(statsSynced.ctime!.valueOf()).toBe(statsLocal.ctime!.valueOf());
 	expect(statsSynced.mtime!.valueOf()).toBeLessThan(statsLocal.mtime!.valueOf());
+	expect(statsSynced.ctime!.valueOf()).toBe(v1stats.ctime!.valueOf());
+	expect(statsSynced.mtime!.valueOf()).toBe(v1stats.mtime!.valueOf());
 };
 specs.its.push(it);
 

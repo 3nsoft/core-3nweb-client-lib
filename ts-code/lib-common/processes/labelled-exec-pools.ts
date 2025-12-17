@@ -61,9 +61,7 @@ class ProcessingPool<PoolLabel extends string> {
 		} catch (err) {
 			await this.doOnError(err);
 		} finally {
-			if (proc) {
-				this.inProcess.delete(proc);
-			}
+			this.inProcess.delete(proc!);
 		}	
 		return this.processNextQueued();
 	}

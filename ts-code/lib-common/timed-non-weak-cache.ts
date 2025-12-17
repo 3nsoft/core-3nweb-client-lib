@@ -20,7 +20,7 @@ import { TimedCache } from "./timed-cache";
 export class TimeWindowCache<TKey, TVal> implements TimedCache<TKey, TVal> {
 	private filling: Map<TKey, TVal> = new Map<TKey, TVal>();
 	private waiting: Map<TKey, TVal> = new Map<TKey, TVal>();
-	private interval: NodeJS.Timer|void;
+	private interval: NodeJS.Timeout|void;
 
 	constructor(
 		periodMillis: number,

@@ -53,7 +53,8 @@ message StatsMsg {
 	common.UInt64Value mtime = 6;
 	common.UInt64Value ctime = 7;
 	common.UInt64Value version = 8;
-	SyncStatusMsg sync = 9;
+	common.UInt64Value bytes_need_download = 9;
+	common.StringValue version_sync_branch = 10;
 }
 
 // --- ReadonlyFile.getXAttr ---
@@ -95,16 +96,7 @@ message ReadBytesReplyBody {
 
 // --- ReadonlyFile.watch ---
 // Its an observable call, and initial request is empty.
-// Observer expects FileEvent in next.
-
-message FileEventMsg {
-	string type = 1;
-	string path = 2;
-	common.StringValue src = 3;
-	common.UInt64Value new_version = 4;
-	common.UInt64Value removed_arch_ver = 5;
-	common.UInt64Value archived_version = 6;
-}
+// Observer expects common.StringValue in next.
 
 
 // ==== ReadonlyFileVersionedAPI referable object ====
@@ -309,7 +301,6 @@ message OptionsToAdopteRemote {
 // ==== WritableFileSyncAPI referable object ====
 
 // --- WritableFileSyncAPI.upload ---
-// Reply body is common.UInt64Value
 message FileSyncUploadRequestBody {
 	OptionsToUploadLocal opts = 1;
 }
@@ -317,7 +308,28 @@ message FileSyncUploadReplyBody {
 	common.UInt64Value uploaded_version = 1;
 }
 
+// --- WritableFileSyncAPI.startUpload ---
+// Request body is FileSyncUploadRequestBody
+message FileSyncStartUploadReplyBody {
+	message UploadInfo {
+		uint64 upload_version = 1;
+		uint64 upload_task_id = 2;
+	}
+	UploadInfo started_upload = 1;
+}
+
 message OptionsToUploadLocal {
 	common.UInt64Value local_version = 1;
 	common.UInt64Value upload_version = 2;
+}
+
+// --- WritableFileSyncAPI.watchUpload ---
+message WatchUploadRequestBody {
+	uint64 upload_task_id = 1;
+}
+message UploadEventMsg {
+	string type = 1;
+	uint64 upload_task_id = 2;
+	uint64 local_version = 3;
+	uint64 upload_version = 4;
 }

@@ -18,6 +18,7 @@
 import { ObjectReference, strArrValType, objRefType, fixInt, fixArray, Value, toOptVal, toVal, valOfOpt, valOfOptInt, toOptJson, valOf, valOfOptJson, packInt, unpackInt, encodeToUtf8, decodeFromUtf8, intValOf, methodPathFor, boolValType } from "../ipc-via-protobuf/protobuf-msg";
 import { ProtoType } from '../lib-client/protobuf-type';
 import { file as pb } from '../protos/file.proto';
+import { common as commonPB } from '../protos/common.proto';
 import { checkRefObjTypeIs, ExposedFn, makeIPCException, EnvelopeBody, ExposedObj, Caller, CoreSideServices } from "../ipc-via-protobuf/connector";
 import { errWithCause } from "../lib-common/exceptions/error";
 import { exposeSrcService, makeSrcCaller, exposeSinkService, makeSinkCaller } from "./bytes";
@@ -34,6 +35,7 @@ type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
 type File = web3n.files.File;
 type Stats = web3n.files.Stats;
+type SyncBranch = web3n.files.SyncBranch;
 type SyncStatus = web3n.files.SyncStatus;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type FileEvent = web3n.files.FileEvent;
@@ -42,6 +44,7 @@ type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
+type UploadEvent = web3n.files.UploadEvent;
 
 export function makeFileCaller(
 	caller: Caller, fileMsg: FileMsg
@@ -99,6 +102,7 @@ export function makeFileCaller(
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
 			} as WritableFileSyncAPI;
 			if (file.writable) {
+				file.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
 				file.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
 			}
 		}
@@ -160,12 +164,12 @@ export function exposeFileService(
 				adoptRemote: vsAdoptRemote.wrapService(file.v.sync.adoptRemote),
 			} as ExposedObj<WritableFileSyncAPI>;
 			if (file.writable) {
+				implExp.v.sync.startedUpload = vsStartUpload.wrapService((file.v.sync as WritableFileSyncAPI).startUpload);
 				implExp.v.sync.upload = vsUpload.wrapService((file.v.sync as WritableFileSyncAPI).upload);
 			}
 		}
 	}
-	const impl = expServices.exposeDroppableService<'FileImpl'>(
-		'FileImpl', implExp, file);
+	const impl = expServices.exposeDroppableService<'FileImpl'>('FileImpl', implExp, file);
 	const fileMsg: FileMsg = {
 		impl,
 		isNew: file.isNew,
@@ -197,6 +201,8 @@ interface StatsMsg {
 	mtime?: Value<number>;
 	ctime?: Value<number>;
 	version?: Value<number>;
+	bytesNeedDownload?: Value<number>;
+	versionSyncBranch?: Value<SyncBranch>;
 }
 
 const statsMsgType = ProtoType.for<StatsMsg>(pb.StatsMsg);
@@ -215,6 +221,8 @@ function statsToMsg(s: Stats): StatsMsg {
 		mtime: (s.mtime ? toVal(s.mtime.valueOf()) : undefined),
 		size: toOptVal(s.size),
 		version: toOptVal(s.version),
+		bytesNeedDownload: toOptVal(s.bytesNeedDownload),
+		versionSyncBranch: toOptVal(s.versionSyncBranch),
 	};
 }
 
@@ -230,6 +238,8 @@ function msgToStats(m: StatsMsg): Stats {
 		isLink: valOfOpt(m.isLink),
 		size: valOfOptInt(m.size),
 		version: valOfOptInt(m.version),
+		bytesNeedDownload: valOfOptInt(m.bytesNeedDownload),
+		versionSyncBranch: valOfOpt(m.versionSyncBranch),
 		ctime: (m.ctime ? new Date(valOfOptInt(m.ctime)!) : undefined),
 		mtime: (m.mtime ? new Date(valOfOptInt(m.mtime)!) : undefined),
 	};
@@ -576,86 +586,14 @@ namespace getByteSource {
 Object.freeze(getByteSource);
 
 
-interface FileEventMsg {
-	type: (FileEvent|RemoteEvent)['type'];
-	path: string;
-	src?: Value<FileEvent['src']>;
-	newVersion?: Value<number>;
-	removedArchVer?: Value<number>;
-	archivedVersion?: Value<number>;
+const stringValueType = ProtoType.for<Value<string>>(commonPB.StringValue);
+
+export function packEvent<T extends object>(e: T): Buffer {
+	return stringValueType.pack(toVal(JSON.stringify(e)));
 }
 
-const fileEventType = ProtoType.for<FileEventMsg>(pb.FileEventMsg);
-
-export function packFileEvent(e: FileEvent|RemoteEvent): Buffer {
-	const { type, path } = e;
-	switch (type) {
-		case 'file-change':
-			return fileEventType.pack({
-				type, path,
-				src: toVal(e.src),
-				newVersion: toOptVal(e.newVersion)
-			});
-		case 'removed':
-			return fileEventType.pack({
-				type, path,
-				src: toVal(e.src)
-			});
-		case 'remote-change':
-			return fileEventType.pack({
-				type, path, newVersion: toOptVal(e.newVersion)
-			});
-		case 'remote-removal':
-			return fileEventType.pack({
-				type, path
-			});
-		case 'remote-arch-ver-removal':
-			return fileEventType.pack({
-				type, path, removedArchVer: toOptVal(e.removedArchVer)
-			});
-		case 'remote-version-archival':
-			return fileEventType.pack({
-				type, path, archivedVersion: toOptVal(e.archivedVersion)
-			});
-		default:
-			throw new Error(`Unknown event type ${type}`);
-	}
-}
-
-export function unpackFileEvent(buf: EnvelopeBody): FileEvent|RemoteEvent {
-	const m = fileEventType.unpack(buf);
-	const { type, path } = m;
-	switch (type) {
-		case 'file-change':
-			return {
-				type, path,
-				src: valOf(m.src!),
-				newVersion: valOfOptInt(m.newVersion!)
-			};
-		case 'removed':
-			return {
-				type, path,
-				src: valOf(m.src!)
-			};
-		case 'remote-removal':
-			return {
-				type, path
-			};
-		case 'remote-change':
-			return {
-				type, path, newVersion: intValOf(m.newVersion!)
-			};
-		case 'remote-arch-ver-removal':
-			return {
-				type, path, removedArchVer: intValOf(m.removedArchVer!)
-			};
-		case 'remote-version-archival':
-			return {
-				type, path, archivedVersion: intValOf(m.archivedVersion!)
-			};
-		default:
-			throw new Error(`Unknown event type ${type}`);
-	}
+export function unpackEvent<T extends object>(buf: EnvelopeBody): T {
+	return JSON.parse(stringValueType.unpack(buf).value);
 }
 
 
@@ -665,7 +603,7 @@ namespace watch {
 		return buf => {
 			const s = new Subject<FileEvent|RemoteEvent>();
 			const obs = s.asObservable().pipe(
-				map(packFileEvent)
+				map(packEvent)
 			);
 			const onCancel = fn(s);
 			return { obs, onCancel };
@@ -681,13 +619,13 @@ namespace watch {
 			const unsub = caller.startObservableCall(path, undefined, s);
 			s.asObservable()
 			.pipe(
-				map(unpackFileEvent)
+				map(unpackEvent)
 			)
 			.subscribe(toRxObserver(obs));
 			return unsub;
 		};
 	}
-	
+
 }
 Object.freeze(watch);
 
@@ -1630,19 +1568,61 @@ export function optionsToUploadLocalFromMsg(
 }
 
 
-namespace vsUpload {
+export namespace vsStartUpload {
 
-	const requestType = ProtoType.for<{
+	export const requestType = ProtoType.for<{
 		opts?: OptionsToUploadLocalMsg;
 	}>(pb.FileSyncUploadRequestBody);
 
-	const replyType = ProtoType.for<{
+	export const replyType = ProtoType.for<{
+		startedUpload?: {
+			uploadVersion: number;
+			uploadTaskId: number;
+		};
+	}>(pb.FileSyncStartUploadReplyBody);
+
+	export function wrapService(fn: WritableFileSyncAPI['startUpload']): ExposedFn {
+		return buf => {
+			const { opts } = requestType.unpack(buf);
+			const promise = fn(optionsToUploadLocalFromMsg(opts))
+			.then(startedUpload => replyType.pack({ startedUpload }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFileSyncAPI['startUpload'] {
+		const path = methodPathFor<WritableFileSyncAPI>(objPath, 'startUpload');
+		return opts => caller
+		.startPromiseCall(path, requestType.pack({
+			opts: optionsToUploadLocalToMsg(opts)
+		}))
+		.then(buf => {
+			const { startedUpload } = replyType.unpack(buf);
+			if (startedUpload) {
+				const { uploadTaskId, uploadVersion } = startedUpload;
+				return {
+					uploadVersion: fixInt(uploadVersion),
+					uploadTaskId: fixInt(uploadTaskId)
+				}
+			}
+		});
+	}
+
+}
+Object.freeze(vsStartUpload);
+
+
+export namespace vsUpload {
+
+	export const replyType = ProtoType.for<{
 		uploadedVersion?: Value<number>;
 	}>(pb.FileSyncUploadReplyBody);
 
 	export function wrapService(fn: WritableFileSyncAPI['upload']): ExposedFn {
 		return buf => {
-			const { opts } = requestType.unpack(buf);
+			const { opts } = vsStartUpload.requestType.unpack(buf);
 			const promise = fn(optionsToUploadLocalFromMsg(opts))
 			.then(uploadedVersion => replyType.pack({
 				uploadedVersion: toOptVal(uploadedVersion)
@@ -1656,7 +1636,7 @@ namespace vsUpload {
 	): WritableFileSyncAPI['upload'] {
 		const path = methodPathFor<WritableFileSyncAPI>(objPath, 'upload');
 		return opts => caller
-		.startPromiseCall(path, requestType.pack({
+		.startPromiseCall(path, vsStartUpload.requestType.pack({
 			opts: optionsToUploadLocalToMsg(opts)
 		}))
 		.then(buf => valOfOptInt(replyType.unpack(buf).uploadedVersion));

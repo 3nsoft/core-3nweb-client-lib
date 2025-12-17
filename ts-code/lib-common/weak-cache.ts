@@ -99,7 +99,7 @@ implements TimedCache<TKey, TVal> {
 
 	private filling: Map<TKey, TVal> = new Map<TKey, TVal>();
 	private waiting: Map<TKey, TVal> = new Map<TKey, TVal>();
-	private interval: NodeJS.Timer;
+	private interval: NodeJS.Timeout;
 
 	constructor(millis: number) {
 		this.interval = setInterval(

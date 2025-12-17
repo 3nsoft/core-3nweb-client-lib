@@ -530,6 +530,20 @@ export class SyncedObj {
 		return (objVer.doesFileNeedDownload() ? 'complete' : 'partial');
 	}
 
+	async getNumOfBytesNeedingDownload(version: number): Promise<number|'unknown'> {
+		if (!this.status.isAmongRemote(version)) {
+			if (this.localVers.has(version)) {
+				return 0;
+			} else {
+				throw makeObjVersionNotFoundExc(this.objId, version);
+			}
+		}
+		const verPath = this.remoteVerPath(version);
+		if (!(await isOnDisk(verPath))) { return 'unknown'; }
+		const objVer = await this.instanceOfRemoteObjVer(version);
+		return objVer.numOfBytesNeedingDownload();
+	}
+
 	async downloadRemoteVersion(version: number): Promise<void> {
 		const objVer = await this.instanceOfRemoteObjVer(version);
 		await objVer.downloadMissingSections();

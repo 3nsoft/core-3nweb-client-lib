@@ -38,7 +38,8 @@ const ALL_SPECS = [
 jas.loadConfig({
 	spec_dir: 'build/tests',
 	spec_files: ((specsFromCLI.length > 0) ? specsFromCLI : ALL_SPECS),
-	random: false
+	random: false,
+	failSpecWithNoExpectations: false,
 });
 
 jas.configureDefaultReporter({

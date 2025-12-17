@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -146,23 +146,8 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 	}
 
 	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
-		let attrs: CommonAttrs|Attrs;
-		let version: number;
-		if (shouldReadCurrentVersion(flags)) {
-			attrs = this.attrs;
-			version = this.version;
-		} else {
-			const src = await this.getObjSrcOfVersion(flags);
-			attrs = await this.crypto.getAttrs(src);
-			version = src.version;
-		}
-		return {
-			ctime: new Date(attrs.ctime),
-			mtime: new Date(attrs.mtime),
-			version,
-			writable: false,
-			isLink: true,
-		};
+		const { stats } = await this.getStatsAndSize(flags);
+		return stats;
 	}
 
 	private setUpdatedState(

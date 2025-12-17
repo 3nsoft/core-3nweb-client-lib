@@ -238,9 +238,7 @@ export interface ReadonlyPayload {
 	getAttrs(): Attrs;
 	getXAttrs(): Promise<XAttrs>;
 	readAllContent(): Promise<Uint8Array|undefined>;
-	readSomeContentBytes(
-		start: number, end: number
-	): Promise<Uint8Array|undefined>;
+	readSomeContentBytes(start: number, end: number): Promise<Uint8Array|undefined>;
 	makeFileByteSource(): FileByteSource;
 }
 

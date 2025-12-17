@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2018 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2018 - 2020, 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -272,6 +272,14 @@ export class ObjOnDisk {
 
 	doesFileNeedDownload(): boolean {
 		return (this.segsThatNeedDownload().length === 0);
+	}
+
+	numOfBytesNeedingDownload(): number {
+		let totalLen = 0;
+		for (const { len } of this.segsThatNeedDownload()) {
+			totalLen += len;
+		}
+		return totalLen;
 	}
 
 	async downloadMissingSections(): Promise<void> {

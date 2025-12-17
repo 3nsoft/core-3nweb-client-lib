@@ -15,13 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ScryptGenParams } from '../key-derivation';
-import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
-import { Observable } from 'rxjs';
-import { LogError } from '../logging/log-to-file';
+import type { ScryptGenParams } from '../key-derivation';
+import type { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
+import type { Observable } from 'rxjs';
+import type { LogError } from '../logging/log-to-file';
 
-export { AsyncSBoxCryptor } from 'xsp-files';
-export { FolderInJSON } from './folder-node'; 
+export type { AsyncSBoxCryptor } from 'xsp-files';
+export type { FolderInJSON } from './folder-node'; 
 
 type StorageType = web3n.files.FSType;
 type FolderEvent = web3n.files.FolderEvent;
@@ -31,6 +31,7 @@ type SyncStatus = web3n.files.SyncStatus;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type FSSyncException = web3n.files.FSSyncException;
 type FileException = web3n.files.FileException;
+type UploadEvent = web3n.files.UploadEvent;
 
 export type FSChangeSrc = web3n.files.FSChangeEvent['src'];
 
@@ -44,18 +45,6 @@ export type NodeType = 'file' | 'link' | 'folder';
 
 export type ObjId = string|null;
 
-/**
- * This is a container for file system nodes.
- * 
- * Current implementation performs two functions: container for nodes, and a
- * provider of node type, corresponding to given object.
- * The later function, used by synced storage for conflict resolution, takes
- * advantage of container not forgeting nodes, like cache may do.
- * So, at least for local storage's sake, this container may be refactored to
- * act more like cache, and even then we shouldn't forget about cascading keys
- * and a need to keep parent nodes in memory, while child nodes are in
- * use/cache.
- */
 export class NodesContainer {
 
 	private nodes = new Map<ObjId, Node|null>();
@@ -130,7 +119,7 @@ export interface NodeEvent {
 	objId: ObjId;
 	parentObjId?: ObjId;
 	childObjId?: ObjId;
-	event: FolderEvent|FileEvent|RemoteEvent;
+	event: FolderEvent|FileEvent|RemoteEvent|UploadEvent;
 }
 
 export interface Storage {
@@ -242,18 +231,17 @@ export interface SyncedStorage extends Storage {
 
 	updateStatusInfo(objId: ObjId): Promise<SyncStatus>;
 
-	isObjOnDisk(objId: ObjId): Promise<boolean>;
-
 	isRemoteVersionOnDisk(
 		objId: ObjId, version: number
 	): Promise<'partial'|'complete'|'none'>;
 
 	download(objId: ObjId, version: number): Promise<void>;
 
-	upload(
+	startUpload(
 		objId: ObjId, localVersion: number, uploadVersion: number,
-		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean
-	): Promise<void>;
+		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean,
+		eventSink: (event: UploadEvent) => void
+	): Promise<{ uploadTaskId: number; completion: Promise<void>; }>;
 
 	dropCachedLocalObjVersionsLessOrEqual(
 		objId: ObjId, localVersion: number
@@ -262,6 +250,8 @@ export interface SyncedStorage extends Storage {
 	uploadObjRemoval(objId: ObjId): Promise<void>;
 
 	status(objId: ObjId): Promise<SyncedObjStatus>;
+
+	getNumOfBytesNeedingDownload(objId: ObjId, version: number): Promise<number|'unknown'>;
 
 	suspendNetworkActivity(): void;
 
@@ -286,32 +276,30 @@ export interface UploadHeaderChange {
 	uploadHeader: Uint8Array;
 }
 
-export function wrapSyncStorageImplementation(
-	impl: SyncedStorage
-): SyncedStorage {
+export function wrapSyncStorageImplementation(impl: SyncedStorage): SyncedStorage {
 	const storageWrap = wrapStorageImplementation(impl);
 	const wrap: SyncedStorage = {} as any;
 	for (const [field, value] of Object.entries(storageWrap)) {
 		wrap[field] = value;
 	}
-	wrap.getRootKeyDerivParamsFromServer =
-		impl.getRootKeyDerivParamsFromServer.bind(impl);
+	wrap.getRootKeyDerivParamsFromServer = impl.getRootKeyDerivParamsFromServer.bind(impl);
 	wrap.getObjSrcOfRemoteVersion = impl.getObjSrcOfRemoteVersion.bind(impl);
 	wrap.archiveVersionOnServer = impl.archiveVersionOnServer.bind(impl);
 	wrap.isRemoteVersionOnDisk = impl.isRemoteVersionOnDisk.bind(impl);
 	wrap.download = impl.download.bind(impl);
-	wrap.upload = impl.upload.bind(impl);
+	wrap.startUpload = impl.startUpload.bind(impl);
 	wrap.uploadObjRemoval = impl.uploadObjRemoval.bind(impl);
 	wrap.dropCachedLocalObjVersionsLessOrEqual = impl.dropCachedLocalObjVersionsLessOrEqual.bind(impl);
 	wrap.adoptRemote = impl.adoptRemote.bind(impl);
 	wrap.updateStatusInfo = impl.updateStatusInfo.bind(impl);
 	wrap.suspendNetworkActivity = impl.suspendNetworkActivity.bind(impl);
 	wrap.resumeNetworkActivity = impl.resumeNetworkActivity.bind(impl);
+	wrap.getNumOfBytesNeedingDownload = impl.getNumOfBytesNeedingDownload.bind(impl);
 	return Object.freeze(wrap);
 }
 
 export function isSyncedStorage(storage: Storage) {
-	return !!(storage as SyncedStorage).upload;
+	return !!(storage as SyncedStorage).startUpload;
 }
 
 

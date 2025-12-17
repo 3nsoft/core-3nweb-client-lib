@@ -709,7 +709,8 @@ class V implements WritableFSVersionedAPI, N {
 		).catch(setExcPath(path));
 		return (shouldReadCurrentVersion(flags) ?
 			folder.list() :
-			folder.listNonCurrent(flags!));
+			folder.listNonCurrent(flags!)
+		);
 	}
 
 	async writeBytes(
@@ -905,13 +906,37 @@ class S implements WritableFSSyncAPI {
 		Object.freeze(this);
 	}
 
+	async startUpload(
+		path: string, opts?: OptionsToUploadLocal
+	): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined> {
+		this.n.ensureIsWritable();
+		const node = await this.n.get(path);
+		try {
+			const startedUpload = await node.startUpload(opts);
+			if (startedUpload) {
+				const { uploadTaskId, uploadVersion } = startedUpload;
+				return { uploadTaskId, uploadVersion };
+			} else {
+				return;
+			}
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		};
+	}
+
 	async upload(
 		path: string, opts?: OptionsToUploadLocal
 	): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.get(path);
 		try {
-			return await node.upload(opts);
+			const startedUpload = await node.startUpload(opts);
+			if (!startedUpload) {
+				return;
+			}
+			const { completion, uploadVersion } = startedUpload;
+			await completion;
+			return uploadVersion
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		};
