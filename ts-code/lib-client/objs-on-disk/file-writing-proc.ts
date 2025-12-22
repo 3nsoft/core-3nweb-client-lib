@@ -20,7 +20,7 @@ import { PressureValve } from '../../lib-common/processes/pressure';
 import { Observable } from 'rxjs';
 import { map, filter, mergeMap } from 'rxjs/operators';
 import { joinByteArrs } from '../../lib-common/buffer-utils';
-import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-file';
+import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-version-file';
 import { flatMapComplete } from '../../lib-common/utils-for-observables';
 
 const SAVING_BUF_SIZE = 512*1024;

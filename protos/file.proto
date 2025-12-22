@@ -280,10 +280,16 @@ message FileSyncIsOnDiskReplyBody {
 	string status = 1;
 }
 
-// --- ReadonlyFileSyncAPI.download ---
+// --- ReadonlyFileSyncAPI.startDownload ---
 // Reply has only status and body is empty
-message FileSyncDownloadRequestBody {
+message FileSyncStartDownloadRequestBody {
 	uint64 version = 1;
+}
+message FileSyncStartDownloadReplyBody {
+	message DownloadInfo {
+		uint64 download_task_id = 2;
+	}
+	DownloadInfo started_download = 1;
 }
 
 // --- ReadonlyFileSyncAPI.adoptRemote ---

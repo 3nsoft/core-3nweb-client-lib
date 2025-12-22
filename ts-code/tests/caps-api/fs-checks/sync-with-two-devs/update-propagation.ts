@@ -16,6 +16,7 @@
 */
 
 import { utf8 } from '../../../../lib-common/buffer-utils';
+import { defer } from '../../../../lib-common/processes/deferred';
 import { stringOfB64CharsSync, bytes as randomBytes } from '../../../../lib-common/random-node';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { deepEqual } from '../../../libs-for-tests/json-equal';
@@ -24,6 +25,10 @@ import { observeFileForOneEvent, observeFolderForOneEvent, SpecItWithTwoDevsFSs 
 
 type FileException = web3n.files.FileException;
 type RemoteChangeEvent = web3n.files.RemoteChangeEvent;
+type ReadonlyFS = web3n.files.ReadonlyFS;
+type DownloadStartEvent = web3n.files.DownloadStartEvent;
+type DownloadDoneEvent = web3n.files.DownloadDoneEvent;
+type DownloadProgressEvent = web3n.files.DownloadProgressEvent;
 
 export const specs: SpecDescribe = {
 	description: '--',
@@ -106,6 +111,36 @@ it.func = async function({ dev1FS, dev2FS, dev2 }) {
 };
 specs.its.push(it);
 
+function collectFileDownloadEvents(fs: ReadonlyFS, path: string): {
+	startEvent: Promise<DownloadStartEvent>; doneEvent: Promise<DownloadDoneEvent>;
+	progressEvents: DownloadProgressEvent[];
+} {
+	const startEvent = defer<DownloadStartEvent>();
+	const doneEvent = defer<DownloadDoneEvent>();
+	const progressEvents: DownloadProgressEvent[] = [];
+	const unsub = fs.watchFile(path, {
+		next: ev => {
+			switch (ev.type) {
+				case 'download-started':
+					startEvent.resolve(ev);
+					break;
+				case 'download-done':
+					doneEvent.resolve(ev);
+					unsub();
+					break;
+				case 'download-progress':
+					progressEvents.push(ev);
+					break;
+			}
+		}
+	});
+	return {
+		startEvent: startEvent.promise,
+		doneEvent: doneEvent.promise,
+		progressEvents
+	};
+}
+
 it = {
 	expectation: 'remote version is downloaded non-automatically'
 };
@@ -127,15 +162,15 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect((await fs2.v!.sync!.status('')).remote?.latest)
 	.toBe(folderEv.newVersion);
 
-	expect(
-		await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion)
-	).toBe('none');
+	expect(await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion)).toBe('none');
 
-	await fs2.v!.sync!.download('', folderEv.newVersion);
-
-	expect(
-		await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion)
-	).toBe('complete');
+	let startedDownload = await fs2.v!.sync!.startDownload('', folderEv.newVersion);
+	expect(startedDownload)
+	.withContext(`long download is not started, cause small entity is completely downloaded in the first request`)
+	.toBeUndefined();
+	expect(await fs2.v!.sync!.isRemoteVersionOnDisk('', folderEv.newVersion))
+	.withContext(`expect to see entity completely on a disk, when download has started, as not being needed`)
+	.toBe('complete');
 
 	// case 2: remote version of file
 
@@ -144,7 +179,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(await fs2.readTxtFile(file)).toBe(await fs1.readTxtFile(file));
 
 	let fileEventAt2 = observeFileForOneEvent<RemoteChangeEvent>(fs2, file);
-	await fs1.writeBytes(file, await randomBytes(880000));
+	await fs1.writeBytes(file, await randomBytes(88000000));
 	await fs1.v!.sync!.upload(file);
 
 	let fileEv = await fileEventAt2;
@@ -152,23 +187,24 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect((await fs2.v!.sync!.status(file)).remote?.latest)
 	.toBe(fileEv.newVersion);
 
-	expect(
-		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
-	).toBe('none');
+	expect(await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)).toBe('none');
 
-	await fs2.v!.sync!.download(file, fileEv.newVersion);
+	let events = collectFileDownloadEvents(fs2, file);
+	startedDownload = await fs2.v!.sync!.startDownload(file, fileEv.newVersion);
+	expect(await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)).toBe('partial');
+	expect(startedDownload).toBeDefined();
+	expect((await events.startEvent).downloadTaskId).toBe(startedDownload!.downloadTaskId);
 
-	expect(
-		await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)
-	).toBe('complete');
+	expect((await events.doneEvent).downloadTaskId).toBe(startedDownload!.downloadTaskId);
+	expect(events.progressEvents.length).toBeGreaterThan(0);
+
+	expect(await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newVersion)).toBe('complete');
 	expect(bytesEqual(
-		(await fs2.v!.readBytes(
-			file, undefined, undefined, { remoteVersion: fileEv.newVersion }
-		)).bytes!,
+		(await fs2.v!.readBytes(file, undefined, undefined, { remoteVersion: fileEv.newVersion })).bytes!,
 		(await fs1.readBytes(file))!
 	)).toBeTrue();
 
-	// case 3: reading remote version of file without adopting it
+	// case 3: reading remote version of file without adopting it and without explicit download
 
 	fileEventAt2 = observeFileForOneEvent<RemoteChangeEvent>(fs2, file);
 	await fs1.writeBytes(file, await randomBytes(770000));

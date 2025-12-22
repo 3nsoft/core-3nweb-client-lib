@@ -56,6 +56,8 @@ declare namespace web3n {
 	interface HTTPException extends HTTPErrorDetails {
 		type: 'http-request';
 		status: number;
+		malformedResponse?: true;
+		unexpectedStatus?: true;
 	}
 
 	interface ServLocException extends RuntimeException {

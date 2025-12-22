@@ -329,7 +329,7 @@ class S implements WritableFileSyncAPI {
 	): Promise<{ uploadVersion: number; uploadTaskId: number; }|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.getNode();
-		const startedUpload = await node.startUpload(opts);
+		const startedUpload = await node.startUpload(opts, true);
 		if (startedUpload) {
 			const { uploadTaskId, uploadVersion } = startedUpload;
 			return { uploadTaskId, uploadVersion };
@@ -341,7 +341,7 @@ class S implements WritableFileSyncAPI {
 	async upload(opts?: OptionsToUploadLocal): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.getNode();
-		const startedUpload = await node.startUpload(opts);
+		const startedUpload = await node.startUpload(opts, false);
 		if (!startedUpload) {
 			return;
 		}
@@ -369,9 +369,9 @@ class S implements WritableFileSyncAPI {
 		return isOnDisk;
 	}
 
-	async download(version: number): Promise<void> {
+	async startDownload(version: number): Promise<{ downloadTaskId: number; }|undefined> {
 		const node = await this.n.getNode();
-		await node.download(version);
+		return await node.startDownload(version);
 	}
 
 	async adoptRemote(opts?: OptionsToAdopteRemote): Promise<void> {

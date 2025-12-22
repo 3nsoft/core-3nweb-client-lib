@@ -697,8 +697,9 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	async removeChild(f: NodeInFS<any>): Promise<void> {
 		await this.doTransition(async (state, version) => {
 			const childJSON = state.nodes[f.name];
-			if (!childJSON || (childJSON.objId !== f.objId)) { throw new Error(
-				`Not a child given: name==${f.name}, objId==${f.objId}, parentId==${f.parentId}, this folder objId==${this.objId}`); }
+			if (!childJSON || (childJSON.objId !== f.objId)) {
+				throw new Error(`Not a child given: name==${f.name}, objId==${f.objId}, parentId==${f.parentId}, this folder objId==${this.objId}`);
+			}
 			delete state.nodes[f.name];
 			const event: EntryRemovalEvent = {
 				type: 'entry-removal',
@@ -953,19 +954,19 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async startUpload(
-		opts: OptionsToUploadLocal|undefined
+		opts: OptionsToUploadLocal|undefined, emitEvents: boolean
 	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
 			const { localVersion, createOnRemote, uploadVersion } = toUpload;
 			if (toUpload.createOnRemote) {
-				return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
+				return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion, emitEvents);
 			}
 			const removedNodes = await this.getNodesRemovedBetweenVersions(localVersion, uploadVersion - 1);
 			const {
 				completion, uploadTaskId
-			} = await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
+			} = await this.startUploadProcess(localVersion, createOnRemote, uploadVersion, emitEvents);
 			if (removedNodes.length > 0) {
 				// start upload of children's removal after folder's upload;
 				// we also don't await for chidren removal in returned completion
@@ -1271,6 +1272,7 @@ function nodeInfoToListingEntry(
 	} else if (isLink) {
 		return { name, isLink };
 	} else {
+
 		return { name };
 	}
 }

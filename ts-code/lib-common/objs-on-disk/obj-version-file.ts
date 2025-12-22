@@ -132,8 +132,7 @@ export class ObjVersionFile {
 	}
 
 	saveSegs(
-		segsChunks: Uint8Array, thisVerOfs: number,
-		baseVerOfs: number|undefined, saveLayout: boolean
+		segsChunks: Uint8Array, thisVerOfs: number, baseVerOfs: number|undefined, saveLayout: boolean
 	): Promise<void> {
 		return this.withRWFile(async fd => {
 			const ofs = this.layout.getLayoutOfs();
@@ -141,8 +140,7 @@ export class ObjVersionFile {
 			if (baseVerOfs === undefined) {
 				this.layout.addSegsOnFile(thisVerOfs, segsChunks.length, ofs);
 			} else {
-				this.layout.addBaseSegsOnFile(
-					thisVerOfs, baseVerOfs, segsChunks.length, ofs);
+				this.layout.addBaseSegsOnFile(thisVerOfs, baseVerOfs, segsChunks.length, ofs);
 			}
 			if (saveLayout) {
 				await this.recordLayout(fd);

@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { makeHTTPException, makeConnectionException, HTTPException } from '../lib-common/exceptions/http';
+import { makeHTTPException, makeConnectionException, HTTPException, makeMalformedReplyHTTPException } from '../lib-common/exceptions/http';
 import { BytesFIFOBuffer } from '../lib-common/byte-streaming/bytes-fifo-buffer';
 import * as https from 'https';
 import { IncomingMessage, IncomingHttpHeaders, ClientRequest } from 'http';
@@ -194,8 +194,11 @@ function formReply<T>(res: IncomingMessage, resBody: Uint8Array|undefined,
 			data = (resBody ? JSON.parse(utf8.open(resBody)) : undefined);
 		} catch (err) {
 			if (resContentType === 'application/json') {
-				throw makeHTTPException(reqOpts.url!, reqOpts.method, status,
-					`Cannot parse received bytes`, err);
+				throw makeHTTPException(reqOpts.url!, reqOpts.method, status, {
+					message: `Cannot parse received bytes as json`,
+					cause: err,
+					malformedResponse: true
+				});
 			}
 		}
 	}
@@ -206,7 +209,8 @@ function formReply<T>(res: IncomingMessage, resBody: Uint8Array|undefined,
 		data,
 		headers: (reqOpts.responseHeaders ?
 			makeHeaders(filterHeaders(res.headers, reqOpts.responseHeaders)) :
-			undefined)
+			undefined
+		)
 	};
 	return rep;
 }
@@ -231,19 +235,21 @@ function makeHeaders(headers: { [h:string]: string; }): Headers {
 	};
 }
 
-/**
- * @param rep
- * @param errMsg
- * @return http exception based on given reply, with an optional message
- */
-export function makeException(rep: Reply<any>, errMsg?: string): HTTPException {
-	return makeHTTPException(rep.url, rep.method, rep.status, errMsg);
-}
+// /**
+//  * @param rep
+//  * @param errMsg
+//  * @return http exception based on given reply, with an optional message
+//  */
+// export function makeException(rep: Reply<any>, message?: string): HTTPException {
+// 	return makeHTTPException(rep.url, rep.method, rep.status, { message });
+// }
 
 export function extractIntHeader(rep: Reply<any>, headerName: string): number {
 	const intHeader = parseInt(rep.headers!.get(headerName)!);
-	if (isNaN(intHeader)) { throw makeException(rep,
-		`Malformed response: header ${headerName} is missing or malformed`); }
+	if (isNaN(intHeader)) {
+		throw makeMalformedReplyHTTPException(rep, {
+			message: `Malformed response: header ${headerName} is missing or malformed`
+		}); }
 	return intHeader;
 }
 

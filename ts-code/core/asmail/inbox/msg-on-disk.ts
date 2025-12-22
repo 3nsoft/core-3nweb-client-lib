@@ -72,16 +72,18 @@ export class MsgOnDisk {
 		Object.freeze(this);
 	}
 
-	static async forExistingMsg(msgId: string, path: string,
-			msgDownloader: MsgDownloader): Promise<MsgOnDisk> {
+	static async forExistingMsg(
+		msgId: string, path: string, msgDownloader: MsgDownloader
+	): Promise<MsgOnDisk> {
 		const meta = await readJSON<MsgMeta>(path, META_FNAME, msgId);
 		const status = await readJSON<MsgStatus>(path, STATUS_FNAME, msgId);
 		const objIds = objIdsFromMeta(meta);
 		return new MsgOnDisk(msgId, path, msgDownloader, status, objIds);
 	}
 
-	static async createOnDisk(path: string, msgId: string, meta: MsgMeta,
-			msgDownloader: MsgDownloader): Promise<MsgOnDisk> {
+	static async createOnDisk(
+		path: string, msgId: string, meta: MsgMeta, msgDownloader: MsgDownloader
+	): Promise<MsgOnDisk> {
 		const status = makeInitMsgStatus(msgId, meta);
 		const objIds = objIdsFromMeta(meta);
 		const msg = new MsgOnDisk(msgId, path, msgDownloader, status, objIds);
@@ -111,8 +113,8 @@ export class MsgOnDisk {
 		}));
 		file = (isOnDisk ?
 			await ObjOnDisk.forExistingFile(objId, 0, path, this.objDownloader) :
-			await ObjOnDisk.createFileForExistingVersion(
-				objId, 0, path, this.objDownloader));
+			await ObjOnDisk.createFileForExistingVersion(objId, 0, path, this.objDownloader)
+		);
 		this.objs[objId] = file;
 		return file;
 	}
@@ -130,9 +132,7 @@ export class MsgOnDisk {
 		return this.status.keyStatus;
 	}
 
-	updateMsgKeyStatus(
-		newStatus: Exclude<MsgKeyStatus, 'not-checked'>
-	): Promise<void> {
+	updateMsgKeyStatus(newStatus: Exclude<MsgKeyStatus, 'not-checked'>): Promise<void> {
 		return this.syncProc.startOrChain(async () => {
 			if (this.status.keyStatus === 'not-checked') {
 				this.status.keyStatus = newStatus;
@@ -153,22 +153,20 @@ export class MsgOnDisk {
 Object.freeze(MsgOnDisk.prototype);
 Object.freeze(MsgOnDisk);
 
-async function readJSON<T>(msgFolderPath: string, fname: string, msgId: string):
-		Promise<T> {
+async function readJSON<T>(msgFolderPath: string, fname: string, msgId: string): Promise<T> {
 	const path = join(msgFolderPath, fname);
 	try {
-		return JSON.parse(await fs.readFile(
-			path, { flag: 'r', encoding: 'utf8' }));
+		return JSON.parse(await fs.readFile(path, { flag: 'r', encoding: 'utf8' }));
 	} catch (err) {
 		throw errWithCause(err, `Can't read file ${fname} of message ${msgId}`);
 	}
 }
 
-async function writeJSON(msgFolderPath: string, fname: string, json: any,
-		exclusive = false): Promise<void> {
+async function writeJSON(
+	msgFolderPath: string, fname: string, json: any, exclusive = false
+): Promise<void> {
 	const path = join(msgFolderPath, fname);
-	await fs.writeFile(path, JSON.stringify(json),
-		{ flag: (exclusive ? 'wx' : 'w') });
+	await fs.writeFile(path, JSON.stringify(json), { flag: (exclusive ? 'wx' : 'w') });
 }
 
 function objIdsFromMeta(meta: MsgMeta): Set<string> {

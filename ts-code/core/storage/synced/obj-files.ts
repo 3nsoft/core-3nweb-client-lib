@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,7 @@
 import { FileException } from '../../../lib-common/exceptions/file';
 import { Observable, from } from 'rxjs';
 import { NamedProcs } from '../../../lib-common/processes/synced';
-import { ObjId, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
+import { DownloadEventSink, ObjId, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
 import { ObjFolders, CanMoveObjToDeeperCache } from '../../../lib-client/objs-on-disk/obj-folders';
 import * as fs from '../../../lib-common/async-fs-node';
 import { ObjOnDisk, GetBaseSegsOnDisk, InitDownloadParts } from '../../../lib-client/objs-on-disk/obj-on-disk';
@@ -40,6 +40,7 @@ import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { saveUploadHeaderFile } from './upload-header-file';
 import { noop } from '../common/utils';
 import { makeObjVersionNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
+import { isPromise } from 'util/types';
 
 export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
 export const REMOTE_FILE_NAME_EXT = 'v';
@@ -134,11 +135,12 @@ export class ObjFiles {
 				assert(typeof download.version === 'number');
 				obj = await SyncedObj.forDownloadedObj(
 					objId, folder!, this.downloader, this.gc.scheduleCollection,
-					download.version, download.parts, this.logError);
+					download.version, download.parts, this.logError
+				);
 			} else {
 				obj = await SyncedObj.forNewObj(
-					objId, folder!, this.downloader, this.gc.scheduleCollection,
-					this.logError);
+					objId, folder!, this.downloader, this.gc.scheduleCollection, this.logError
+				);
 			}
 			this.objs.set(objId, obj);
 			return obj;
@@ -162,9 +164,8 @@ export class ObjFiles {
 
 	async makeByDownloadingCurrentVersion(objId: ObjId): Promise<SyncedObj> {
 		// initial download implicitly checks existence of obj on server
-		const download = await this.downloader.getCurrentObjVersion(objId);
-		const obj = await this.makeObj(objId, download);
-		return obj;
+		const initDownload = await this.downloader.getCurrentObjVersion(objId);
+		return await this.makeObj(objId, initDownload);
 	}
 
 	async saveFirstVersion(
@@ -263,14 +264,12 @@ export class SyncedObj {
 		version: number, parts: InitDownloadParts, logError: LogError
 	): Promise<SyncedObj> {
 		// XXX let's note that given version is also passed as current on server
-		const status = await ObjStatus.makeForDownloadedVersion(
-			objFolder, objId, version, version, logError);
-		const obj = new SyncedObj(
-			objId, objFolder, status, downloader, scheduleGC);
+		const status = await ObjStatus.makeForDownloadedVersion(objFolder, objId, version, version, logError);
+		const obj = new SyncedObj(objId, objFolder, status, downloader, scheduleGC);
 		const fPath = obj.remoteVerPath(version);
 		const objVer = await ObjOnDisk.createFileForExistingVersion(
-			obj.objId, version, fPath,
-			obj.downloader, obj.remoteObjSegsGetterFromDisk, parts);
+			obj.objId, version, fPath, obj.downloader, obj.remoteObjSegsGetterFromDisk, parts
+		);
 		obj.remoteVers.set(version, objVer);
 		return obj;
 	}
@@ -518,16 +517,14 @@ export class SyncedObj {
 		this.scheduleSelfGC();
 	}
 
-	async isRemoteVersionOnDisk(
-		version: number
-	): Promise<'complete'|'partial'|'none'> {
+	async isRemoteVersionOnDisk(version: number): Promise<'complete'|'partial'|'none'> {
 		if (!this.status.isAmongRemote(version)) {
 			throw makeObjVersionNotFoundExc(this.objId, version);
 		}
 		const verPath = this.remoteVerPath(version);
 		if (!(await isOnDisk(verPath))) { return 'none'; }
 		const objVer = await this.instanceOfRemoteObjVer(version);
-		return (objVer.doesFileNeedDownload() ? 'complete' : 'partial');
+		return (objVer.doesFileNeedDownload() ? 'partial' : 'complete');
 	}
 
 	async getNumOfBytesNeedingDownload(version: number): Promise<number|'unknown'> {
@@ -544,9 +541,12 @@ export class SyncedObj {
 		return objVer.numOfBytesNeedingDownload();
 	}
 
-	async downloadRemoteVersion(version: number): Promise<void> {
+	async startDownloadProcess(
+		version: number, eventSink: DownloadEventSink
+	): Promise<{ downloadTaskId: number; }|undefined> {
 		const objVer = await this.instanceOfRemoteObjVer(version);
-		await objVer.downloadMissingSections();
+		const downloadTaskId = objVer.startDownloadInBackground(eventSink);
+		return (downloadTaskId ? { downloadTaskId } : undefined);
 	}
 
 }

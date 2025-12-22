@@ -16,7 +16,7 @@
 */
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
-import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
+import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus, DownloadEventSink } from '../../../lib-client/xsp-fs/common';
 import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/xsp-fs/exceptions';
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
@@ -170,9 +170,11 @@ export class SyncedStore implements ISyncedStorage {
 		return obj.isRemoteVersionOnDisk(version);
 	}
 
-	async download(objId: ObjId, version: number): Promise<void> {
+	async startDownload(
+		objId: ObjId, version: number, eventSink: DownloadEventSink
+	): Promise<{ downloadTaskId: number; }|undefined> {
 		const obj = await this.getObjOrThrow(objId, true);
-		return obj.downloadRemoteVersion(version);
+		return obj.startDownloadProcess(version, eventSink);
 	}
 
 	async startUpload(

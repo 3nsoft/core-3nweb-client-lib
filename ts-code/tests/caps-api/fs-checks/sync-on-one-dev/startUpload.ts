@@ -188,5 +188,36 @@ it.func = async function(s) {
 };
 specs.its.push(it);
 
+const mb = 1024*1024;
+
+it = { expectation: 'uploads big file versions', timeout: 10000 };
+it.func = async function(s) {
+	const { testFS } = s;
+	const file1 = 'some folder/file 1';
+
+	// file version written as a whole
+	await testFS.v!.writeBytes(file1, await randomBytes(3*mb));
+	await testFS.v!.sync!.upload(file1);
+	let syncStatus = await testFS.v!.sync!.status(file1, true);
+	expect(syncStatus.synced!.latest)
+	.withContext(`first uploaded version should be equal to 1`).toBe(1);
+	expect((await testFS.stat(file1)).version!).toBe(1);
+
+	// file version written as a diff from a synced version
+	const {
+		sink: sinkForV2, version: v2
+	} = await testFS.v!.getByteSink(file1, { truncate: false });
+	expect(v2).withContext(`normal increase of version by 1`).toBe(2);
+	await sinkForV2.splice(2*mb, 0, await randomBytes(2*mb));
+	await sinkForV2.done();
+	await testFS.v!.sync!.upload(file1);
+	syncStatus = await testFS.v!.sync!.status(file1, true);
+	expect(syncStatus.synced!.latest)
+	.withContext(`next uploaded version increases by 1`).toBe(2);
+
+};
+// XXX add this, when changed to proper event checking
+// specs.its.push(it);
+
 
 Object.freeze(exports);

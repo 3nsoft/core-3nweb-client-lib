@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018 - 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018 - 2020, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -91,6 +91,9 @@ export namespace utf8 {
 Object.freeze(utf8);
 
 export function joinByteArrs(arrs: Uint8Array[]): Uint8Array {
+	if (arrs.length === 1) {
+		return arrs[0];
+	}
 	let totalLen = 0;
 	for (const arr of arrs) {
 		totalLen += arr.length;

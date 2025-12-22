@@ -16,8 +16,8 @@
 */
 
 import * as api from '../../lib-common/service-api/mailer-id/login';
-import { NetClient, makeException } from '../request-utils';
-import { HTTPException } from '../../lib-common/exceptions/http';
+import { NetClient } from '../request-utils';
+import { HTTPException, makeHTTPException, makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 import { parse as parseUrl } from 'url';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 
@@ -42,22 +42,21 @@ export async function startMidSession(
 	if (rep.status === api.startSession.SC.ok) {
 		const r = rep.data as api.startSession.Reply;
 		if (!r || (typeof r.sessionId !== 'string') || !r.sessionId) {
-			throw makeException(rep, 'Malformed reply to starting session');
+			throw makeMalformedReplyHTTPException(rep);
 		}
 		return { sessionId: r.sessionId };
 	} else if (rep.status === api.startSession.SC.redirect) {
 		const rd =  rep.data as api.startSession.RedirectReply;
 		if (!rd || ('string' !== typeof rd.redirect) || !rd.redirect) {
-			throw makeException(rep,
-				'Malformed redirect reply to starting session');
+			throw makeMalformedReplyHTTPException(rep);
 		}
 		return { redirect: rd.redirect };
 	} else if (rep.status === api.startSession.SC.unknownUser) {
-		const exc = makeException(rep) as LoginException;
+		const exc = makeHTTPException(rep.url, rep.method, rep.status, {}) as LoginException;
 		exc.unknownUser = true;
 		throw exc;
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 	
@@ -81,11 +80,11 @@ export async function authenticateMidSession(
 	if (rep.status === api.authSession.SC.ok) {
 		return;
 	} else if (rep.status === api.authSession.SC.authFailed) {
-		const exc = makeException(rep) as LoginException;
+		const exc = makeHTTPException(rep.url, rep.method, rep.status, {}) as LoginException;
 		exc.loginFailed = true;
 		throw exc;
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 

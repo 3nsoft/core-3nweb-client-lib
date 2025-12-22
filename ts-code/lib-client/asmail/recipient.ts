@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeException, extractIntHeader, NetClient } from '../request-utils';
+import { extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/retrieval';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { LogError } from '../logging/log-to-file';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 type InboxException = web3n.asmail.InboxException;
 
@@ -89,11 +90,11 @@ export class MailRecipient extends ServiceUser {
 		});
 		if (rep.status === api.listMsgs.SC.ok) {
 			if (!Array.isArray(rep.data)) {
-				throw makeException(rep, 'Malformed response');
+				throw makeMalformedReplyHTTPException(rep);
 			}
 			return rep.data;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -106,13 +107,15 @@ export class MailRecipient extends ServiceUser {
 		if (rep.status === api.msgMetadata.SC.ok) {
 			const { meta, errMsg } = api.sanitizedMeta(rep.data);
 			if (!meta) {
-				throw makeException(rep, `Malformed message metadata in a server response: ${errMsg}`);
+				throw makeMalformedReplyHTTPException(rep, {
+					message: `Malformed message metadata in a server response: ${errMsg}`
+				});
 			}
 			return meta;
 		} else if (rep.status === api.msgMetadata.SC.unknownMsg) {
 			throw makeMsgNotFoundException(msgId);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -139,14 +142,16 @@ export class MailRecipient extends ServiceUser {
 		});
 
 		if (rep.status === api.msgObj.SC.ok) {
-			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
-				`Malformed response: body is not binary`); }
+			if (!(rep.data instanceof Uint8Array)) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is not binary` });
+			}
 			const segsTotalLen = extractIntHeader(rep,
 				api.HTTP_HEADER.objSegmentsLength);
 			const headerLen = extractIntHeader(rep,
 				api.HTTP_HEADER.objHeaderLength);
 			if (rep.data.length > (headerLen + segsTotalLen)) {
-				throw makeException(rep, `Malformed response: body is too long`); }
+				throw makeMalformedReplyHTTPException(rep, { message: `body is too long` });
+			}
 			return {
 				segsTotalLen,
 				header: rep.data.subarray(0, headerLen),
@@ -155,7 +160,7 @@ export class MailRecipient extends ServiceUser {
 		} else if (rep.status === api.msgObj.SC.unknownMsgOrObj) {
 			throw makeObjNotFoundException(msgId, objId);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -180,13 +185,14 @@ export class MailRecipient extends ServiceUser {
 		});
 
 		if (rep.status === api.msgObj.SC.ok) {
-			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
-				`Malformed response: body is not binary`); }
+			if (!(rep.data instanceof Uint8Array)) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is not binary` });
+			}
 			return rep.data;
 		} else if (rep.status === api.msgObj.SC.unknownMsgOrObj) {
 			throw makeObjNotFoundException(msgId, objId);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -200,7 +206,7 @@ export class MailRecipient extends ServiceUser {
 		} else if (rep.status === api.rmMsg.SC.unknownMsg) {
 			throw makeMsgNotFoundException(msgId);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -209,7 +215,7 @@ export class MailRecipient extends ServiceUser {
 		if (rep.status === api.wsEventChannel.SC.ok) {
 			return makeSubscriber(rep.data, undefined);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	

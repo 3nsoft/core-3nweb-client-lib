@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeException, NetClient } from '../request-utils';
+import { NetClient } from '../request-utils';
 import { mailerIdInfoAt } from '../service-locator';
 import { ServiceUser, ICalcDHSharedKey, LoginCompletion } from '../user-with-pkl-session';
 import { keyToJson, getKeyCert } from '../../lib-common/jwkeys';
@@ -27,6 +27,7 @@ import { parse as parseUrl } from 'url';
 import { assert } from '../../lib-common/assert';
 import { generateSigningKeyPair, MailerIdSigner, makeMailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { verifyChainAndGetUserKey } from '../../lib-common/mailerid-sigs/relying-party';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 type JsonKey = web3n.keys.JsonKey;
 type SignedLoad = web3n.keys.SignedLoad;
@@ -104,10 +105,10 @@ export class MailerIdProvisioner extends ServiceUser {
 				try {
 					certs = this.encryptor!.openJSON(rep.data);
 				} catch (err) {
-					throw makeException(rep, 'Malformed reply: '+err.message);
+					throw makeMalformedReplyHTTPException(rep, { message: err.message });
 				}
 				if (!certs.userCert || !certs.provCert) {
-					throw makeException(rep, 'Malformed reply: Certificates are missing.');
+					throw makeMalformedReplyHTTPException(rep, { message: 'Certificates are missing.' });
 				}
 				if (certs.provCert.kid !== this.rootCert.kid) {
 					const { currentCert, previousCerts } = await mailerIdInfoAt(this.net, this.entryURI);
@@ -117,7 +118,9 @@ export class MailerIdProvisioner extends ServiceUser {
 					if (rootCert) {
 						this.rootCert = rootCert;
 					} else {
-						throw makeException(rep, 'Malformed reply: referenced root MailerId certificate id is unknown.');
+						throw makeMalformedReplyHTTPException(rep, {
+							message: 'referenced root MailerId certificate id is unknown.'
+						});
 					}
 				}
 				const pkeyAndId = verifyChainAndGetUserKey(
@@ -126,16 +129,16 @@ export class MailerIdProvisioner extends ServiceUser {
 					getKeyCert(certs.userCert).issuedAt+1
 				);
 				if (pkeyAndId.address !== toCanonicalAddress(this.userId)) {
-					throw makeException(rep, 'Malformed reply: Certificate is for a wrong address.');
+					throw makeMalformedReplyHTTPException(rep, { message: 'Certificate is for a wrong address.' });
 				}
 				const keyInCert = keyToJson(pkeyAndId.pkey);
 				if (!deepEqual(keyInCert, pkey)) {
-					throw makeException(rep, 'Malformed reply: Certificate is for a wrong key.');
+					throw makeMalformedReplyHTTPException(rep, { message: 'Certificate is for a wrong key.' });
 				}
 				this.userCert = certs.userCert;
 				this.provCert = certs.provCert;
 			} else {
-				throw makeException(rep, 'Unexpected status');
+				throw makeUnexpectedStatusHTTPException(rep);
 			}
 		} finally {
 			this.sessionId = (undefined as any);

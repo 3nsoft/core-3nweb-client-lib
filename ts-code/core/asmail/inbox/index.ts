@@ -218,7 +218,7 @@ export class InboxOnServer {
 		const msgOnDisk = await this.cache.findMsg(msgId);
 		if (msgOnDisk) { return msgOnDisk; }
 		const meta = await this.downloader.getMsgMeta(msgId);
-		return this.cache.addMsg(msgId, meta);
+		return await this.cache.addMsg(msgId, meta);
 	}
 
 	private async startCachingAndAddKeyToIndex(msgId: string): Promise<boolean> {

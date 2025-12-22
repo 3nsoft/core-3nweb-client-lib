@@ -912,7 +912,7 @@ class S implements WritableFSSyncAPI {
 		this.n.ensureIsWritable();
 		const node = await this.n.get(path);
 		try {
-			const startedUpload = await node.startUpload(opts);
+			const startedUpload = await node.startUpload(opts, true);
 			if (startedUpload) {
 				const { uploadTaskId, uploadVersion } = startedUpload;
 				return { uploadTaskId, uploadVersion };
@@ -930,7 +930,7 @@ class S implements WritableFSSyncAPI {
 		this.n.ensureIsWritable();
 		const node = await this.n.get(path);
 		try {
-			const startedUpload = await node.startUpload(opts);
+			const startedUpload = await node.startUpload(opts, false);
 			if (!startedUpload) {
 				return;
 			}
@@ -969,10 +969,10 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	async download(path: string, version: number): Promise<void> {
+	async startDownload(path: string, version: number): Promise<{ downloadTaskId: number; }|undefined> {
 		const node = await this.n.get(path);
 		try {
-			await node.download(version);
+			return await node.startDownload(version);
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		}

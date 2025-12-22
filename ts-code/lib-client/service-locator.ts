@@ -17,12 +17,13 @@
 
 import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { parse as parseUrl } from 'url';
-import { Reply, makeException, NetClient } from './request-utils';
+import { Reply, NetClient } from './request-utils';
 import { promises as dnsPromises } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 import { MailerIdRootRoute } from '../lib-common/service-api/mailer-id/root-route';
 import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route';
 import { ASMailRootRoute } from '../lib-common/service-api/asmail/root-route';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 
 type SignedLoad = web3n.keys.SignedLoad;
 
@@ -39,11 +40,11 @@ async function readJSONLocatedAt<T>(
 	});
 	if (rep.status === 200) {
 		if (!rep.data) {
-			throw makeException(rep, 'Malformed reply');
+			throw makeMalformedReplyHTTPException(rep);
 		}
 		return rep;
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 
@@ -54,7 +55,7 @@ function transformPathToCompleteUri(
 	const protoAndHost = `${uInit.protocol}//${uInit.host}`;
 	const uPath = parseUrl(path);
 	if (!uPath.path || !uPath.href || !uPath.href.startsWith(uPath.path)) {
-		throw makeException(rep, `Malformed path parameter ${path}`);
+		throw makeMalformedReplyHTTPException(rep, { message: `Malformed path parameter ${path}` });
 	}
 	if (uPath.href.startsWith('/')) {
 		return `${protoAndHost}${uPath.href}`;
@@ -107,7 +108,7 @@ export async function mailerIdInfoAt(
 	if ('string' === typeof json.provisioning) {
 		transform.provisioning = transformPathToCompleteUri(url, json.provisioning, rep);
 	} else {
-		throw makeException(rep, 'Malformed reply');
+		throw makeMalformedReplyHTTPException(rep);
 	}
 	if (isLikeSignedKeyCert(json["current-cert"])) {
 		transform.currentCert = json["current-cert"];
@@ -115,7 +116,7 @@ export async function mailerIdInfoAt(
 			json["previous-certs"].filter(isLikeSignedKeyCert) : []
 		);
 	} else {
-		throw makeException(rep, 'Malformed reply');
+		throw makeMalformedReplyHTTPException(rep);
 	}
 	Object.freeze(transform);
 	return transform;
@@ -271,7 +272,8 @@ const DNS_ERR_CODE = {
 	NODATA: 'ENODATA',
 	NOTFOUND: 'ENOTFOUND',
 	ESERVFAIL: 'ESERVFAIL',
-	ECONNREFUSED: 'ECONNREFUSED'
+	ECONNREFUSED: 'ECONNREFUSED',
+	ETIMEOUT: 'ETIMEOUT'
 };
 Object.freeze(DNS_ERR_CODE);
 
@@ -300,7 +302,9 @@ export function makeServiceLocator(
 			const { code, hostname, message } = (err as DnsError);
 			if (code === DNS_ERR_CODE.NODATA) {
 				throw noServiceRecordExc(address);
-			} else if ((code === DNS_ERR_CODE.ESERVFAIL) || (code === DNS_ERR_CODE.ECONNREFUSED)) {
+			} else if ((code === DNS_ERR_CODE.ESERVFAIL)
+			|| (code === DNS_ERR_CODE.ECONNREFUSED)
+			|| (code === DNS_ERR_CODE.ETIMEOUT)) {
 				throw noConnectionExc({ code, hostname, message });
 			} else if (hostname) {
 				throw domainNotFoundExc(address, { code, hostname, message });

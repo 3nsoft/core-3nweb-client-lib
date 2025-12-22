@@ -15,8 +15,9 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { NetClient, makeException } from './request-utils';
+import { NetClient } from './request-utils';
 import * as api from '../lib-common/user-admin-api/signup';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 
 export async function checkAvailableDomains(
 	client: NetClient, serviceUrl: string, signupToken: string|undefined
@@ -31,10 +32,10 @@ export async function checkAvailableDomains(
 		if (Array.isArray(rep.data)) {
 			return rep.data;
 		} else {
-			throw makeException(rep, 'Reply is malformed');
+			throw makeMalformedReplyHTTPException(rep);
 		}
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 
@@ -54,10 +55,10 @@ export async function checkAvailableAddressesForName(
 		if (Array.isArray(rep.data)) {
 			return rep.data;
 		} else {
-			throw makeException(rep, 'Reply is malformed');
+			throw makeMalformedReplyHTTPException(rep);
 		}
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 
@@ -75,7 +76,7 @@ export async function addUser(
 	|| (rep.status === api.addUser.SC.unauthorized)) {
 		return false;
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 
@@ -95,7 +96,7 @@ export async function sendActivationCheckRequest(
 	} else if (rep.status === api.isActivated.SC.notActive) {
 		return false;
 	} else {
-		throw makeException(rep, 'Unexpected status');
+		throw makeUnexpectedStatusHTTPException(rep);
 	}
 }
 

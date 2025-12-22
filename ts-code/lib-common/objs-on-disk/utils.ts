@@ -18,7 +18,7 @@
 import { Layout, LayoutBaseSection, LayoutNewSection } from 'xsp-files';
 import { defer, Deferred } from '../processes/deferred';
 import { DiffInfo } from '../service-api/3nstorage/owner';
-import { ObjVersionFile } from './obj-file';
+import { ObjVersionFile } from './obj-version-file';
 import { Readable } from 'stream';
 import { makeFileException } from '../exceptions/file';
 import { assert } from '../assert';

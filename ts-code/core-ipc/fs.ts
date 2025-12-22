@@ -125,7 +125,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 			fs.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
-				download: vsDownload.makeCaller(caller, vsPath),
+				startDownload: vsDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(caller, vsPath)
 			} as WritableFSSyncAPI;
@@ -207,7 +207,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 			implExp.v.sync = {
 				status: vsStatus.wrapService(fs.v.sync.status),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(fs.v.sync.isRemoteVersionOnDisk),
-				download: vsDownload.wrapService(fs.v.sync.download),
+				startDownload: vsDownload.wrapService(fs.v.sync.startDownload),
 				adoptRemote: vsAdoptRemote.wrapService(fs.v.sync.adoptRemote),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.wrapService(
 					fs.v.sync.diffCurrentAndRemoteFolderVersions
@@ -2534,24 +2534,31 @@ namespace vsDownload {
 	const requestType = ProtoType.for<{
 		path: string;
 		version: number;
-	}>(pb.FSSyncDownloadRequestBody);
+	}>(pb.FSSyncStartDownloadRequestBody);
 
-	export function wrapService(fn: ReadonlyFSSyncAPI['download']): ExposedFn {
+	export function wrapService(fn: ReadonlyFSSyncAPI['startDownload']): ExposedFn {
 		return buf => {
 			const { path, version } = requestType.unpack(buf);
-			const promise = fn(path, fixInt(version));
+			const promise = fn(path, fixInt(version))
+			.then(startedDownload => file.vsStartDownload.replyType.pack({ startedDownload }));
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): ReadonlyFSSyncAPI['download'] {
-		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'download');
+	): ReadonlyFSSyncAPI['startDownload'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'startDownload');
 		return (path, version) => caller
-		.startPromiseCall(ipcPath, requestType.pack({
-			path, version
-		})) as Promise<void>;
+		.startPromiseCall(ipcPath, requestType.pack({ path, version }))
+		.then(buf => {
+			const { startedDownload } = file.vsStartDownload.replyType.unpack(buf);
+			if (startedDownload) {
+				return {
+					downloadTaskId: fixInt(startedDownload.downloadTaskId)
+				};
+			}
+		});
 	}
 
 }

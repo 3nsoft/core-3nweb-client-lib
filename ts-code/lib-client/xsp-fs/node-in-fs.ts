@@ -35,7 +35,7 @@ import { assert } from '../../lib-common/assert';
 import { makeRuntimeException } from '../../lib-common/exceptions/runtime';
 
 
-export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent | web3n.files.UploadEvent;
+export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent | web3n.files.UploadEvent | web3n.files.DownloadEvent;
 type RemoteEvent = web3n.files.RemoteEvent;
 type RemovedEvent = web3n.files.RemovedEvent;
 type FileChangeEvent = web3n.files.FileChangeEvent;
@@ -420,9 +420,12 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return storage.isRemoteVersionOnDisk(this.objId, version);
 	}
 
-	 async download(version: number): Promise<void> {
+	 async startDownload(version: number): Promise<{ downloadTaskId: number; }|undefined> {
 		const storage = this.syncedStorage();
-		return storage.download(this.objId, version);
+		return storage.startDownload(this.objId, version, event => {
+			event.path = this.name;
+			this.broadcastEvent(event);
+		});
 	}
 
 	protected abstract setCurrentStateFrom(src: ObjSource): Promise<void>;
@@ -532,29 +535,32 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	}
 
 	async startUpload(
-		opts: OptionsToUploadLocal|undefined
+		opts: OptionsToUploadLocal|undefined, emitEvents: boolean
 	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }|undefined> {
 		try {
 			const toUpload = await this.needUpload(opts);
 			if (!toUpload) { return; }
 			const { localVersion, createOnRemote, uploadVersion } = toUpload;
-			return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion);
+			return await this.startUploadProcess(localVersion, createOnRemote, uploadVersion, emitEvents);
 		} catch (exc) {
 			throw setPathInExc(exc, this.name);
 		}
 	}
 
 	protected async startUploadProcess(
-		localVersion: number, createOnRemote: boolean, uploadVersion: number
+		localVersion: number, createOnRemote: boolean, uploadVersion: number, emitEvents: boolean
 	): Promise<{ uploadVersion: number; completion: Promise<void>; uploadTaskId: number; }> {
 		const uploadHeader = await this.makeHeaderForUploadIfVersionChanges(localVersion, uploadVersion);
 		const storage = this.syncedStorage();
 		const { completion, uploadTaskId } = await storage.startUpload(
 			this.objId, localVersion, uploadVersion, uploadHeader, createOnRemote,
-			event => {
-				event.path = this.name;
-				this.broadcastEvent(event);
-			}
+			(emitEvents ?
+				event => {
+					event.path = this.name;
+					this.broadcastEvent(event);
+				} :
+				undefined
+			)
 		);
 		return {
 			completion: completion.then(() => this.doChange(true, async () => {

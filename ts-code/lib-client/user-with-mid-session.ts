@@ -20,7 +20,7 @@
  * MailerId and uses respectively authenticated session.
  */
 
-import { makeException, Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
+import { Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
 import * as api from '../lib-common/service-api/mailer-id/login';
 import * as WebSocket from 'ws';
 import { openSocket } from './ws-utils';
@@ -28,6 +28,7 @@ import { parse as parseUrl } from 'url';
 import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
 import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
+import { makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 
 export type IGetMailerIdSigner = () => Promise<MailerIdSigner>;
 
@@ -183,7 +184,7 @@ export abstract class ServiceUser {
 		if ((rep.status === 200) || (rep.status === api.ERR_SC.needAuth)) {
 			this.sessionId = (undefined as any);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 

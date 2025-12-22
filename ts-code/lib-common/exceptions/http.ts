@@ -29,10 +29,26 @@ export function makeConnectionException(
 }
 
 export function makeHTTPException(
-	url: string, method: string, status: number, message?: string, cause?: any
+	url: string, method: string, status: number, params: Partial<HTTPException>
 ): HTTPException {
 	return makeRuntimeException<HTTPException>(
-		'http-request', { url, method, status, cause, message }, {}
+		'http-request', { url, method, status, ...params }, {}
+	);
+}
+
+export function makeMalformedReplyHTTPException(
+	{ url, method, status }: { url: string; method: string; status: number; }, params?: Partial<HTTPException>
+): HTTPException {
+	return makeRuntimeException<HTTPException>(
+		'http-request', { url, method, status, ...params }, { malformedResponse: true }
+	);
+}
+
+export function makeUnexpectedStatusHTTPException(
+	{ url, method, status }: { url: string; method: string; status: number; }, params?: Partial<HTTPException>
+): HTTPException {
+	return makeRuntimeException<HTTPException>(
+		'http-request', { url, method, status, ...params }, { unexpectedStatus: true }
 	);
 }
 

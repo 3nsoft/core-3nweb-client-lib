@@ -98,7 +98,7 @@ export function makeFileCaller(
 			file.v.sync = {
 				status: vsStatus.makeCaller(caller, vsPath),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
-				download: vsDownload.makeCaller(caller, vsPath),
+				startDownload: vsStartDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
 			} as WritableFileSyncAPI;
 			if (file.writable) {
@@ -160,7 +160,7 @@ export function exposeFileService(
 			implExp.v.sync = {
 				status: vsStatus.wrapService(file.v.sync.status),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(file.v.sync.isRemoteVersionOnDisk),
-				download: vsDownload.wrapService(file.v.sync.download),
+				startDownload: vsStartDownload.wrapService(file.v.sync.startDownload),
 				adoptRemote: vsAdoptRemote.wrapService(file.v.sync.adoptRemote),
 			} as ExposedObj<WritableFileSyncAPI>;
 			if (file.writable) {
@@ -1516,30 +1516,45 @@ namespace vsIsRemoteVersionOnDisk {
 Object.freeze(vsIsRemoteVersionOnDisk);
 
 
-namespace vsDownload {
+export namespace vsStartDownload {
 
 	const requestType = ProtoType.for<{
 		version: number;
-	}>(pb.FileSyncDownloadRequestBody);
+	}>(pb.FileSyncStartDownloadRequestBody);
 
-	export function wrapService(fn: ReadonlyFileSyncAPI['download']): ExposedFn {
+	export const replyType = ProtoType.for<{
+		startedDownload?: {
+			downloadTaskId: number;
+		};
+	}>(pb.FileSyncStartDownloadReplyBody);
+
+	export function wrapService(fn: ReadonlyFileSyncAPI['startDownload']): ExposedFn {
 		return buf => {
 			const { version } = requestType.unpack(buf);
-			const promise = fn(fixInt(version));
+			const promise = fn(fixInt(version))
+			.then(startedDownload => replyType.pack({ startedDownload }));
 			return { promise };
 		};
 	}
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): ReadonlyFileSyncAPI['download'] {
-		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'download');
+	): ReadonlyFileSyncAPI['startDownload'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'startDownload');
 		return version => caller
-		.startPromiseCall(path, requestType.pack({ version })) as Promise<void>;
+		.startPromiseCall(path, requestType.pack({ version }))
+		.then(buf => {
+			const { startedDownload } = replyType.unpack(buf);
+			if (startedDownload) {
+				return {
+					downloadTaskId: fixInt(startedDownload.downloadTaskId)
+				};
+			}
+		});		
 	}
 
 }
-Object.freeze(vsDownload);
+Object.freeze(vsStartDownload);
 
 
 export interface OptionsToUploadLocalMsg {

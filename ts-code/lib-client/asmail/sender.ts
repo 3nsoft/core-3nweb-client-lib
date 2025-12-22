@@ -18,11 +18,12 @@
  * This defines functions that implement ASMail delivery protocol.
  */
 
-import { NetClient, makeException } from '../request-utils';
+import { NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/delivery';
 import { asmailInfoAt, ServiceLocator } from '../service-locator';
 import { parse as parseUrl } from 'url';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 const LIMIT_ON_MAX_CHUNK = 1024*1024;
 
@@ -229,12 +230,10 @@ export class MailSender {
 		}, reqData);
 		if (rep.status === api.preFlight.SC.ok) {
 			if (typeof rep.data.maxMsgLength !== 'number') {
-				throw makeException(rep,
-					'Malformed reply: missing number maxMsgLength');
+				throw makeMalformedReplyHTTPException(rep, { message: 'missing number maxMsgLength' });
 			}
 			if (rep.data.maxMsgLength < 500) {
-				throw makeException(rep,
-					'Malformed reply: maxMsgLength is too short');
+				throw makeMalformedReplyHTTPException(rep, { message: 'maxMsgLength is too short' });
 			}
 			this.maxMsgLength = rep.data.maxMsgLength;
 			return rep.data;
@@ -248,7 +247,7 @@ export class MailSender {
 		} else if (rep.status == api.preFlight.SC.inboxFull) {
 			throw this.inboxIsFullExc();
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	
@@ -277,17 +276,14 @@ export class MailSender {
 		}, reqData);
 		if (rep.status == api.sessionStart.SC.ok) {
 			if (typeof rep.data.maxMsgLength !== 'number') {
-				throw makeException(rep,
-					'Malformed reply: missing number maxMsgLength');
+				throw makeMalformedReplyHTTPException(rep, { message: 'missing number maxMsgLength' });
 			}
 			if (rep.data.maxMsgLength < 500) {
-				throw makeException(rep,
-					'Malformed reply: maxMsgLength is too short');
+				throw makeMalformedReplyHTTPException(rep, { message: 'maxMsgLength is too short' });
 			}
 			this.maxMsgLength = rep.data.maxMsgLength;
 			if ('string' !== typeof rep.data.sessionId) {
-				throw makeException(rep,
-					'Malformed reply: missing sessionId string');
+				throw makeMalformedReplyHTTPException(rep, { message: 'missing sessionId string' });
 			}
 			this.sessionId = rep.data.sessionId;
 			delete (rep.data as any).sessionId;
@@ -302,7 +298,7 @@ export class MailSender {
 		} else if (rep.status == api.sessionStart.SC.inboxFull) {
 			throw this.inboxIsFullExc();
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -320,17 +316,14 @@ export class MailSender {
 		}, reqData);
 		if (rep.status == api.sessionRestart.SC.ok) {
 			if (typeof rep.data.maxMsgLength !== 'number') {
-				throw makeException(rep,
-					'Malformed reply: missing number maxMsgLength');
+				throw makeMalformedReplyHTTPException(rep, { message: 'missing number maxMsgLength' });
 			}
 			if (rep.data.maxMsgLength < 500) {
-				throw makeException(rep,
-					'Malformed reply: maxMsgLength is too short');
+				throw makeMalformedReplyHTTPException(rep, { message: 'maxMsgLength is too short' });
 			}
 			this.maxMsgLength = rep.data.maxMsgLength;
 			if (typeof rep.data.sessionId !== 'string') {
-				throw makeException(rep,
-					'Malformed reply: missing sessionId string');
+				throw makeMalformedReplyHTTPException(rep, { message: 'missing sessionId string' });
 			}
 			this.sessionId = rep.data.sessionId;
 			if ((typeof rep.data.maxChunkSize === 'number') &&
@@ -344,7 +337,7 @@ export class MailSender {
 		} else if (rep.status == api.sessionRestart.SC.unknownRecipient) {
 			throw this.unknownRecipientExc();
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -373,7 +366,7 @@ export class MailSender {
 		if (rep.status === api.authSender.SC.authFailed) {
 			throw this.authFailedOnDeliveryExc();
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -397,7 +390,7 @@ export class MailSender {
 		} else if (rep.status === api.initPubKey.SC.pkeyNotRegistered) {
 			throw this.recipientHasNoPubKeyExc();
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -418,16 +411,14 @@ export class MailSender {
 			responseType: 'json'
 		}, meta);
 		if (rep.status == api.msgMeta.SC.ok) {
-			if (('string' !== typeof rep.data.msgId) ||
-					(rep.data.msgId.length === 0)) {
-				throw makeException(rep,
-					'Malformed reply: msgId string is missing');
+			if (('string' !== typeof rep.data.msgId)
+			|| (rep.data.msgId.length === 0)) {
+				throw makeMalformedReplyHTTPException(rep, { message: 'msgId string is missing' });
 			}
 			this.msgId = rep.data.msgId;
 			if (typeof rep.data.maxChunkSize === 'number') {
 				if (rep.data.maxChunkSize < 64*1024) {
-					throw makeException(rep,
-						'Malformed reply: maxChunkSize is too small');
+				throw makeMalformedReplyHTTPException(rep, { message: 'maxChunkSize is too small' });
 				} else if (rep.data.maxChunkSize < this.maxChunkSize) {
 					this.maxChunkSize = rep.data.maxChunkSize;
 				}
@@ -440,7 +431,7 @@ export class MailSender {
 				maxMsgLength: this.maxMsgLength
 			};
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	
@@ -482,13 +473,15 @@ export class MailSender {
 			if (restart) {
 				return this.sendObj(objId, bytes, fstReq, followReq);
 			} else {
-				throw makeException(rep, 'Unexpected status, when session restart is not expected to happen');
+				throw makeUnexpectedStatusHTTPException(rep, {
+					message: 'Unexpected status, when session restart is not expected to happen'
+				});
 			}
 		} else if (rep.status === api.msgObj.SC.ok) {
 			// normal return
 			return;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	
@@ -504,7 +497,7 @@ export class MailSender {
 		if (rep.status === api.completion.SC.ok) {
 			this.sessionId = (undefined as any);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 

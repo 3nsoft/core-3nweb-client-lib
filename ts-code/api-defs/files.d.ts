@@ -412,7 +412,7 @@ declare namespace web3n.files {
 		 */
 		getByteSource(): Promise<FileByteSource>;
 
-		watch(observer: Observer<FileEvent|RemoteEvent|UploadEvent>): () => void;
+		watch(observer: Observer<FileEvent|RemoteEvent|UploadEvent|DownloadEvent>): () => void;
 
 	}
 
@@ -638,7 +638,7 @@ declare namespace web3n.files {
 		 * This downloads bytes onto disk, skipping decryption, as file content isn't read here.
 		 * @param version 
 		 */
-		download(version: number): Promise<void>;
+		startDownload(version: number): Promise<{ downloadTaskId: number; }|undefined>;
 
 		/**
 		 * Adopts remote version.
@@ -665,7 +665,7 @@ declare namespace web3n.files {
 		 * Undefined is returned when upload is not needed, e.g. version is already synced.
 		 * Upload version and upload task id are returned together with an indicator of whether
 		 * this call has started upload, or it has already been going on.
-		 * Upload task id can be used to watch upload process.
+		 * Upload task id can be used to filter watched events.
 		 * @param opts 
 		 */
 		startUpload(
@@ -674,6 +674,7 @@ declare namespace web3n.files {
 
 		/**
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * This upload will not be generating upload events.
 		 * @param opts 
 		 */
 		upload(opts?: OptionsToUploadLocal): Promise<number|undefined>;
@@ -763,16 +764,16 @@ declare namespace web3n.files {
 		readLink(path: string): Promise<SymLink>;
 
 		watchFolder(
-			path: string, observer: Observer<FolderEvent|RemoteEvent|UploadEvent>
+			path: string, observer: Observer<FolderEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		watchFile(
-			path: string, observer: Observer<FileEvent|RemoteEvent|UploadEvent>
+			path: string, observer: Observer<FileEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		watchTree(
 			path: string, depth: number|undefined,
-			observer: Observer<FolderEvent|FileEvent|RemoteEvent|UploadEvent>
+			observer: Observer<FolderEvent|FileEvent|RemoteEvent|UploadEvent|DownloadEvent>
 		): () => void;
 
 		close(): Promise<void>;
@@ -1288,7 +1289,7 @@ declare namespace web3n.files {
 		 * @param path 
 		 * @param version 
 		 */
-		download(path: string, version: number): Promise<void>;
+		startDownload(path: string, version: number): Promise<{ downloadTaskId: number; }|undefined>;
 
 		/**
 		 * Adopts remote version of fs object at given path.
@@ -1340,7 +1341,7 @@ declare namespace web3n.files {
 		 * Undefined is returned when upload is not needed, e.g. version is already synced.
 		 * Upload version and upload task id are returned together with an indicator of whether
 		 * this call has started upload, or it has already been going on.
-		 * Upload task id can be used to watch upload process.
+		 * Upload task id can be used to filter watched events.
 		 * @param path 
 		 * @param opts 
 		 */
@@ -1350,6 +1351,7 @@ declare namespace web3n.files {
 
 		/**
 		 * Upload in conflicting and behind state of sync requires explicit upload version.
+		 * This upload will not be generating upload events.
 		 * @param path 
 		 * @param opts 
 		 */
@@ -1468,6 +1470,28 @@ declare namespace web3n.files {
 
 	interface UploadDoneEvent extends UploadEventBase {
 		type: 'upload-done';
+	}
+
+	type DownloadEvent = DownloadStartEvent | DownloadProgressEvent | DownloadDoneEvent;
+
+	interface DownloadEventBase extends FSEvent {
+		downloadTaskId: number;
+		version: number;
+	}
+
+	interface DownloadStartEvent extends DownloadEventBase {
+		type: 'download-started';
+		totalBytesToDownload: number;
+	}
+
+	interface DownloadDoneEvent extends DownloadEventBase {
+		type: 'download-done';
+	}
+
+	interface DownloadProgressEvent extends DownloadEventBase {
+		type: 'download-progress';
+		totalBytesToDownload: number;
+		bytesLeftToDownload: number;
 	}
 
 }

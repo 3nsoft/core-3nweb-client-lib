@@ -32,6 +32,7 @@ type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type FSSyncException = web3n.files.FSSyncException;
 type FileException = web3n.files.FileException;
 type UploadEvent = web3n.files.UploadEvent;
+type DownloadEvent = web3n.files.DownloadEvent;
 
 export type FSChangeSrc = web3n.files.FSChangeEvent['src'];
 
@@ -119,7 +120,7 @@ export interface NodeEvent {
 	objId: ObjId;
 	parentObjId?: ObjId;
 	childObjId?: ObjId;
-	event: FolderEvent|FileEvent|RemoteEvent|UploadEvent;
+	event: FolderEvent|FileEvent|RemoteEvent|UploadEvent|DownloadEvent;
 }
 
 export interface Storage {
@@ -214,6 +215,10 @@ export function wrapStorageImplementation(impl: Storage): Storage {
 
 export type StorageGetter = (type: StorageType, location?: string) => Storage;
 
+export type DownloadEventSink = (event: DownloadEvent) => void;
+
+export type UploadEventSink = (event: UploadEvent) => void;
+
 export interface SyncedStorage extends Storage {
 
 	getObjSrcOfRemoteVersion(objId: ObjId, version: number): Promise<ObjSource>;
@@ -235,12 +240,14 @@ export interface SyncedStorage extends Storage {
 		objId: ObjId, version: number
 	): Promise<'partial'|'complete'|'none'>;
 
-	download(objId: ObjId, version: number): Promise<void>;
+	startDownload(
+		objId: ObjId, version: number, eventSink: DownloadEventSink
+	): Promise<{ downloadTaskId: number; }|undefined>;
 
 	startUpload(
 		objId: ObjId, localVersion: number, uploadVersion: number,
 		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean,
-		eventSink: (event: UploadEvent) => void
+		eventSink: UploadEventSink|undefined
 	): Promise<{ uploadTaskId: number; completion: Promise<void>; }>;
 
 	dropCachedLocalObjVersionsLessOrEqual(
@@ -286,7 +293,7 @@ export function wrapSyncStorageImplementation(impl: SyncedStorage): SyncedStorag
 	wrap.getObjSrcOfRemoteVersion = impl.getObjSrcOfRemoteVersion.bind(impl);
 	wrap.archiveVersionOnServer = impl.archiveVersionOnServer.bind(impl);
 	wrap.isRemoteVersionOnDisk = impl.isRemoteVersionOnDisk.bind(impl);
-	wrap.download = impl.download.bind(impl);
+	wrap.startDownload = impl.startDownload.bind(impl);
 	wrap.startUpload = impl.startUpload.bind(impl);
 	wrap.uploadObjRemoval = impl.uploadObjRemoval.bind(impl);
 	wrap.dropCachedLocalObjVersionsLessOrEqual = impl.dropCachedLocalObjVersionsLessOrEqual.bind(impl);

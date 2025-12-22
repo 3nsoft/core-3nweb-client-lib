@@ -117,7 +117,7 @@ function wrapWritableFileSyncAPI(
 	if (!sImpl) { return; }
 	const w: WritableFileSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		download: sImpl.download.bind(sImpl),
+		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
@@ -174,7 +174,7 @@ function wrapReadonlyFileSyncAPI(
 	if (!sImpl) { return; }
 	const w: ReadonlyFileSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		download: sImpl.download.bind(sImpl),
+		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 	};
@@ -273,7 +273,7 @@ function wrapWritableFSSyncAPI(
 	if (!sImpl) { return; }
 	const w: WritableFSSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		download: sImpl.download.bind(sImpl),
+		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 		diffCurrentAndRemoteFolderVersions: sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
@@ -338,7 +338,7 @@ function wrapReadonlyFSSyncAPI(
 	if (!sImpl) { return; }
 	const w: ReadonlyFSSyncAPI = {
 		status: sImpl.status.bind(sImpl),
-		download: sImpl.download.bind(sImpl),
+		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
 		diffCurrentAndRemoteFolderVersions:

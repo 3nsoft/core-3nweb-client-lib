@@ -146,8 +146,7 @@ namespace formatV1 {
 				bytesRead: KEY_LENGTH + 4 + jsonBytesLen
 			};
 		} catch (err) {
-			throw parsingException(
-				`Cannot deserialize node info from bytes.`, err);
+			throw parsingException(`Cannot deserialize node info from bytes.`, err);
 		}
 	}
 	

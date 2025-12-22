@@ -469,9 +469,9 @@ message FSSyncIsOnDiskReplyBody {
 	string status = 1;
 }
 
-// --- ReadonlyFSSyncAPI.download ---
-// Reply has only status and body is empty
-message FSSyncDownloadRequestBody {
+// --- ReadonlyFSSyncAPI.startDownload ---
+// Reply has only status and body is file.FileSyncStartDownloadReplyBody
+message FSSyncStartDownloadRequestBody {
 	string path = 1;
 	uint64 version = 2;
 }

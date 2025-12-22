@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,8 +20,8 @@
  * Public Key Login process and uses respectively authenticated session.
  */
 
-import { makeException, NetClient } from './request-utils';
-import { HTTPException } from '../lib-common/exceptions/http';
+import { NetClient } from './request-utils';
+import { HTTPException, makeHTTPException, makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 import { base64, makeUint8ArrayCopy } from '../lib-common/buffer-utils';
 import { secret_box as sbox, box, nonce as nMod, arrays, compareVectors } from 'ecma-nacl';
 import { SessionEncryptor, makeSessionEncryptor } from '../lib-common/session-encryptor';
@@ -112,39 +112,41 @@ export abstract class ServiceUser {
 		if (rep.status == loginApi.start.SC.ok) {
 			// set sessionid
 			if (!rep.data || (typeof rep.data.sessionId !== 'string')) {
-				throw makeException(rep, 'Malformed reply to starting session');
+				throw makeMalformedReplyHTTPException(rep);
 			}
 			this.sessionId = rep.data.sessionId;
 			// set server public key
 			if (typeof rep.data.serverPubKey !== 'string') {
-				throw makeException(rep, 'Malformed reply: serverPubKey string is missing.');
+				throw makeMalformedReplyHTTPException(rep, { message: 'serverPubKey string is missing.' });
 			}
 			try {
 				this.serverPubKey = base64.open(rep.data.serverPubKey);
 				if (this.serverPubKey.length !== box.KEY_LENGTH) {
-					throw makeException(rep,
-						'Malformed reply: server\'s key has a wrong size.');
+					throw makeMalformedReplyHTTPException(rep,{ message: `server's key has a wrong size.` });
 				}
 			} catch (err) {
-				throw makeException(rep, `Malformed reply: bad serverPubKey string. Error: ${('string' === typeof err)? err : err.message}`);
+				throw makeMalformedReplyHTTPException(rep, {
+					message: `bad serverPubKey string. Error: ${('string' === typeof err)? err : err.message}`
+				});
 			}
 			// get encrypted session key from json body
 			if (typeof rep.data.sessionKey !== 'string') {
-				throw makeException(rep, 'Malformed reply: sessionKey string is missing.');
+				throw makeMalformedReplyHTTPException(rep, { message: 'sessionKey string is missing.' });
 			}
 			try {
 				this.encChallenge = base64.open(rep.data.sessionKey);
-				if (this.encChallenge.length !==
-						(sbox.NONCE_LENGTH + sbox.KEY_LENGTH)) {
-					throw makeException(rep, `Malformed reply: byte chunk with session key has a wrong size.`);
+				if (this.encChallenge.length !== (sbox.NONCE_LENGTH + sbox.KEY_LENGTH)) {
+					throw makeMalformedReplyHTTPException(rep, { message: `byte chunk with session key has a wrong size.` });
 				}
 			} catch (err) {
-				throw makeException(rep, `Malformed reply: bad sessionKey string. Error: ${(typeof err === 'string') ? err : err.message}`);
+				throw makeMalformedReplyHTTPException(rep, {
+					message: `bad sessionKey string. Error: ${(typeof err === 'string') ? err : err.message}`
+				});
 			}
 			// get key derivation parameters for a default key
 			if (!keyId) {
 				if (typeof rep.data.keyDerivParams !== 'object') {
-					throw makeException(rep, `Malformed reply: keyDerivParams string is missing.`);
+					throw makeMalformedReplyHTTPException(rep, { message: `keyDerivParams string is missing.` });
 				}
 				this.keyDerivationParams = rep.data.keyDerivParams;
 			}
@@ -152,12 +154,13 @@ export abstract class ServiceUser {
 				(rep.status === loginApi.start.SC.redirect)) {
 			const rd: loginApi.start.RedirectReply = <any> rep.data;
 			if (!rd || ('string' !== typeof rd.redirect)) {
-				throw makeException(rep, 'Malformed reply');
+				throw makeMalformedReplyHTTPException(rep);
 			}
 			// refuse second redirect
 			if (this.redirectedFrom !== undefined) {
-				throw makeException(rep,
-					`Redirected too many times. First redirect was from ${this.redirectedFrom} to ${this.serviceURI}. Second and forbidden redirect is to ${rd.redirect}`);
+				throw makeMalformedReplyHTTPException(rep, {
+					message: `Redirected too many times. First redirect was from ${this.redirectedFrom} to ${this.serviceURI}. Second and forbidden redirect is to ${rd.redirect}`
+				});
 			}
 			// set params
 			this.redirectedFrom = this.serviceURI;
@@ -165,11 +168,11 @@ export abstract class ServiceUser {
 			// start redirect call
 			return this.startSession(keyId);
 		} else if (rep.status === loginApi.start.SC.unknownUser) {
-			const exc = <PKLoginException> makeException(rep);
+			const exc = makeHTTPException(rep.url, rep.method, rep.status, {}) as PKLoginException;
 			exc.unknownUser = true;
 			throw exc;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	
@@ -220,16 +223,16 @@ export abstract class ServiceUser {
 			if (compareVectors(rep.data, this.serverVerificationBytes)) {
 				this.serverVerificationBytes = undefined;
 			} else {
-				const exc = <PKLoginException> makeException(rep);
+				const exc = makeHTTPException(rep.url, rep.method, rep.status, {}) as PKLoginException;
 				exc.serverNotTrusted = true;
 				throw exc;
 			}
 		} else if (rep.status === loginApi.complete.SC.authFailed) {
-				const exc = <PKLoginException> makeException(rep);
+				const exc = makeHTTPException(rep.url, rep.method, rep.status, {}) as PKLoginException;
 				exc.cryptoResponseNotAccepted = true;
 				throw exc;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	
@@ -272,7 +275,7 @@ export abstract class ServiceUser {
 			this.encryptor.destroy();
 			this.encryptor = undefined;
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 	

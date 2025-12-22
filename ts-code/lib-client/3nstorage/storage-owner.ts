@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { makeException, extractIntHeader, NetClient } from '../request-utils';
+import { extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/3nstorage/owner';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { storageInfoAt } from '../service-locator';
@@ -25,6 +25,7 @@ import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
 import { LogError } from '../logging/log-to-file';
+import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
@@ -79,11 +80,13 @@ export class StorageOwner extends ServiceUser {
 			responseType: 'json'
 		});
 		if (rep.status !== api.sessionParams.SC.ok) {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 		const keyDerivParams = rep.data;
 		if (!keyGen.checkParams(rep.data)) {
-			throw makeException(rep, 'Malformed response');
+			throw makeMalformedReplyHTTPException(rep, {
+				message: `expected key generation parameters form isn't there`
+			});
 		}
 		return keyDerivParams;
 	}
@@ -95,11 +98,10 @@ export class StorageOwner extends ServiceUser {
 			responseType: 'json'
 		});
 		if (rep.status !== api.sessionParams.SC.ok) {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
-		if ((typeof rep.data.maxChunkSize !== 'number') ||
-				(rep.data.maxChunkSize < 64*1024)) {
-			throw makeException(rep, 'Malformed response');
+		if ((typeof rep.data.maxChunkSize !== 'number') || (rep.data.maxChunkSize < 64*1024)) {
+			throw makeMalformedReplyHTTPException(rep, { message: 'bad maxChunkSize value in reply' });
 		}
 		this.maxChunkSize = rep.data.maxChunkSize;
 	}
@@ -133,7 +135,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.cancelTransaction.SC.missing) {
 			throw makeUnknownTransactionExc(objId!);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -147,43 +149,43 @@ export class StorageOwner extends ServiceUser {
 	 * @param limit this is a limit on segments size that we can accept in this
 	 * request.
 	 */
-	async getCurrentObj(
-		objId: ObjId, limit: number
-	): Promise<{
-		version: number; segsTotalLen: number;
-		header: Uint8Array; segsChunk: Uint8Array;
+	async getCurrentObj(objId: ObjId, limit: number): Promise<{
+		version: number; segsTotalLen: number; header: Uint8Array; segsChunk: Uint8Array;
 	}> {
 		const opts: api.GetObjQueryOpts = { header: true, limit };
 		const appPath = (objId ?
 			api.currentObj.getReqUrlEnd(objId, opts) :
-			api.currentRootObj.getReqUrlEnd(opts));
+			api.currentRootObj.getReqUrlEnd(opts)
+		);
 		const rep = await this.doBodylessSessionRequest<Uint8Array>({
 			appPath,
 			method: 'GET',
 			responseType: 'arraybuffer',
-			responseHeaders: [ api.HTTP_HEADER.objVersion,
-				api.HTTP_HEADER.objSegmentsLength, api.HTTP_HEADER.objHeaderLength ]
+			responseHeaders: [
+				api.HTTP_HEADER.objVersion, api.HTTP_HEADER.objSegmentsLength, api.HTTP_HEADER.objHeaderLength
+			]
 		});
 
 		if (rep.status === api.currentObj.SC.okGet) {
-			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
-				`Malformed response: body is not binary`); }
+			const bytes = rep.data;
+			if (!(bytes instanceof Uint8Array)) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is not binary` });
+			}
 			const version = extractIntHeader(rep, api.HTTP_HEADER.objVersion);
-			const segsTotalLen = extractIntHeader(rep,
-				api.HTTP_HEADER.objSegmentsLength);
-			const headerLen = extractIntHeader(rep,
-				api.HTTP_HEADER.objHeaderLength);
-			if (rep.data.length > (headerLen + segsTotalLen)) {
-				throw makeException(rep, `Malformed response: body is too long`); }
+			const segsTotalLen = extractIntHeader(rep, api.HTTP_HEADER.objSegmentsLength);
+			const headerLen = extractIntHeader(rep, api.HTTP_HEADER.objHeaderLength);
+			if (bytes.length > (headerLen + segsTotalLen)) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is too long` });
+			}
 			return {
 				version, segsTotalLen,
-				header: rep.data.subarray(0, headerLen),
-				segsChunk: rep.data.subarray(headerLen)
+				header: bytes.subarray(0, headerLen),
+				segsChunk: bytes.subarray(headerLen)
 			};
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
 			throw makeObjNotFoundExc(objId!, true);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -198,27 +200,34 @@ export class StorageOwner extends ServiceUser {
 	async getCurrentObjSegs(
 		objId: ObjId, version: number, start: number, end: number
 	): Promise<Uint8Array> {
-		if (end <= start) { throw new Error(`Given out of bounds parameters: start is ${start}, end is ${end}, -- for downloading obj ${objId}, version ${version}`); }
+		if (end <= start) {
+			throw new Error(`Given out of bounds parameters: start is ${start}, end is ${end}, -- for downloading obj ${objId}, version ${version}`);
+		}
 		const limit = end - start;
 
 		const opts: api.GetObjQueryOpts = { ofs: start, limit, ver: version };
-		const appPath = (objId ?
-			api.currentObj.getReqUrlEnd(objId, opts) :
-			api.currentRootObj.getReqUrlEnd(opts));
 		const rep = await this.doBodylessSessionRequest<Uint8Array>({
-			appPath,
+			appPath: (objId ?
+				api.currentObj.getReqUrlEnd(objId, opts) :
+				api.currentRootObj.getReqUrlEnd(opts)
+			),
 			method: 'GET',
 			responseType: 'arraybuffer',
 		});
 
 		if (rep.status === api.currentObj.SC.okGet) {
-			if (!(rep.data instanceof Uint8Array)) { throw makeException(rep,
-				`Malformed response: body is not binary`); }
-			return rep.data;
+			const chunk = rep.data;
+			if (!(chunk instanceof Uint8Array)) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is not binary` });
+			}
+			if (chunk.length > limit) {
+				throw makeMalformedReplyHTTPException(rep, { message: `body is too long` });
+			}
+			return chunk;
 		} else if (rep.status === api.currentObj.SC.unknownObj) {
 			throw makeObjNotFoundExc(objId!, true);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -300,7 +309,7 @@ export class StorageOwner extends ServiceUser {
 				`Got non-integer current object version value from a version mismatch reply ${curVer}`); }
 			throw makeVersionMismatchExc(objId!, curVer);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -318,7 +327,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.currentObj.SC.unknownObjVer) {
 			throw makeObjVersionNotFoundExc(objId!, currentVer, true);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -336,7 +345,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.objStatus.SC.unknownObj) {
 			throw makeObjNotFoundExc(objId!, true);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -358,7 +367,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.currentObj.SC.concurrentTransaction) {
 			throw makeConcurrentTransExc(objId);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
@@ -367,7 +376,7 @@ export class StorageOwner extends ServiceUser {
 		if (rep.status === api.wsEventChannel.SC.ok) {
 			return makeSubscriber(rep.data, undefined);
 		} else {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 

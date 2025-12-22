@@ -18,10 +18,11 @@
  * This defines functions that implement ASMail configuration protocol.
  */
 
-import { makeException, NetClient } from '../request-utils';
+import { NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/config';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
+import { makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 type ASMailConfigParams = web3n.asmail.ASMailConfigParams;
 
@@ -61,7 +62,7 @@ export class MailConfigurator extends ServiceUser {
 			responseType: 'json'
 		});
 		if (rep.status !== api.PARAM_SC.ok) {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 		return rep.data;
 	}
@@ -76,7 +77,7 @@ export class MailConfigurator extends ServiceUser {
 			method: 'PUT',
 		}, value);
 		if (rep.status !== api.PARAM_SC.ok) {
-			throw makeException(rep, 'Unexpected status');
+			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
 
