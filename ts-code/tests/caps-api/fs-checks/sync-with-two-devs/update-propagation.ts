@@ -172,6 +172,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 	.withContext(`expect to see entity completely on a disk, when download has started, as not being needed`)
 	.toBe('complete');
 
+	expect((
+		await fs2.v!.listFolder('', { remoteVersion: folderEv.newVersion })
+	).lst.map(({ name }) => name)).toContain(file);
+
 	// case 2: remote version of file
 
 	expect(await fs2.checkFilePresence(file)).toBeFalse();
@@ -227,6 +231,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	).toBe('complete');
 
 };
+it.timeout = 30000;
 specs.its.push(it);
 
 it = {

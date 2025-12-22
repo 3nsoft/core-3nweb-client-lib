@@ -368,7 +368,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	): Promise<{ lst: ListingEntry[]; version: number; }> {
 		const src = await this.getObjSrcOfVersion(flags);
 		const { folderInfo } = await this.crypto.read(src);
-		const lst = Object.values(folderInfo)
+		const lst = Object.values(folderInfo.nodes)
 		.map(nodeInfoToListingEntry);
 		return { lst, version: src.version };
 	}
