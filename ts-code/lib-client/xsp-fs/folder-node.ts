@@ -1070,7 +1070,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async adoptRemoteFolderItem(
-		itemName: string, opts: OptionsToAdoptRemoteItem|undefined
+		remoteItemName: string, opts: OptionsToAdoptRemoteItem|undefined
 	): Promise<number> {
 		if (opts?.localVersion) {
 			if (this.version !== opts.localVersion) {
@@ -1105,29 +1105,42 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		const {
 			folderInfo: { nodes: remoteNodes }
 		} = await this.crypto.read(srcOfRemote);
-		const remoteChildNode = remoteNodes[itemName];
+		const remoteChildNode = remoteNodes[remoteItemName];
 		if (!remoteChildNode) {
 			throw makeFSSyncException(this.name, {
 				remoteFolderItemNotFound: true,
-				message: `Item '${itemName}' is not found in remote version`
+				message: `Item '${remoteItemName}' is not found in remote version`
 			});
 		}
-		const localNodeToRm = this.getNodeInfo(itemName, true);
-		if (!localNodeToRm) {
-			return await this.addRemoteChild(remoteChildNode);
-		} else if (localNodeToRm.objId === remoteChildNode.objId) {
-			assert(typeOfNode(localNodeToRm) === typeOfNode(remoteChildNode));
+		let dstItemName = remoteItemName;
+		if (typeof opts?.newItemName === 'string') {
+			const newItemName = opts.newItemName.trim();
+			if (newItemName.length > 0) {
+				dstItemName = newItemName;
+			}
+		}
+		const localNodeWithSameName = this.getNodeInfo(dstItemName, true);
+		if (!localNodeWithSameName) {
+			return await this.addRemoteChild(remoteChildNode, dstItemName);
+		} else if (localNodeWithSameName.objId === remoteChildNode.objId) {
+			assert(typeOfNode(localNodeWithSameName) === typeOfNode(remoteChildNode));
 			// XXX
 			throw new Error(`Adaptation of changing keys needs implementation`);
-		} else {
+		} else if (opts?.replaceLocalItem) {
 			return await this.replaceLocalChildWithRemote(remoteChildNode);
+		} else {
+			throw makeFSSyncException(this.name, {
+				overlapsLocalItem: true,
+				message: `Local item exists under name '${dstItemName}' and option flag is not forcing replacement`
+			});
 		}
 	}
 
-	private async addRemoteChild(remoteChildNode: NodeInfo): Promise<number> {
+	private async addRemoteChild(remoteChildNode: NodeInfo, childName: string): Promise<number> {
 		let newVersion: number;
 		await this.doTransition(async (state, version) => {
 			newVersion = version;
+			remoteChildNode.name = childName;
 			state.nodes[remoteChildNode.name] = remoteChildNode;
 			const event: EntryAdditionEvent = {
 				type: 'entry-addition',

@@ -153,7 +153,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff!.nameOverlaps!).toContain(file);
 
 	// adopt on dev2 some remote elements from dev1
-	await dev2FS().v!.sync!.adoptRemoteFolderItem('', file);
+	await dev2FS().v!.sync!.adoptRemoteFolderItem('', file, { replaceLocalItem: true });
 	await dev2FS().v!.sync!.adoptRemoteFolderItem('', fileFromDev1);
 
 	expect(await dev2FS().readTxtFile(file))

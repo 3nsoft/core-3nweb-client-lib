@@ -83,6 +83,7 @@ declare namespace web3n.files {
 		notSynced?: true;
 		remoteIsArchived?: true;
 		remoteFolderItemNotFound?: true;
+		overlapsLocalItem?: true;
 	}
 
 	/**
@@ -1304,9 +1305,17 @@ declare namespace web3n.files {
 		 * @param path 
 		 * @param remoteVersion 
 		 */
-		diffCurrentAndRemoteFolderVersions(
-			path: string, remoteVersion?: number
-		): Promise<FolderDiff|undefined>;
+		diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined>;
+
+
+		// XXX (Christmas methods)
+		// add following methods to read remote item, facilitating decisions in conflict situations.
+
+		// statRemoteItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<Stats>;
+
+		// listRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ListingEntry[]>;
+
+		// getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
 
 	}
 
@@ -1355,26 +1364,39 @@ declare namespace web3n.files {
 		 * @param path 
 		 * @param opts 
 		 */
-		upload(
-			path: string, opts?: OptionsToUploadLocal
-		): Promise<number|undefined>;
+		upload(path: string, opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 		/**
 		 * This method is for resolving conflicts on folders.
 		 * It adopts some folder items, and not the whole folder state.
 		 * @param path 
-		 * @param itemName 
+		 * @param remoteItemName 
 		 * @param opts 
 		 */
 		adoptRemoteFolderItem(
-			path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
+			path: string, remoteItemName: string, opts?: OptionsToAdoptRemoteItem
 		): Promise<number>;
 
 	}
 
 	interface OptionsToAdoptRemoteItem {
+		/**
+		 * Folder's local version. If not given, current local version is used.
+		 */
 		localVersion?: number;
+		/**
+		 * Folder's remote version. If not given, current remote version is used.
+		 */
 		remoteVersion?: number;
+		/**
+		 * Flag to force replacement of locally referenced item under the same item name (or new name).
+		 * If not given, and there is an overlapping local, an exception is thrown.
+		 */
+		replaceLocalItem?: boolean;
+		/**
+		 * Name for item when it is added into local folder version.
+		 */
+		newItemName?: string;
 	}
 
 	interface FSEvent {

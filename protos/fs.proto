@@ -531,6 +531,8 @@ message AdoptRemoteFolderItemRequestBody {
 	message Options {
 		common.UInt64Value local_version = 1;
 		common.UInt64Value upload_version = 2;
+		common.BooleanValue replace_local_item = 3;
+		common.StringValue new_item_name = 4;
 	}
 	string path = 1;
 	string item_name = 2;

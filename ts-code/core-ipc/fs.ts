@@ -2645,6 +2645,8 @@ Object.freeze(vsUpload);
 interface OptionsToAdoptRemoteItemMsg {
 	localVersion?: Value<number>;
 	remoteVersion?: Value<number>;
+	replaceLocalItem?: Value<boolean>;
+	newItemName?: Value<string>;
 }
 
 export function optionsToAdoptRemoteItemToMsg(
@@ -2653,7 +2655,9 @@ export function optionsToAdoptRemoteItemToMsg(
 	if (!opts) { return; }
 	return {
 		localVersion: toOptVal(opts.localVersion),
-		remoteVersion: toOptVal(opts.remoteVersion)
+		remoteVersion: toOptVal(opts.remoteVersion),
+		replaceLocalItem: toOptVal(opts.replaceLocalItem),
+		newItemName: toOptVal(opts.newItemName)
 	};
 }
 
@@ -2663,8 +2667,10 @@ export function optionsToAdoptRemoteItemFromMsg(
 	if (!msg) { return; }
 	return {
 		localVersion: valOfOptInt(msg.localVersion),
-		remoteVersion: valOfOptInt(msg.remoteVersion)
-	}
+		remoteVersion: valOfOptInt(msg.remoteVersion),
+		replaceLocalItem: valOfOpt(msg.replaceLocalItem),
+		newItemName: valOfOpt(msg.newItemName)
+	};
 }
 
 
