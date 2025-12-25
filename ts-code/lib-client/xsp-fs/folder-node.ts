@@ -390,7 +390,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		}
 	}
 
-	getNodeInfo(name: string, undefOnMissing = false): NodeInfo|undefined {
+	getCurrentNodeInfo(name: string, undefOnMissing = false): NodeInfo|undefined {
 		const fj = this.currentState.nodes[name];
 		if (fj) {
 			return fj;
@@ -402,13 +402,13 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	hasChild(childName: string, throwIfMissing = false): boolean {
-		return !!this.getNodeInfo(childName, !throwIfMissing);
+		return !!this.getCurrentNodeInfo(childName, !throwIfMissing);
 	}
 
 	async getNode<T extends NodeInFS<any>>(
 		type: NodeType|undefined, name: string, undefOnMissing = false
 	): Promise<T|undefined> {
-		const childInfo = this.getNodeInfo(name, undefOnMissing);
+		const childInfo = this.getCurrentNodeInfo(name, undefOnMissing);
 		if (!childInfo) { return; }
 		if (type) {
 			if ((type === 'file') && !childInfo.isFile) {
@@ -423,7 +423,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	private async getOrMakeChildNodeForInfo<T extends NodeInFS<any>>(
-		info: NodeInfo
+		info: NodeInfo, fromCurrentNodes = true
 	): Promise<T> {
 		const {
 			node, nodePromise
@@ -431,9 +431,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		if (node) { return node; }
 		if (nodePromise) { return nodePromise; }
 		const deferred = defer<T>();
-		const nodeSet = this.storage.nodes.setPromise(
-			info.objId, deferred.promise
-		);
+		const nodeSet = this.storage.nodes.setPromise(info.objId, deferred.promise);
 		try {
 			let node: Node;
 			if (info.isFile) {
@@ -455,7 +453,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			deferred.resolve(node as T);
 			return nodeSet;
 		} catch (exc) {
-			if (exc.objNotFound) {
+			if (exc.objNotFound && fromCurrentNodes) {
 				await this.fixMissingChildAndThrow(exc, info);
 			}
 			deferred.reject(errWithCause(
@@ -632,7 +630,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return this.doChange(true, async () => {
 
 			// do check for concurrent creation of a node
-			if (this.getNodeInfo(name, true)) {
+			if (this.getCurrentNodeInfo(name, true)) {
 				if (exclusive) {
 					throw makeFileException('alreadyExists', name);
 				} else if (type === 'folder') {
@@ -747,7 +745,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			// In this case we only need to change child's name
 			await this.changeChildName(childName, nameInDst);
 		} else {
-			const childJSON = this.getNodeInfo(childName)!;
+			const childJSON = this.getCurrentNodeInfo(childName)!;
 			// we have two transitions here, in this and in dst.
 			const moveLabel = getMoveLabel();
 			await dst.moveChildIn(nameInDst, childJSON, moveLabel);
@@ -1080,38 +1078,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				});
 			}
 		}
-		const { remote } = await this.syncStatus();
-		if (!remote) {
-			throw makeFSSyncException(this.name, {
-				versionMismatch: true,
-				message: `No remote versions`
-			});
-		}
-		if (opts?.remoteVersion) {
-			if (opts.remoteVersion !== remote.latest) {
-				throw makeFSSyncException(this.name, {
-					versionMismatch: true,
-					message: `Unknown remote version ${opts.remoteVersion}`
-				});
-			}
-		} else if (!remote.latest) {
-			throw makeFSSyncException(this.name, {
-				remoteIsArchived: true
-			});
-		}
-		const storage = this.syncedStorage();
-		const srcOfRemote = await storage.getObjSrcOfRemoteVersion(
-			this.objId, remote.latest);
-		const {
-			folderInfo: { nodes: remoteNodes }
-		} = await this.crypto.read(srcOfRemote);
-		const remoteChildNode = remoteNodes[remoteItemName];
-		if (!remoteChildNode) {
-			throw makeFSSyncException(this.name, {
-				remoteFolderItemNotFound: true,
-				message: `Item '${remoteItemName}' is not found in remote version`
-			});
-		}
+		const remoteChildNode = await this.getRemoteChildNodeInfo(remoteItemName, opts?.remoteVersion);
 		let dstItemName = remoteItemName;
 		if (typeof opts?.newItemName === 'string') {
 			const newItemName = opts.newItemName.trim();
@@ -1119,7 +1086,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				dstItemName = newItemName;
 			}
 		}
-		const localNodeWithSameName = this.getNodeInfo(dstItemName, true);
+		const localNodeWithSameName = this.getCurrentNodeInfo(dstItemName, true);
 		if (!localNodeWithSameName) {
 			return await this.addRemoteChild(remoteChildNode, dstItemName);
 		} else if (localNodeWithSameName.objId === remoteChildNode.objId) {
@@ -1132,6 +1099,42 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			throw makeFSSyncException(this.name, {
 				overlapsLocalItem: true,
 				message: `Local item exists under name '${dstItemName}' and option flag is not forcing replacement`
+			});
+		}
+	}
+
+	private async getRemoteChildNodeInfo(
+		remoteChildName: string, remoteVersion: number|undefined
+	): Promise<NodeInfo> {
+		const { remote } = await this.syncStatus();
+		if (!remote) {
+			throw makeFSSyncException(this.name, {
+				versionMismatch: true,
+				message: `No remote versions`
+			});
+		}
+		if (remoteVersion) {
+			if (remoteVersion !== remote.latest) {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					message: `Unknown remote version ${remoteVersion}`
+				});
+			}
+		} else if (!remote.latest) {
+			throw makeFSSyncException(this.name, {
+				remoteIsArchived: true
+			});
+		}
+		const storage = this.syncedStorage();
+		const srcOfRemote = await storage.getObjSrcOfRemoteVersion(this.objId, remote.latest);
+		const { folderInfo: { nodes: remoteNodes } } = await this.crypto.read(srcOfRemote);
+		const remoteChildNode = remoteNodes[remoteChildName];
+		if (remoteChildNode) {
+			return remoteChildNode;
+		} else {
+			throw makeFSSyncException(this.name, {
+				remoteFolderItemNotFound: true,
+				message: `Item '${remoteChildName}' is not found in remote version`
 			});
 		}
 	}
@@ -1258,6 +1261,13 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			mtime,
 			xattrs: diffXAttrs(this.xattrs, xattrs)
 		};
+	}
+
+	async getRemoteItemNode<T extends NodeInFS<any>>(
+		remoteItemName: string, remoteVersion: number|undefined
+	): Promise<T> {
+		const remoteChildNodeInfo = await this.getRemoteChildNodeInfo(remoteItemName, remoteVersion);
+		return await this.getOrMakeChildNodeForInfo(remoteChildNodeInfo, false);
 	}
 
 }

@@ -152,6 +152,20 @@ it.func = async function({ dev1FS, dev2FS }) {
 	.toBeDefined();
 	expect(diff!.nameOverlaps!).toContain(file);
 
+	// we can stat remote child
+	let statsRemote = await dev2FS().v!.sync!.statRemoteItem('', file);
+	let statsLocal = await dev2FS().stat(file);
+	let statsOn1 = await dev1FS().stat(file);
+	expect(statsRemote.mtime?.valueOf()).not.toBe(statsLocal.mtime?.valueOf());
+	expect(statsRemote.mtime?.valueOf()).toBe(statsOn1.mtime?.valueOf());
+	expect(statsRemote.size).not.toBe(statsLocal.size);
+	expect(statsRemote.size).toBe(statsOn1.size);
+
+	// we can read remote child
+	let remoteChild = await dev2FS().v!.sync!.getRemoteFileItem('', file);
+	expect(await remoteChild.readTxt()).toBe(await dev1FS().readTxtFile(file));
+	expect((await remoteChild.stat()).size).toBe(statsOn1.size);
+
 	// adopt on dev2 some remote elements from dev1
 	await dev2FS().v!.sync!.adoptRemoteFolderItem('', file, { replaceLocalItem: true });
 	await dev2FS().v!.sync!.adoptRemoteFolderItem('', fileFromDev1);

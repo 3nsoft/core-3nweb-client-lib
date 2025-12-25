@@ -729,16 +729,12 @@ class V implements WritableFSVersionedAPI, N {
 		return await file.readBytes(start, end, flags);
 	}
 
-	writeTxtFile(
-		path: string, txt: string, flags = WRITE_NONEXCL_FLAGS
-	): Promise<number> {
+	writeTxtFile(path: string, txt: string, flags = WRITE_NONEXCL_FLAGS): Promise<number> {
 		const bytes = utf8.pack(txt);
 		return this.writeBytes(path, bytes, flags);
 	}
 
-	async readTxtFile(
-		path: string, flags?: VersionedReadFlags
-	): Promise<{ txt: string; version: number; }> {
+	async readTxtFile(path: string, flags?: VersionedReadFlags): Promise<{ txt: string; version: number; }> {
 		const {
 			bytes, version
 		} = await this.readBytes(path, undefined, undefined, flags);
@@ -750,16 +746,12 @@ class V implements WritableFSVersionedAPI, N {
 		}
 	}
 
-	writeJSONFile(
-		path: string, json: any, flags = WRITE_NONEXCL_FLAGS
-	): Promise<number> {
+	writeJSONFile(path: string, json: any, flags = WRITE_NONEXCL_FLAGS): Promise<number> {
 		const txt = JSON.stringify(json);
 		return this.writeTxtFile(path, txt, flags);
 	}
 
-	async readJSONFile<T>(
-		path: string, flags?: VersionedReadFlags
-	): Promise<{ json: T; version: number; }> {
+	async readJSONFile<T>(path: string, flags?: VersionedReadFlags): Promise<{ json: T; version: number; }> {
 		const { txt, version } = await this.readTxtFile(path, flags);
 		try {
 			const json = JSON.parse(txt);
@@ -874,7 +866,7 @@ async function recursiveIdAndPathList(
 	for (const item of lst) {
 		const childPath = `${path}/${item.name}`;
 		if (item.isFile || item.isLink) {
-			const { objId } = folder.getNodeInfo(item.name)!;
+			const { objId } = folder.getCurrentNodeInfo(item.name)!;
 			idAndPaths.push([ objId, childPath, depth+1 ]);
 		} else if (item.isFolder) {
 			const child = await folder.getFolder(item.name);
@@ -886,9 +878,7 @@ async function recursiveIdAndPathList(
 	return idAndPaths;
 }
 
-function shallowCopyWithPath(
-	event: NodeEvent['event'], path: string
-): NodeEvent['event'] {
+function shallowCopyWithPath(event: NodeEvent['event'], path: string): NodeEvent['event'] {
 	const shallowCopy = {} as NodeEvent['event'];
 	for (const [field, value] of Object.entries(event)) {
 		shallowCopy[field] = value;
@@ -924,9 +914,7 @@ class S implements WritableFSSyncAPI {
 		};
 	}
 
-	async upload(
-		path: string, opts?: OptionsToUploadLocal
-	): Promise<number|undefined> {
+	async upload(path: string, opts?: OptionsToUploadLocal): Promise<number|undefined> {
 		this.n.ensureIsWritable();
 		const node = await this.n.get(path);
 		try {
@@ -957,9 +945,7 @@ class S implements WritableFSSyncAPI {
 		return status;
 	}
 
-	async isRemoteVersionOnDisk(
-		path: string, version: number
-	): Promise<'complete' | 'partial' | 'none'> {
+	async isRemoteVersionOnDisk(path: string, version: number): Promise<'complete' | 'partial' | 'none'> {
 		const node = await this.n.get(path);
 		try {
 			const isOnDisk = await node.isSyncedVersionOnDisk(version);
@@ -978,9 +964,7 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	async adoptRemote(
-		path: string, opts?: OptionsToAdopteRemote
-	): Promise<void> {
+	async adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void> {
 		const node = await this.n.get(path);
 		try {
 			await node.adoptRemote(opts);
@@ -997,9 +981,7 @@ class S implements WritableFSSyncAPI {
 		return node as FolderNode;
 	}
 
-	async diffCurrentAndRemoteFolderVersions(
-		path: string, remoteVersion?: number
-	): Promise<FolderDiff|undefined> {
+	async diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined> {
 		const node = await this.getFolderNode(path);
 		try {
 			const diff = await node.diffCurrentAndRemote(remoteVersion);
@@ -1009,15 +991,41 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	async adoptRemoteFolderItem(
-		path: string, itemName: string, opts?: OptionsToAdoptRemoteItem
-	): Promise<number> {
+	async adoptRemoteFolderItem(path: string, itemName: string, opts?: OptionsToAdoptRemoteItem): Promise<number> {
 		const node = await this.getFolderNode(path);
 		try {
 			const newVersion = await node.adoptRemoteFolderItem(itemName, opts);
 			return newVersion;
 		} catch (exc) {
 			throw setPathInExc(exc, path);
+		}
+	}
+
+	async statRemoteItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<Stats> {
+		const folderNode = await this.getFolderNode(path);
+		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
+		return await remoteChild.getStats();
+	}
+
+	async listRemoteFolderItem(
+		path: string, remoteItemName: string, remoteVersion?: number
+	): Promise<ListingEntry[]> {
+		const folderNode = await this.getFolderNode(path);
+		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
+		if (remoteChild.type === 'folder') {
+			return (remoteChild as FolderNode).list().lst;
+		} else {
+			throw makeFileException('notDirectory', `${path}/${remoteItemName}`);
+		}
+	}
+
+	async getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile> {
+		const folderNode = await this.getFolderNode(path);
+		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
+		if (remoteChild.type === 'file') {
+			return wrapReadonlyFile(FileObject.makeExisting(remoteChild as FileNode, false));
+		} else {
+			throw makeFileException('notFile', `${path}/${remoteItemName}`);
 		}
 	}
 

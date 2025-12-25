@@ -1311,11 +1311,29 @@ declare namespace web3n.files {
 		// XXX (Christmas methods)
 		// add following methods to read remote item, facilitating decisions in conflict situations.
 
-		// statRemoteItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<Stats>;
+		/**
+		 * Returns stats of a child from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		statRemoteItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<Stats>;
 
-		// listRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ListingEntry[]>;
+		/**
+		 * Lists child folder from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		listRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ListingEntry[]>;
 
-		// getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
+		/**
+		 * Returns child file from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
+		getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
 
 	}
 

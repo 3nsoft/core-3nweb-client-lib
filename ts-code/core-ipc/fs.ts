@@ -127,7 +127,10 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				startDownload: vsDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
-				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(caller, vsPath)
+				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(caller, vsPath),
+				statRemoteItem: vsStatRemoteItem.makeCaller(caller, vsPath),
+				listRemoteFolderItem: vsListRemoteFolderItem.makeCaller(caller, vsPath),
+				getRemoteFileItem: vsGetRemoteFileItem.makeCaller(caller, vsPath),
 			} as WritableFSSyncAPI;
 			if (fs.writable) {
 				fs.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
@@ -209,6 +212,9 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(fs.v.sync.isRemoteVersionOnDisk),
 				startDownload: vsDownload.wrapService(fs.v.sync.startDownload),
 				adoptRemote: vsAdoptRemote.wrapService(fs.v.sync.adoptRemote),
+				statRemoteItem: vsStatRemoteItem.wrapService(fs.v.sync.statRemoteItem),
+				listRemoteFolderItem: vsListRemoteFolderItem.wrapService(fs.v.sync.listRemoteFolderItem),
+				getRemoteFileItem: vsGetRemoteFileItem.wrapService(fs.v.sync.getRemoteFileItem, expServices),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.wrapService(
 					fs.v.sync.diffCurrentAndRemoteFolderVersions
 				)
@@ -681,13 +687,21 @@ namespace listFolder {
 		entries: ListingEntryMsg[];
 	}
 
-	const requestType = ProtoType.for<Reply>(pb.ListFolderReplyBody);
+	const replyType = ProtoType.for<Reply>(pb.ListFolderReplyBody);
+
+	export function packFolderListing(lst: ListingEntry[]): EnvelopeBody {
+		return replyType.pack({ entries: lst.map(lsEntryToMsg) });
+	}
+
+	export function unpackFolderListing(buf: EnvelopeBody): ListingEntry[] {
+		return fixArray(replyType.unpack(buf).entries).map(lsEntryFromMsg);
+	}
 
 	export function wrapService(fn: ReadonlyFS['listFolder']): ExposedFn {
 		return buf => {
 			const { path } = reqWithPathType.unpack(buf);
 			const promise = fn(path)
-			.then(lst => requestType.pack({ entries: lst.map(lsEntryToMsg) }));
+			.then(packFolderListing);
 			return { promise };
 		};
 	}
@@ -698,8 +712,7 @@ namespace listFolder {
 		const ipcPath = methodPathFor<ReadonlyFS>(objPath, 'listFolder');
 		return path => caller
 		.startPromiseCall(ipcPath, reqWithPathType.pack({ path }))
-		.then(buf => fixArray(requestType.unpack(buf).entries).map(
-			lsEntryFromMsg));
+		.then(unpackFolderListing);
 	}
 
 }
@@ -2731,7 +2744,7 @@ namespace vsAdoptRemote {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['adoptRemote'] {
+	): ReadonlyFSSyncAPI['adoptRemote'] {
 		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'adoptRemote');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
@@ -2741,6 +2754,93 @@ namespace vsAdoptRemote {
 
 }
 Object.freeze(vsAdoptRemote);
+
+
+const remoteChildReqType = ProtoType.for<{
+	path: string;
+	remoteItemName: string;
+	remoteVersion?: Value<number>;
+}>(pb.RemoteChildRequestBody);;
+
+
+namespace vsStatRemoteItem {
+
+	export function wrapService(fn: ReadonlyFSSyncAPI['statRemoteItem']): ExposedFn {
+		return buf => {
+			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
+			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			.then(file.packStats);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSSyncAPI['statRemoteItem'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'statRemoteItem');
+		return (path, remoteItemName, remoteVersion) => caller
+		.startPromiseCall(ipcPath, remoteChildReqType.pack({
+			path, remoteItemName, remoteVersion: toOptVal(remoteVersion)
+		}))
+		.then(file.unpackStats);
+	}
+
+}
+Object.freeze(vsStatRemoteItem);
+
+
+namespace vsListRemoteFolderItem {
+
+	export function wrapService(fn: ReadonlyFSSyncAPI['listRemoteFolderItem']): ExposedFn {
+		return buf => {
+			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
+			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			.then(listFolder.packFolderListing);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSSyncAPI['listRemoteFolderItem'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'listRemoteFolderItem');
+		return (path, remoteItemName, remoteVersion) => caller
+		.startPromiseCall(ipcPath, remoteChildReqType.pack({
+			path, remoteItemName, remoteVersion: toOptVal(remoteVersion)
+		}))
+		.then(listFolder.unpackFolderListing);
+	}
+
+}
+Object.freeze(vsListRemoteFolderItem);
+
+
+namespace vsGetRemoteFileItem {
+
+	export function wrapService(
+		fn: ReadonlyFSSyncAPI['getRemoteFileItem'], expServices: CoreSideServices
+	): ExposedFn {
+		return buf => {
+			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
+			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			.then(file => {
+				const fileMsg = exposeFileService(file, expServices);
+				return fileMsgType.pack(fileMsg);
+			});
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSSyncAPI['getRemoteFileItem'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'getRemoteFileItem');
+		return (path, remoteItemName, remoteVersion) => caller
+		.startPromiseCall(ipcPath, remoteChildReqType.pack({
+			path, remoteItemName, remoteVersion: toOptVal(remoteVersion)
+		}))
+		.then(buf => {
+			const fileMsg = fileMsgType.unpack(buf);
+			return makeFileCaller(caller, fileMsg);
+		});
+	}
+
+}
+Object.freeze(vsGetRemoteFileItem);
 
 
 namespace vListVersions {

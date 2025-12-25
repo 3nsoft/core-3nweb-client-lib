@@ -512,6 +512,24 @@ message FolderDiff {
 	XAttrs xattrs = 8;
 }
 
+message RemoteChildRequestBody {
+	string path = 1;
+	string remote_item_name = 2;
+	common.UInt64Value remote_version = 3;
+}
+
+// --- ReadonlyFSSyncAPI.statRemoteItem ---
+// Request body is RemoteChildRequestBody
+// Reply body is file.StatsMsg
+
+// --- ReadonlyFSSyncAPI.listRemoteFolderItem ---
+// Request body is RemoteChildRequestBody
+// Reply body is ListFolderReplyBody
+
+// --- ReadonlyFSSyncAPI.getRemoteFileItem ---
+// Request body is RemoteChildRequestBody
+// Reply body is file.File
+
 
 // ==== WritableFSSyncAPI referable object ====
 
