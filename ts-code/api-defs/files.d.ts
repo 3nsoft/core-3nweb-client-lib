@@ -1307,10 +1307,6 @@ declare namespace web3n.files {
 		 */
 		diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined>;
 
-
-		// XXX (Christmas methods)
-		// add following methods to read remote item, facilitating decisions in conflict situations.
-
 		/**
 		 * Returns stats of a child from remote version of a folder.
 		 * @param path of folder

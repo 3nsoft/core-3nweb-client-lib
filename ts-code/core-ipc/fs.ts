@@ -2768,7 +2768,7 @@ namespace vsStatRemoteItem {
 	export function wrapService(fn: ReadonlyFSSyncAPI['statRemoteItem']): ExposedFn {
 		return buf => {
 			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
-			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			const promise = fn(path, remoteItemName, valOfOptInt(remoteVersion))
 			.then(file.packStats);
 			return { promise };
 		};
@@ -2792,7 +2792,7 @@ namespace vsListRemoteFolderItem {
 	export function wrapService(fn: ReadonlyFSSyncAPI['listRemoteFolderItem']): ExposedFn {
 		return buf => {
 			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
-			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			const promise = fn(path, remoteItemName, valOfOptInt(remoteVersion))
 			.then(listFolder.packFolderListing);
 			return { promise };
 		};
@@ -2818,7 +2818,7 @@ namespace vsGetRemoteFileItem {
 	): ExposedFn {
 		return buf => {
 			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
-			const promise = fn(path, remoteItemName, valOfOpt(remoteVersion))
+			const promise = fn(path, remoteItemName, valOfOptInt(remoteVersion))
 			.then(file => {
 				const fileMsg = exposeFileService(file, expServices);
 				return fileMsgType.pack(fileMsg);
