@@ -592,14 +592,22 @@ Object.freeze(NodeInFS);
 
 function copyWithPathIfRemoteEvent(e: RemoteEvent|FSEvent, path: string): RemoteEvent {
 	switch (e.type) {
-		case 'remote-change':
-			return { type: e.type, path, newVersion: e.newVersion };
-		case 'remote-removal':
-			return { type: e.type, path };
-		case 'remote-version-archival':
-			return { type: e.type, path, archivedVersion: e.archivedVersion };
-		case 'remote-arch-ver-removal':
-			return { type: e.type, path, removedArchVer: e.removedArchVer };
+		case 'remote-change': {
+			const { type, syncStatus, newRemoteVersion } = e;
+			return { type, syncStatus, newRemoteVersion, path };
+		}
+		case 'remote-removal': {
+			const { syncStatus, type } = e;
+			return { syncStatus, type, path };
+		}
+		case 'remote-version-archival': {
+			const { archivedVersion, syncStatus, type } = e;
+			return { archivedVersion, syncStatus, type, path };
+		}
+		case 'remote-arch-ver-removal': {
+			const { removedArchVer, syncStatus, type } = e;
+			return { removedArchVer, syncStatus, type, path };
+		}
 		default:
 			return e as any;
 	}

@@ -145,11 +145,9 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff!.currentVersion).toBe(folderStatus.local!.latest!);
 	expect(diff!.remoteVersion).toBe(folderStatus.remote!.latest!);
 	expect(diff!.inCurrent!.find(item => (item.name === file))).toBeDefined();
-	expect(diff!.inCurrent!.find(item => (item.name === fileFromDev2)))
-	.toBeDefined();
+	expect(diff!.inCurrent!.find(item => (item.name === fileFromDev2))).toBeDefined();
 	expect(diff!.inRemote!.find(item => (item.name === file))).toBeDefined();
-	expect(diff!.inRemote!.find(item => (item.name === fileFromDev1)))
-	.toBeDefined();
+	expect(diff!.inRemote!.find(item => (item.name === fileFromDev1))).toBeDefined();
 	expect(diff!.nameOverlaps!).toContain(file);
 
 	// we can stat remote child

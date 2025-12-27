@@ -49,7 +49,6 @@ export class RemoteEvents {
 	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private readonly wsProc: WebSocketListening;
-	// private listeningProc: Subscription|undefined = undefined;
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -98,15 +97,18 @@ export class RemoteEvents {
 			obs => client.subscribe(events.objChanged.EVENT_NAME, obs)
 		))
 		.pipe(
-			mergeMap(async ({ newVer, objId }) => {
-				if (!Number.isInteger(newVer) || (newVer < 1)) { return; }
+			mergeMap(async ({ newVer: newRemoteVersion, objId }) => {
+				if (!Number.isInteger(newRemoteVersion) || (newRemoteVersion < 1)) { return; }
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
-				obj.statusObj().recordRemoteChange(newVer);
+				const syncStatus = obj.syncStatus().syncStatus();
+				if (!syncStatus.synced?.latest || (syncStatus.synced.latest >= newRemoteVersion)) { return; }
+				obj.statusObj().recordRemoteChange(newRemoteVersion);
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-change',
 					path: '',
-					newVersion: newVer
+					newRemoteVersion,
+					syncStatus: obj.syncStatus().syncStatus()
 				});
 			}, 1)
 		);
@@ -124,7 +126,8 @@ export class RemoteEvents {
 				obj.statusObj().recordRemoteRemoval();
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-removal',
-					path: ''
+					path: '',
+					syncStatus: obj.syncStatus().syncStatus()
 				});
 			}, 1)
 		);
@@ -144,7 +147,8 @@ export class RemoteEvents {
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-version-archival',
 					path: '',
-					archivedVersion: archivedVer
+					archivedVersion: archivedVer,
+					syncStatus: obj.syncStatus().syncStatus()
 				});
 			}, 1)
 		);
@@ -165,7 +169,8 @@ export class RemoteEvents {
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-arch-ver-removal',
 					path: '',
-					removedArchVer: archivedVer
+					removedArchVer: archivedVer,
+					syncStatus: obj.syncStatus().syncStatus()
 				});
 			}, 1)
 		);

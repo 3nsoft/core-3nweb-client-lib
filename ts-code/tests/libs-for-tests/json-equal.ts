@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 3NSoft Inc.
+ Copyright (C) 2015, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,13 +12,10 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
-/**
- * This module provides hex encoding of binary array into a string.
- */
-
-export function deepEqual(a: any, b: any): boolean {
+export function deepEqual(a: any, b: any, trimUndefinedObjFields = true): boolean {
 	
 	let t = typeof a;
 	
@@ -40,10 +37,25 @@ export function deepEqual(a: any, b: any): boolean {
 			if (!deepEqual(aArr[i], bArr[i])) { return false; }
 		}
 	} else {
-		let keys = Object.keys(a);
-		if (keys.length !== Object.keys(b).length) { return false; }
-		for (let i=0; i<keys.length; i+=1) {
-			let key = keys[i];
+		let aKeys = Object.keys(a);
+		let bKeys = Object.keys(b);
+		if (trimUndefinedObjFields) {
+			for (let i=0; i<aKeys.length; i+=1) {
+				if (a[aKeys[i]] === undefined) {
+					aKeys.splice(i, 1);
+					i -= 1;
+				}
+			}
+			for (let i=0; i<bKeys.length; i+=1) {
+				if (b[bKeys[i]] === undefined) {
+					bKeys.splice(i, 1);
+					i -= 1;
+				}
+			}
+		}
+		if (aKeys.length !== bKeys.length) { return false; }
+		for (let i=0; i<aKeys.length; i+=1) {
+			let key = aKeys[i];
 			if (!deepEqual(a[key], b[key])) { return false; }
 		}
 	}

@@ -1469,20 +1469,24 @@ declare namespace web3n.files {
 	interface RemoteVersionArchivalEvent extends FSEvent {
 		type: 'remote-version-archival';
 		archivedVersion: number;
+		syncStatus: SyncStatus;
 	}
 
 	interface RemoteArchVerRemovalEvent extends FSEvent {
 		type: 'remote-arch-ver-removal';
 		removedArchVer: number;
+		syncStatus: SyncStatus;
 	}
 
 	interface RemoteRemovalEvent extends FSEvent {
 		type: 'remote-removal';
+		syncStatus: SyncStatus;
 	}
 
 	interface RemoteChangeEvent extends FSEvent {
 		type: 'remote-change';
-		newVersion: number;
+		newRemoteVersion: number;
+		syncStatus: SyncStatus;
 	}
 
 	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDoneEvent;
