@@ -131,6 +131,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				statRemoteItem: vsStatRemoteItem.makeCaller(caller, vsPath),
 				listRemoteFolderItem: vsListRemoteFolderItem.makeCaller(caller, vsPath),
 				getRemoteFileItem: vsGetRemoteFileItem.makeCaller(caller, vsPath),
+				getRemoteFolderItem: vsGetRemoteFolderItem.makeCaller(caller, vsPath),
 			} as WritableFSSyncAPI;
 			if (fs.writable) {
 				fs.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
@@ -215,6 +216,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				statRemoteItem: vsStatRemoteItem.wrapService(fs.v.sync.statRemoteItem),
 				listRemoteFolderItem: vsListRemoteFolderItem.wrapService(fs.v.sync.listRemoteFolderItem),
 				getRemoteFileItem: vsGetRemoteFileItem.wrapService(fs.v.sync.getRemoteFileItem, expServices),
+				getRemoteFolderItem: vsGetRemoteFolderItem.wrapService(fs.v.sync.getRemoteFolderItem, expServices),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.wrapService(
 					fs.v.sync.diffCurrentAndRemoteFolderVersions
 				)
@@ -2841,6 +2843,38 @@ namespace vsGetRemoteFileItem {
 
 }
 Object.freeze(vsGetRemoteFileItem);
+
+
+namespace vsGetRemoteFolderItem {
+
+	export function wrapService(
+		fn: ReadonlyFSSyncAPI['getRemoteFolderItem'], expServices: CoreSideServices
+	): ExposedFn {
+		return buf => {
+			const { path, remoteItemName, remoteVersion } = remoteChildReqType.unpack(buf);
+			const promise = fn(path, remoteItemName, valOfOptInt(remoteVersion))
+			.then(fs => {
+				const fsMsg = exposeFSService(fs, expServices);
+				return fsMsgType.pack(fsMsg);
+			});
+			return { promise };
+		};
+	}
+
+	export function makeCaller(caller: Caller, objPath: string[]): ReadonlyFSSyncAPI['getRemoteFolderItem'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(objPath, 'getRemoteFolderItem');
+		return (path, remoteItemName, remoteVersion) => caller
+		.startPromiseCall(ipcPath, remoteChildReqType.pack({
+			path, remoteItemName, remoteVersion: toOptVal(remoteVersion)
+		}))
+		.then(buf => {
+			const fsMsg = fsMsgType.unpack(buf);
+			return makeFSCaller(caller, fsMsg);
+		});
+	}
+
+}
+Object.freeze(vsGetRemoteFolderItem);
 
 
 namespace vListVersions {

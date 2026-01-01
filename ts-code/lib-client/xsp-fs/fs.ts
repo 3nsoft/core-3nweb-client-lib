@@ -121,10 +121,8 @@ export class XspFS implements WritableFS {
 	async readonlySubRoot(path: string): Promise<ReadonlyFS> {
 		const pathParts = splitPathIntoParts(path);
 		const root = this.v.getRootIfNotClosed(path);
-		const folder = await root.getFolderInThisSubTree(
-			pathParts, false).catch(setExcPath(path));
-		const folderName = ((pathParts.length === 0) ?
-			this.name : pathParts[pathParts.length-1]);
+		const folder = await root.getFolderInThisSubTree(pathParts, false).catch(setExcPath(path));
+		const folderName = ((pathParts.length === 0) ? this.name : pathParts[pathParts.length-1]);
 		const fs = new XspFS(this.storage(), false, folder, folderName);
 		return wrapReadonlyFS(fs);
 	}
@@ -135,9 +133,9 @@ export class XspFS implements WritableFS {
 		const pathParts = splitPathIntoParts(path);
 		const root = this.v.getRootIfNotClosed(path);
 		const folder = await root.getFolderInThisSubTree(
-			pathParts, flags.create, flags.exclusive).catch(setExcPath(path));
-		const folderName = ((pathParts.length === 0) ?
-			this.name : pathParts[pathParts.length-1]);
+			pathParts, flags.create, flags.exclusive).catch(setExcPath(path)
+		);
+		const folderName = ((pathParts.length === 0) ? this.name : pathParts[pathParts.length-1]);
 		const fs = new XspFS(this.storage(), true, folder, folderName);
 		return wrapWritableFS(fs);
 	}
@@ -162,21 +160,21 @@ export class XspFS implements WritableFS {
 	 * @param storage 
 	 * @param key is a file key of a root object
 	 */
-	static async fromExistingRoot(
-		storage: Storage, key: Uint8Array
-	): Promise<WritableFS> {
+	static async fromExistingRoot(storage: Storage, key: Uint8Array): Promise<WritableFS> {
 		const objSrc = await storage.getObjSrc(null);
-		const root = await FolderNode.rootFromObjBytes(
-			storage, undefined, null, objSrc, key);
+		const root = await FolderNode.rootFromObjBytes(storage, undefined, null, objSrc, key);
 		const fs = new XspFS(storage, true, root);
 		return wrapWritableFS(fs);
 	}
 
-	static fromASMailMsgRootFromJSON(
-		storage: Storage, folderJson: FolderInJSON, rootName?: string
-	): ReadonlyFS {
+	static fromASMailMsgRootFromJSON(storage: Storage, folderJson: FolderInJSON, rootName?: string): ReadonlyFS {
 		const root = FolderNode.rootFromJSON(storage, rootName, folderJson);
 		const fs = new XspFS(storage, false, root, rootName);
+		return wrapIntoVersionlessReadonlyFS(fs);
+	}
+
+	static fromFolderNode(folderNode: FolderNode): ReadonlyFS {
+		const fs = new XspFS(folderNode.getStorage(), false, folderNode, folderNode.name);
 		return wrapIntoVersionlessReadonlyFS(fs);
 	}
 
@@ -1026,6 +1024,16 @@ class S implements WritableFSSyncAPI {
 			return wrapReadonlyFile(FileObject.makeExisting(remoteChild as FileNode, false));
 		} else {
 			throw makeFileException('notFile', `${path}/${remoteItemName}`);
+		}
+	}
+
+	async getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS> {
+		const folderNode = await this.getFolderNode(path);
+		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
+		if (remoteChild.type === 'folder') {
+			return XspFS.fromFolderNode(remoteChild as FolderNode);
+		} else {
+			throw makeFileException('notDirectory', `${path}/${remoteItemName}`);
 		}
 	}
 

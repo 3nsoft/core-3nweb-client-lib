@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-// import { KeyRing, makeAndKeyRing } from "../../core/keyring";
+import { Keyrings } from "../../core/keyring";
 import { makeInProcessCryptor } from "../../cryptors";
 import { afterEachCond, beforeAllWithTimeoutLog, itCond } from "../libs-for-tests/jasmine-utils";
 import { setupWithUsers } from "../libs-for-tests/setups";
@@ -40,7 +40,7 @@ describe('ASMail keyring', () => {
 
 	const testFolder = `keyring-test`;
 
-	// let keyring: KeyRing;
+	let keyring: Keyrings;
 
 	const {
 		fsSetup: setup, setupDevsAndFSs
@@ -63,7 +63,7 @@ describe('ASMail keyring', () => {
 		await setup.resetFS();
 	});
 
-// 	itCond(`.generateKeysToSend()`, async () => {
+	itCond(`.generateKeysToSend()`, async () => {
 // 		const {
 // 			currentPair, encryptor, msgCount
 // 		} = await keyring.generateKeysToSend(address, introPKeyFromServer);
@@ -81,6 +81,6 @@ describe('ASMail keyring', () => {
 // // msgCount`, count);
 
 
-// 	}, undefined, setup);
+	}, undefined, setup);
 
 });

@@ -283,6 +283,7 @@ function wrapWritableFSSyncAPI(
 		statRemoteItem: sImpl.statRemoteItem.bind(sImpl),
 		listRemoteFolderItem: sImpl.listRemoteFolderItem.bind(sImpl),
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),
+		getRemoteFolderItem: sImpl.getRemoteFolderItem.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -347,6 +348,7 @@ function wrapReadonlyFSSyncAPI(
 		statRemoteItem: sImpl.statRemoteItem.bind(sImpl),
 		listRemoteFolderItem: sImpl.listRemoteFolderItem.bind(sImpl),
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),
+		getRemoteFolderItem: sImpl.getRemoteFolderItem.bind(sImpl),
 		diffCurrentAndRemoteFolderVersions:
 			sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
 	};

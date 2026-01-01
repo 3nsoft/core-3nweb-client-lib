@@ -83,12 +83,8 @@ export class IdManager {
 		const {
 			store, setupManagerStorage
 		} = IdKeysStorage.makeWithoutStorage(logError, logWarning);
-		const idManager = new IdManager(
-			store, makeNet, resolver, address
-		);
-		const provisioning = await idManager.startProvisionWithoutSavedKey(
-			address
-		);
+		const idManager = new IdManager(store, makeNet, resolver, address);
+		const provisioning = await idManager.startProvisionWithoutSavedKey(address);
 		if (!provisioning) { return; }
 		return async (midLoginKey) => {
 			const key = ((typeof midLoginKey === 'function') ?
@@ -100,18 +96,16 @@ export class IdManager {
 			if (!isDone) { return; }
 			return {
 				idManager,
-				setupManagerStorage: (fs, keys) => setupManagerStorage(fs, (keys ? {
-					address: idManager.address,
-					keys
-				} : undefined))
+				setupManagerStorage: (fs, keys) => setupManagerStorage(
+					fs, (keys ? { address: idManager.address, keys } : undefined)
+				)
 			};
-		}
+		};
 	}
 
 	static async initFromCachedStore(
-		address: string, fs: WritableFS,
-		resolver: ServiceLocator, makeNet: () => NetClient,
-		logError: LogError, logWarning: LogWarning
+		address: string, fs: WritableFS, resolver: ServiceLocator,
+		makeNet: () => NetClient, logError: LogError, logWarning: LogWarning
 	): Promise<IdManager|undefined> {
 		const store = IdKeysStorage.makeWithStorage(fs, logError, logWarning);
 		return new IdManager(store, makeNet, resolver, address);
@@ -166,9 +160,7 @@ export class IdManager {
 		if (proc) { return proc; }
 		proc = this.provisioningProc.start(async () => {
 			const midUrl = await this.midServiceFor(this.address);
-			const provisioner = new MailerIdProvisioner(
-				this.address, midUrl, this.makeNet()
-			);
+			const provisioner = new MailerIdProvisioner(this.address, midUrl, this.makeNet());
 			const key = await this.store.getSavedKey();
 			if (!key) {
 				throw new Error(`No saved MailerId login key can be found`);
@@ -177,13 +169,14 @@ export class IdManager {
 				key, keyUse.MID_PKLOGIN, box.JWK_ALG_NAME, box.KEY_LENGTH
 			);
 			const provisioning = await provisioner.provisionSigner(skey.kid);
-			this.signer = await provisioning.complete(() => {
-				const dhshared = box.calc_dhshared_key(
-					provisioning.serverPKey, skey.k
-				);
-				skey.k.fill(0);
-				return dhshared;
-			}, CERTIFICATE_DURATION_SECONDS, ASSERTION_VALIDITY);
+			this.signer = await provisioning.complete(
+				() => {
+					const dhshared = box.calc_dhshared_key(provisioning.serverPKey, skey.k);
+					skey.k.fill(0);
+					return dhshared;
+				},
+				CERTIFICATE_DURATION_SECONDS, ASSERTION_VALIDITY
+			);
 			return this.signer;
 		});
 		return proc;

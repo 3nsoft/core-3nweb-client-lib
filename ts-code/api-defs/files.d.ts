@@ -1331,8 +1331,13 @@ declare namespace web3n.files {
 		 */
 		getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
 
+		getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS>;
+
 	}
 
+	/**
+	 * 
+	 */
 	interface FolderDiff {
 		currentVersion: number;
 		isCurrentLocal: boolean;
@@ -1340,6 +1345,10 @@ declare namespace web3n.files {
 		isRemoteArchived: boolean;
 		inCurrent?: ListingEntry[];
 		inRemote?: ListingEntry[];
+
+		// XXX 
+		// differentNames?: ;
+
 		nameOverlaps?: string[];
 		ctime: {
 			remote?: Date;

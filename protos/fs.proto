@@ -530,6 +530,10 @@ message RemoteChildRequestBody {
 // Request body is RemoteChildRequestBody
 // Reply body is file.File
 
+// --- ReadonlyFSSyncAPI.getRemoteFolderItem ---
+// Request body is RemoteChildRequestBody
+// Reply body is FS
+
 
 // ==== WritableFSSyncAPI referable object ====
 

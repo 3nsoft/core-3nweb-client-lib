@@ -1,5 +1,5 @@
 /*
- Copyright 2022 3NSoft Inc.
+ Copyright 2022, 2025 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -87,7 +87,7 @@ describe('Key storage of IdManager', () => {
 		expect((await fsOnDev2.listFolder('')).length)
 		.withContext(`dev2 should've missed all changes on dev1`).toBe(0);
 		expect((await fsOnDev2.v!.sync!.status('')).state)
-		.withContext(`dev2 should've missed all changes on dev1`).toBe('synced');
+		.withContext(`dev2 should've missed all changes on dev1`).toBe('behind');
 
 		const storeOnDev2 = IdKeysStorage.makeWithStorage(
 			fsOnDev2, failOnErrLog, failOnWarning

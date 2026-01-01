@@ -55,9 +55,7 @@ export class IdKeysStorage {
 
 	static makeWithoutStorage(logError: LogError, logWarning: LogWarning): {
 		store: IdKeysStorage;
-		setupManagerStorage: (
-			fs: WritableFS, keysToSave?: LoginKeysJSON
-		) => Promise<void>;
+		setupManagerStorage: (fs: WritableFS, keysToSave?: LoginKeysJSON) => Promise<void>;
 	} {
 		const store = new IdKeysStorage(logError, logWarning);
 		return {
@@ -71,9 +69,7 @@ export class IdKeysStorage {
 			throw new Error(`Id manager's storages are not set.`);
 		}
 		try {
-			const json = await this.fs.readJSONFile<LoginKeysJSON>(
-				LOGIN_KEY_FILE_NAME
-			);
+			const json = await this.fs.readJSONFile<LoginKeysJSON>(LOGIN_KEY_FILE_NAME);
 			return json.keys[0];
 		} catch (exc) {
 			if (!(exc as FileException).notFound) { throw exc; }

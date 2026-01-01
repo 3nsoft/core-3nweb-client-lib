@@ -455,6 +455,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		} catch (exc) {
 			if (exc.objNotFound && fromCurrentNodes) {
 				await this.fixMissingChildAndThrow(exc, info);
+			} else if ((exc as web3n.EncryptionException).failedCipherVerification) {
+				exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
 			}
 			deferred.reject(errWithCause(
 				exc, `Failed to instantiate fs node '${this.name}/${info.name}'`
@@ -1268,6 +1270,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	): Promise<T> {
 		const remoteChildNodeInfo = await this.getRemoteChildNodeInfo(remoteItemName, remoteVersion);
 		return await this.getOrMakeChildNodeForInfo(remoteChildNodeInfo, false);
+	}
+
+	getStorage(): Storage {
+		return this.storage;
 	}
 
 }
