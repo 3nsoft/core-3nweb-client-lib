@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -47,9 +47,11 @@ type XAttrsChanges = web3n.files.XAttrsChanges;
 type FolderDiff = web3n.files.FolderDiff;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
+type OptionsToAdoptAllRemoteItems = web3n.files.OptionsToAdoptAllRemoteItems;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type Stats = web3n.files.Stats;
+type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 
 export interface NodeInfo {
 	/**
@@ -296,8 +298,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	async adoptRemote(opts: OptionsToAdopteRemote|undefined): Promise<void> {
 		const objsToRm = await this.doChange(true, async () => {
 			try {
-				const adopted = await this.syncedStorage().adoptRemote(
-					this.objId, opts);
+				const adopted = await this.syncedStorage().adoptRemote(this.objId, opts);
 				if (!adopted) { return; }
 				const src = await this.storage.getObjSrc(this.objId, adopted);
 				const originalState = this.currentState;
@@ -458,6 +459,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			} else if ((exc as web3n.EncryptionException).failedCipherVerification) {
 				exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
 			}
+			// XXX why and what ?
 			deferred.reject(errWithCause(
 				exc, `Failed to instantiate fs node '${this.name}/${info.name}'`
 			));
@@ -465,21 +467,15 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		}
 	}
 
-	getFolder(
-		name: string, undefOnMissing = false
-	): Promise<FolderNode|undefined> {
+	getFolder(name: string, undefOnMissing = false): Promise<FolderNode|undefined> {
 		return this.getNode<FolderNode>('folder', name, undefOnMissing);
 	}
 
-	getFile(
-		name: string, undefOnMissing = false
-	): Promise<FileNode|undefined> {
+	getFile(name: string, undefOnMissing = false): Promise<FileNode|undefined> {
 		return this.getNode<FileNode>('file', name, undefOnMissing);
 	}
 
-	getLink(
-		name: string, undefOnMissing = false
-	): Promise<LinkNode|undefined> {
+	getLink(name: string, undefOnMissing = false): Promise<LinkNode|undefined> {
 		return this.getNode<LinkNode>('link', name, undefOnMissing);
 	}
 
@@ -506,6 +502,77 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		throw fileExc;
 	}
 
+	async adoptItemsFromRemoteVersion(opts: OptionsToAdoptAllRemoteItems|undefined): Promise<number|undefined> {
+		const { state, remote } = await this.syncStatus();
+		if ((state !== 'conflicting') && (state !== 'behind')) {
+			return;
+		}
+		const remoteVersion = versionFromRemoteBranch(remote!, opts?.remoteVersion);
+		if (!remoteVersion) {
+			throw 'something';
+		}
+		const { folderInfo: remoteState } = await this.readRemoteVersion(remoteVersion);
+		return await this.doChangeWhileTrackingVersion(opts?.localVersion, async (state) => {
+			const { inRemote, nameOverlaps, differentKeys } = diffNodes(state, remoteState);
+			if (differentKeys) {
+				throw 'something';
+			}
+			if (!inRemote) {
+				return [];
+			}
+			const addedNodes = new Set<string>();
+			if (nameOverlaps) {
+				const postfix = opts?.postfixForNameOverlaps;
+				if ((postfix === undefined) || (postfix.length < 0)) {
+					throw 'something';
+				}
+				for (const itemName of nameOverlaps) {
+					const node = remoteState.nodes[itemName];
+					let newName = `${itemName}${postfix}`;
+					while (state.nodes[newName]) {
+						newName = `${newName}${postfix}`;
+					}
+					node.name = newName;
+					state[newName] = node;
+					addedNodes.add(itemName);
+				}
+			}
+			for (const { name: itemName } of inRemote) {
+				if (addedNodes.has(itemName)) {
+					continue;
+				}
+				const node = remoteState.nodes[itemName];
+				state[itemName] = node;
+			}
+			return [];
+		});
+	}
+
+	/**
+	 * If no initial local version given, then this performs like doTransition(change) method.
+	 * When initial local version is given and check, exceptions are thrown if versions mismatch,
+	 * or when there is another concurrent process that is already transitioning folder state to new state.
+	 * This returns value of new local version.
+	 * @param initLocalVersion 
+	 * @param change 
+	 */
+	private async doChangeWhileTrackingVersion(
+		initLocalVersion: number|undefined, change: TransactionChange
+	): Promise<number> {
+		if (initLocalVersion) {
+			if (this.version === initLocalVersion) {
+				return await this.doChange(false, () => this.performTransition(change));
+			} else {
+				throw makeFSSyncException(this.name, {
+					versionMismatch: true,
+					message: `Given local version ${initLocalVersion} is not equal to current ${this.version}`
+				});
+			}
+		} else {
+			return await this.doChange(true, () => this.performTransition(change));
+		}
+	}
+
 	/**
 	 * This method prepares a transition state, runs given action, and completes
 	 * transition to a new version.
@@ -519,7 +586,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		await this.doChange(true, () => this.performTransition(change));
 	}
 
-	private async performTransition(change: TransactionChange): Promise<void> {
+	private async performTransition(change: TransactionChange): Promise<number> {
 		// start transition and prepare transition state
 		// Note on copy: byte arrays are not cloned
 		const state = copy(this.currentState);
@@ -546,6 +613,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			const { event, childObjId } = changeEvents;
 			this.broadcastEvent(event, false, childObjId);
 		}
+
+		return version;
 	}
 
 	/**
@@ -1072,14 +1141,6 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	async adoptRemoteFolderItem(
 		remoteItemName: string, opts: OptionsToAdoptRemoteItem|undefined
 	): Promise<number> {
-		if (opts?.localVersion) {
-			if (this.version !== opts.localVersion) {
-				throw makeFSSyncException(this.name, {
-					versionMismatch: true,
-					message: `Given local version ${opts.localVersion} is not equal to current ${this.version}`
-				});
-			}
-		}
 		const remoteChildNode = await this.getRemoteChildNodeInfo(remoteItemName, opts?.remoteVersion);
 		let dstItemName = remoteItemName;
 		if (typeof opts?.newItemName === 'string') {
@@ -1090,13 +1151,12 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		}
 		const localNodeWithSameName = this.getCurrentNodeInfo(dstItemName, true);
 		if (!localNodeWithSameName) {
-			return await this.addRemoteChild(remoteChildNode, dstItemName);
+			return await this.addRemoteChild(remoteChildNode, dstItemName, opts?.localVersion);
 		} else if (localNodeWithSameName.objId === remoteChildNode.objId) {
-			assert(typeOfNode(localNodeWithSameName) === typeOfNode(remoteChildNode));
 			// XXX
 			throw new Error(`Adaptation of changing keys needs implementation`);
 		} else if (opts?.replaceLocalItem) {
-			return await this.replaceLocalChildWithRemote(remoteChildNode);
+			return await this.replaceLocalChildWithRemote(remoteChildNode, opts?.localVersion);
 		} else {
 			throw makeFSSyncException(this.name, {
 				overlapsLocalItem: true,
@@ -1141,10 +1201,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		}
 	}
 
-	private async addRemoteChild(remoteChildNode: NodeInfo, childName: string): Promise<number> {
-		let newVersion: number;
-		await this.doTransition(async (state, version) => {
-			newVersion = version;
+	private addRemoteChild(
+		remoteChildNode: NodeInfo, childName: string, initLocalVersion: number|undefined
+	): Promise<number> {
+		return this.doChangeWhileTrackingVersion(initLocalVersion, async (state, newVersion) => {
 			remoteChildNode.name = childName;
 			state.nodes[remoteChildNode.name] = remoteChildNode;
 			const event: EntryAdditionEvent = {
@@ -1156,16 +1216,13 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			};
 			return { event, childObjId: remoteChildNode.objId };
 		});
-		return newVersion!;
 	}
 
 	private async replaceLocalChildWithRemote(
-		remoteChildNode: NodeInfo
+		remoteChildNode: NodeInfo, initLocalVersion: number|undefined
 	): Promise<number> {
 		let origChildNode: NodeInfo;
-		let newVersion: number;
-		await this.doTransition(async (state, version) => {
-			newVersion = version;
+		const newVersion = await this.doChangeWhileTrackingVersion(initLocalVersion, async (state, newVersion) => {
 			origChildNode = state.nodes[remoteChildNode.name];
 			state.nodes[remoteChildNode.name] = remoteChildNode;
 			const additionEvent: EntryAdditionEvent = {
@@ -1192,9 +1249,13 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return newVersion!;
 	}
 
-	async diffCurrentAndRemote(
-		remoteVersion: number|undefined
-	): Promise<FolderDiff|undefined> {
+	private async readRemoteVersion(remoteVersion: number): ReturnType<FolderPersistance['read']> {
+		const storage = this.syncedStorage();
+		const srcOfRemote = await storage.getObjSrcOfRemoteVersion(this.objId, remoteVersion);
+		return await this.crypto.read(srcOfRemote);
+	}
+
+	async diffCurrentAndRemote(remoteVersion: number|undefined): Promise<FolderDiff|undefined> {
 		const { state, remote } = await this.syncStatus();
 		let isCurrentLocal: boolean;
 		if (state === 'behind') {
@@ -1204,28 +1265,12 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		} else {
 			return;
 		}
-		if (remote!.isArchived) {
-			return this.diffWithArchivedRemote(isCurrentLocal);
+		remoteVersion = versionFromRemoteBranch(remote!, remoteVersion);
+		if (remoteVersion) {
+			const { folderInfo, attrs, xattrs } = await this.readRemoteVersion(remoteVersion);
+			return this.diffWithRemote(isCurrentLocal, remoteVersion, folderInfo, attrs, xattrs);
 		} else {
-			if (remoteVersion) {
-				if ((remoteVersion !== remote!.latest!)
-				&& !remote!.archived?.includes(remoteVersion)) {
-					throw makeFSSyncException(this.name, {
-						versionMismatch: true,
-						message: `Unknown remote version ${remoteVersion}`
-					});
-				}
-			} else {
-				remoteVersion = remote!.latest!;
-			}
-			const storage = this.syncedStorage();
-			const srcOfRemote = await storage.getObjSrcOfRemoteVersion(
-				this.objId, remote!.latest!);
-			const {
-				folderInfo, attrs, xattrs
-			} = await this.crypto.read(srcOfRemote);
-			return this.diffWithRemote(
-				isCurrentLocal, remoteVersion, folderInfo, attrs, xattrs);
+			return this.diffWithArchivedRemote(isCurrentLocal);
 		}
 	}
 
@@ -1319,13 +1364,6 @@ function nodeToListingEntry({ name, type }: Node): ListingEntry {
 	}
 }
 
-function typeOfNode(nodeInfo: NodeInfo): NodeType {
-	if (nodeInfo.isFolder) { return 'folder'; }
-	else if (nodeInfo.isFile) { return 'file'; }
-	else if (nodeInfo.isLink) { return 'link'; }
-	else { throw new Error(`Unknown type of node info`); }
-}
-
 function addToTransitionState(
 	state: FolderInfo, f: Node, key: Uint8Array
 ): void {
@@ -1341,9 +1379,7 @@ function addToTransitionState(
 	state.nodes[nodeInfo.name] = nodeInfo;
 }
 
-type TransactionChange = (
-	state: FolderInfo, version: number
-) => Promise<{
+type TransactionChange = (state: FolderInfo, version: number) => Promise<{
 	event: FSEvent; childObjId?: string;
 }[]|{ event: FSEvent; childObjId?: string; }>;
 
@@ -1363,37 +1399,48 @@ function diffAttrs(current: CommonAttrs, remote: CommonAttrs): {
 }
 
 function diffNodes(current: FolderInfo, remote: FolderInfo): {
-	inCurrent?: ListingEntry[]; inRemote?: ListingEntry[];
-	nameOverlaps?: string[];
+	inCurrent?: ListingEntry[]; inRemote?: ListingEntry[]; nameOverlaps?: string[];
+	differentKeys?: string[]; differentNames?: FolderDiff['differentNames'];
 } {
-	const inCurrent = getOnlyNotEqualNodes(current.nodes, remote.nodes);
-	const inRemote = getOnlyNotEqualNodes(remote.nodes, current.nodes);
-	const combined = combineCheckingNameOverlaps(inCurrent, inRemote);
-	return (combined ? combined : {});
-}
-
-function getOnlyNotEqualNodes(
-	src: FolderInfo['nodes'], exclude: FolderInfo['nodes']
-): ListingEntry[]|undefined {
-	const collected: ListingEntry[] = [];
-	for (const [ name, nodeInSrc ] of Object.entries(src)) {
-		const nodeInExclude = exclude[name];
-		if (!nodeInExclude
-		|| !areNodesEqual(nodeInSrc, nodeInExclude)) {
-			collected.push(nodeInfoToListingEntry(nodeInSrc));
+	const inRemote: ListingEntry[] = [];
+	const nodesInCurrentById = new Map<ObjId, NodeInfo>();
+	for (const node of Object.values(current.nodes)) {
+		nodesInCurrentById.set(node.objId, node);
+	}
+	const nameOverlaps: string[] = [];
+	const differentNames: NonNullable<FolderDiff['differentNames']> = [];
+	const differentKeys: string[] = [];
+	for (const remoteNode of Object.values(remote.nodes)) {
+		const localNode = nodesInCurrentById.get(remoteNode.objId);
+		if (localNode) {
+			if (localNode.name !== remoteNode.name) {
+				differentNames.push({
+					localName: localNode.name,
+					remoteName: remoteNode.name
+				});
+			}
+			if (!areBytesEqual(localNode.key, remoteNode.key)) {
+				differentKeys.push(localNode.name);
+			}
+			nodesInCurrentById.delete(remoteNode.objId);
+		} else {
+			inRemote.push(nodeInfoToListingEntry(remoteNode));
+			if (current.nodes[remoteNode.name]) {
+				nameOverlaps.push(remoteNode.name);
+			}
 		}
 	}
-	return ((collected.length > 0) ? collected : undefined);
-}
-
-function areNodesEqual(n1: NodeInfo, n2: NodeInfo): boolean {
-	if (n1.name !== n2.name) { return false; }
-	if (n1.isFile && !n2.isFile) { return false; }
-	if (n1.isFolder && !n2.isFolder) { return false; }
-	if (n1.isLink && !n2.isLink) { return false; }
-	if (n1.objId !== n2.objId) { return false; }
-	if (!areBytesEqual(n1.key, n2.key)) { return false; }
-	return true;
+	const inCurrent: ListingEntry[] = [];
+	for (const localNode of nodesInCurrentById.values()) {
+		inCurrent.push(nodeInfoToListingEntry(localNode));
+	}
+	return {
+		inCurrent: ((inCurrent.length > 0) ? inCurrent : undefined),
+		inRemote: ((inRemote.length > 0) ? inRemote : undefined),
+		differentNames: ((differentNames.length > 0) ? differentNames : undefined),
+		nameOverlaps: ((nameOverlaps.length > 0) ? nameOverlaps : undefined),
+		differentKeys: ((differentKeys.length > 0) ? differentKeys : undefined)
+	};
 }
 
 function combineCheckingNameOverlaps<T extends { name: string; }>(
@@ -1532,6 +1579,23 @@ function identifyChanges(
 		}
 	}
 	return { addedNodes, removedNodes, renamedNodes };
+}
+
+function versionFromRemoteBranch(remote: SyncVersionsBranch, remoteVersion: number|undefined): number|undefined {
+	if (remote.isArchived) {
+		return;
+	}
+	if (remoteVersion) {
+		if ((remoteVersion !== remote!.latest!)
+		&& !remote.archived?.includes(remoteVersion)) {
+			throw makeFSSyncException(this.name, {
+				versionMismatch: true,
+				message: `Unknown remote version ${remoteVersion}`
+			});
+		}
+	} else {
+		return remote.latest!;
+	}
 }
 
 

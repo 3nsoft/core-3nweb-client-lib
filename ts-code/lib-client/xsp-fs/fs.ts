@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -82,6 +82,7 @@ type SyncStatus = web3n.files.SyncStatus;
 type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
+type OptionsToAdoptAllRemoteItems = web3n.files.OptionsToAdoptAllRemoteItems;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type FolderDiff = web3n.files.FolderDiff;
 
@@ -922,7 +923,7 @@ class S implements WritableFSSyncAPI {
 			}
 			const { completion, uploadVersion } = startedUpload;
 			await completion;
-			return uploadVersion
+			return uploadVersion;
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		};
@@ -939,15 +940,13 @@ class S implements WritableFSSyncAPI {
 
 	async updateStatusInfo(path: string): Promise<SyncStatus> {
 		const node = await this.n.get(path);
-		const status = await node.updateStatusInfo();
-		return status;
+		return await node.updateStatusInfo();
 	}
 
 	async isRemoteVersionOnDisk(path: string, version: number): Promise<'complete' | 'partial' | 'none'> {
 		const node = await this.n.get(path);
 		try {
-			const isOnDisk = await node.isSyncedVersionOnDisk(version);
-			return isOnDisk;
+			return await node.isSyncedVersionOnDisk(version);
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		}
@@ -982,8 +981,7 @@ class S implements WritableFSSyncAPI {
 	async diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined> {
 		const node = await this.getFolderNode(path);
 		try {
-			const diff = await node.diffCurrentAndRemote(remoteVersion);
-			return diff;
+			return await node.diffCurrentAndRemote(remoteVersion);
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		}
@@ -992,8 +990,7 @@ class S implements WritableFSSyncAPI {
 	async adoptRemoteFolderItem(path: string, itemName: string, opts?: OptionsToAdoptRemoteItem): Promise<number> {
 		const node = await this.getFolderNode(path);
 		try {
-			const newVersion = await node.adoptRemoteFolderItem(itemName, opts);
-			return newVersion;
+			return await node.adoptRemoteFolderItem(itemName, opts);
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		}
@@ -1035,6 +1032,13 @@ class S implements WritableFSSyncAPI {
 		} else {
 			throw makeFileException('notDirectory', `${path}/${remoteItemName}`);
 		}
+	}
+
+	async adoptAllRemoteItems(
+		path: string, opts?: OptionsToAdoptAllRemoteItems
+	): Promise<number|undefined> {
+		const folderNode = await this.getFolderNode(path);
+		return await folderNode.adoptItemsFromRemoteVersion(opts);
 	}
 
 }

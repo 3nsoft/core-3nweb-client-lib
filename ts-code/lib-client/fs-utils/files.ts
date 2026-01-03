@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -280,6 +280,7 @@ function wrapWritableFSSyncAPI(
 		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
 		adoptRemoteFolderItem: sImpl.adoptRemoteFolderItem.bind(sImpl),
+		adoptAllRemoteItems: sImpl.adoptAllRemoteItems.bind(sImpl),
 		statRemoteItem: sImpl.statRemoteItem.bind(sImpl),
 		listRemoteFolderItem: sImpl.listRemoteFolderItem.bind(sImpl),
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),

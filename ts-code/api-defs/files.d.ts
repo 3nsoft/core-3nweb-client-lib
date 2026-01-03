@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -1331,7 +1331,16 @@ declare namespace web3n.files {
 		 */
 		getRemoteFileItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFile>;
 
+		/**
+		 * Returns child folder from remote version of a folder.
+		 * @param path of folder
+		 * @param remoteItemName 
+		 * @param remoteVersion of folder. Default is current remote.
+		 */
 		getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS>;
+
+		// XXX method to work around demaged files
+		// reloadFromServer(path: string): Promise<SyncStatus>;
 
 	}
 
@@ -1346,8 +1355,12 @@ declare namespace web3n.files {
 		inCurrent?: ListingEntry[];
 		inRemote?: ListingEntry[];
 
-		// XXX 
-		// differentNames?: ;
+		// XXX add indication for items that have different name
+		differentNames?: {
+			localName: string;
+			remoteName: string;
+		}[];
+		differentKeys?: string[];
 
 		nameOverlaps?: string[];
 		ctime: {
@@ -1391,7 +1404,8 @@ declare namespace web3n.files {
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It adopts some folder items, and not the whole folder state.
+		 * It adopts given folder item, that is present in remote version and is missing in local version.
+		 * Returns new local version.
 		 * @param path 
 		 * @param remoteItemName 
 		 * @param opts 
@@ -1399,6 +1413,15 @@ declare namespace web3n.files {
 		adoptRemoteFolderItem(
 			path: string, remoteItemName: string, opts?: OptionsToAdoptRemoteItem
 		): Promise<number>;
+
+		/**
+		 * This method is for resolving conflicts on folders.
+		 * It adopts all folder items, that are present in remote version and are missing in local version.
+		 * Returns new local version, if there were remote items to adopt and their were added to local state.
+		 * @param path 
+		 * @param opts
+		 */
+		adoptAllRemoteItems(path: string, opts?: OptionsToAdoptAllRemoteItems): Promise<number|undefined>;
 
 	}
 
@@ -1420,6 +1443,22 @@ declare namespace web3n.files {
 		 * Name for item when it is added into local folder version.
 		 */
 		newItemName?: string;
+	}
+
+	interface OptionsToAdoptAllRemoteItems {
+		/**
+		 * Folder's local version. If not given, current local version is used.
+		 */
+		localVersion?: number;
+		/**
+		 * Folder's remote version. If not given, current remote version is used.
+		 */
+		remoteVersion?: number;
+		/**
+		 * Postfix to add to remote item names that have overlapping names with existing local items.
+		 * If there are name overlaps and postfix isn't given, then exception is thrown.
+		 */
+		postfixForNameOverlaps?: string;
 	}
 
 	interface FSEvent {

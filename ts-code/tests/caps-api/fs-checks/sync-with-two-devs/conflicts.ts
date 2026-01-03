@@ -16,6 +16,7 @@
 */
 
 import { stringOfB64CharsSync } from '../../../../lib-common/random-node';
+import { deepEqual } from '../../../libs-for-tests/json-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { watchForEvents } from '../../../libs-for-tests/watching';
 import { SpecItWithTwoDevsFSs } from '../test-utils';
@@ -28,6 +29,7 @@ type RemoteEvent = web3n.files.RemoteEvent;
 export const specs: SpecDescribe = {
 	description: '--',
 	its: []
+	// ,focused:true
 };
 
 let it: SpecItWithTwoDevsFSs = {
@@ -366,6 +368,62 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await dev1FS().v!.sync!.adoptRemote(file);
 	expect(await dev2FS().readTxtFile(file))
 	.toBe(await dev1FS().readTxtFile(file));
+};
+specs.its.push(it);
+
+it = {
+	expectation: 'viewing and adopting remote folder item'
+};
+it.func = async function({ dev1FS, dev2FS }) {
+	const folder = 'folder-for-conflict';
+	const file1 = `file-1`;
+	const file1path = `${folder}/${file1}`;
+	const file2 = `file-2`;
+	const file2path = `${folder}/${file2}`;
+
+	// create tree on dev1 and upload
+	for (const path of [file1path, file2path]) {
+		await dev1FS().writeTxtFile(path, stringOfB64CharsSync(100));
+	}
+	for (const path of [file1path, file2path, folder, '']) {
+		await dev1FS().v!.sync!.upload(path);
+	}
+
+	// tree is not local on dev2
+	let syncStatus = await dev2FS().v!.sync!.status('');	// implicit check of server
+	expect(syncStatus.state).toBe('behind');
+	expect(await dev2FS().checkFolderPresence(folder)).toBeFalse();
+
+	// can read remote items
+	let lst = await dev2FS().v!.sync!.listRemoteFolderItem('', folder);
+	let remoteFS = await dev2FS().v!.sync!.getRemoteFolderItem('', folder);
+	expect(deepEqual(lst, await remoteFS.listFolder(''))).toBeTrue();
+	expect(remoteFS.writable).toBeFalse();
+	expect(await remoteFS.readTxtFile(file1)).toBe(await dev1FS().readTxtFile(file1path));
+	expect(await remoteFS.readTxtFile(file2)).toBe(await dev1FS().readTxtFile(file2path));
+
+	// making a conflicting folder on dev2
+	const file3 = `file-3`;
+	const file3path = `${folder}/${file3}`;
+	for (const path of [file1path, file3path]) {
+		await dev2FS().writeTxtFile(path, stringOfB64CharsSync(100));
+	}
+	for (const path of [file1path, file3path, folder]) {
+		await dev2FS().v!.sync!.upload(path);
+	}
+	syncStatus = await dev2FS().v!.sync!.status('');	// implicit check of server
+	expect(syncStatus.state).toBe('conflicting');
+
+	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('');
+	expect(diff!.inCurrent![0].name).toBe(folder);
+	expect(diff!.inRemote![0].name).toBe(folder);
+	expect(diff!.nameOverlaps![0]).toBe(folder);
+
+	await dev2FS().v!.sync!.adoptAllRemoteItems('').then(
+		() => fail(`Overlapping names require presence of prefix`),
+		exc => {}
+	);
+
 };
 specs.its.push(it);
 

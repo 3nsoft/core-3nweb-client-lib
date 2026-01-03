@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -52,6 +52,7 @@ type FSCollection = web3n.files.FSCollection;
 type CollectionEvent = web3n.files.CollectionEvent;
 type FolderDiff = web3n.files.FolderDiff;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
+type OptionsToAdoptAllRemoteItems = web3n.files.OptionsToAdoptAllRemoteItems;
 
 export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	checkRefObjTypeIs('FSImpl', fsMsg.impl);
@@ -137,6 +138,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				fs.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
+				fs.v.sync!.adoptAllRemoteItems = vsAdoptAllRemoteItems.makeCaller(caller, vsPath);
 			}
 		}
 	}
@@ -226,6 +228,9 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				implExp.v.sync.upload = vsUpload.wrapService((fs.v.sync as WritableFSSyncAPI).upload);
 				implExp.v.sync.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.wrapService(
 					(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem
+				);
+				implExp.v.sync.adoptAllRemoteFolderItems = vsAdoptAllRemoteItems.wrapService(
+					(fs.v.sync as WritableFSSyncAPI).adoptAllRemoteItems
 				);
 			}
 		}
@@ -2657,39 +2662,14 @@ namespace vsUpload {
 Object.freeze(vsUpload);
 
 
-interface OptionsToAdoptRemoteItemMsg {
-	localVersion?: Value<number>;
-	remoteVersion?: Value<number>;
-	replaceLocalItem?: Value<boolean>;
-	newItemName?: Value<string>;
-}
-
-export function optionsToAdoptRemoteItemToMsg(
-	opts: OptionsToAdoptRemoteItem|undefined
-): OptionsToAdoptRemoteItemMsg|undefined {
-	if (!opts) { return; }
-	return {
-		localVersion: toOptVal(opts.localVersion),
-		remoteVersion: toOptVal(opts.remoteVersion),
-		replaceLocalItem: toOptVal(opts.replaceLocalItem),
-		newItemName: toOptVal(opts.newItemName)
-	};
-}
-
-export function optionsToAdoptRemoteItemFromMsg(
-	msg: OptionsToAdoptRemoteItemMsg|undefined
-): OptionsToAdoptRemoteItem|undefined {
-	if (!msg) { return; }
-	return {
-		localVersion: valOfOptInt(msg.localVersion),
-		remoteVersion: valOfOptInt(msg.remoteVersion),
-		replaceLocalItem: valOfOpt(msg.replaceLocalItem),
-		newItemName: valOfOpt(msg.newItemName)
-	};
-}
-
-
 namespace vsAdoptRemoteFolderItem {
+
+	interface OptionsToAdoptRemoteItemMsg {
+		localVersion?: Value<number>;
+		remoteVersion?: Value<number>;
+		replaceLocalItem?: Value<boolean>;
+		newItemName?: Value<string>;
+	}
 
 	const requestType = ProtoType.for<{
 		path: string;
@@ -2697,13 +2677,33 @@ namespace vsAdoptRemoteFolderItem {
 		opts?: OptionsToAdoptRemoteItemMsg;
 	}>(pb.AdoptRemoteFolderItemRequestBody);
 
+	function optionsFromMsg(msg: OptionsToAdoptRemoteItemMsg|undefined): OptionsToAdoptRemoteItem|undefined {
+		if (!msg) { return; }
+		return {
+			localVersion: valOfOptInt(msg.localVersion),
+			remoteVersion: valOfOptInt(msg.remoteVersion),
+			replaceLocalItem: valOfOpt(msg.replaceLocalItem),
+			newItemName: valOfOpt(msg.newItemName)
+		};
+	}
+
+	function optionsToMsg(opts: OptionsToAdoptRemoteItem|undefined): OptionsToAdoptRemoteItemMsg|undefined {
+		if (!opts) { return; }
+		return {
+			localVersion: toOptVal(opts.localVersion),
+			remoteVersion: toOptVal(opts.remoteVersion),
+			replaceLocalItem: toOptVal(opts.replaceLocalItem),
+			newItemName: toOptVal(opts.newItemName)
+		};
+	}
+
 	export function wrapService(
 		fn: WritableFSSyncAPI['adoptRemoteFolderItem']
 	): ExposedFn {
 		return buf => {
 			const { path, itemName, opts } = requestType.unpack(buf);
 			const promise = fn(
-				path, itemName, optionsToAdoptRemoteItemFromMsg(opts)
+				path, itemName, optionsFromMsg(opts)
 			)
 			.then(packInt);
 			return { promise };
@@ -2713,18 +2713,77 @@ namespace vsAdoptRemoteFolderItem {
 	export function makeCaller(
 		caller: Caller, objPath: string[]
 	): WritableFSSyncAPI['adoptRemoteFolderItem'] {
-		const ipcPath = methodPathFor<WritableFSSyncAPI>(
-			objPath, 'adoptRemoteFolderItem'
-		);
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'adoptRemoteFolderItem');
 		return (path, itemName, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({
-			path, itemName, opts: optionsToAdoptRemoteItemToMsg(opts)
+			path, itemName, opts: optionsToMsg(opts)
 		}))
 		.then(unpackInt);
 	}
 
 }
 Object.freeze(vsAdoptRemoteFolderItem);
+
+
+namespace vsAdoptAllRemoteItems {
+
+	interface OptionsToAdoptAllRemoteItemsMsg {
+		localVersion?: Value<number>;
+		remoteVersion?: Value<number>;
+		postfixForNameOverlaps?: Value<string>;
+	}
+
+	const requestType = ProtoType.for<{
+		path: string;
+		opts?: OptionsToAdoptAllRemoteItemsMsg;
+	}>(pb.AdoptAllRemoteFolderItemsRequestBody);
+
+	function optionsFromMsg(
+		msg: OptionsToAdoptAllRemoteItemsMsg|undefined
+	): OptionsToAdoptAllRemoteItems|undefined {
+		if (!msg) { return; }
+		return {
+			localVersion: valOfOptInt(msg.localVersion),
+			remoteVersion: valOfOptInt(msg.remoteVersion),
+			postfixForNameOverlaps: valOfOpt(msg.postfixForNameOverlaps),
+		};
+	}
+
+	function optionsToMsg(opts: OptionsToAdoptAllRemoteItems|undefined): OptionsToAdoptAllRemoteItemsMsg|undefined {
+		if (!opts) { return; }
+		return {
+			localVersion: toOptVal(opts.localVersion),
+			remoteVersion: toOptVal(opts.remoteVersion),
+			postfixForNameOverlaps: toOptVal(opts.postfixForNameOverlaps),
+		};
+	}
+
+	const replyType = ProtoType.for<{
+		newVersion?: Value<number>;
+	}>(pb.AdoptAllRemoteFolderItemsReplyBody);
+
+	export function wrapService(
+		fn: WritableFSSyncAPI['adoptAllRemoteItems']
+	): ExposedFn {
+		return buf => {
+			const { path, opts } = requestType.unpack(buf);
+			const promise = fn(path, optionsFromMsg(opts))
+			.then(newVersion => replyType.pack({ newVersion: toOptVal(newVersion) }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFSSyncAPI['adoptAllRemoteItems'] {
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'adoptAllRemoteItems');
+		return (path, opts) => caller
+		.startPromiseCall(ipcPath, requestType.pack({ path, opts: optionsToMsg(opts) }))
+		.then(buf => valOfOpt(replyType.unpack(buf).newVersion));
+	}
+
+}
+Object.freeze(vsAdoptAllRemoteItems);
 
 
 namespace vsAdoptRemote {
