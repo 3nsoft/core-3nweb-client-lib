@@ -29,7 +29,6 @@ type RemoteEvent = web3n.files.RemoteEvent;
 export const specs: SpecDescribe = {
 	description: '--',
 	its: []
-	// ,focused:true
 };
 
 let it: SpecItWithTwoDevsFSs = {
@@ -375,6 +374,7 @@ it = {
 	expectation: 'viewing and adopting remote folder item'
 };
 it.func = async function({ dev1FS, dev2FS }) {
+	const fileA = `file-a`;
 	const folder = 'folder-for-conflict';
 	const file1 = `file-1`;
 	const file1path = `${folder}/${file1}`;
@@ -382,10 +382,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 	const file2path = `${folder}/${file2}`;
 
 	// create tree on dev1 and upload
-	for (const path of [file1path, file2path]) {
+	for (const path of [file1path, file2path, fileA]) {
 		await dev1FS().writeTxtFile(path, stringOfB64CharsSync(100));
 	}
-	for (const path of [file1path, file2path, folder, '']) {
+	for (const path of [file1path, file2path, folder, fileA, '']) {
 		await dev1FS().v!.sync!.upload(path);
 	}
 
@@ -403,26 +403,40 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(await remoteFS.readTxtFile(file2)).toBe(await dev1FS().readTxtFile(file2path));
 
 	// making a conflicting folder on dev2
+	const fileB = `file-b`;
 	const file3 = `file-3`;
 	const file3path = `${folder}/${file3}`;
-	for (const path of [file1path, file3path]) {
+	for (const path of [file1path, file3path, fileB]) {
 		await dev2FS().writeTxtFile(path, stringOfB64CharsSync(100));
 	}
-	for (const path of [file1path, file3path, folder]) {
+	for (const path of [file1path, file3path, folder, fileB]) {
 		await dev2FS().v!.sync!.upload(path);
 	}
 	syncStatus = await dev2FS().v!.sync!.status('');	// implicit check of server
 	expect(syncStatus.state).toBe('conflicting');
 
 	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('');
-	expect(diff!.inCurrent![0].name).toBe(folder);
-	expect(diff!.inRemote![0].name).toBe(folder);
-	expect(diff!.nameOverlaps![0]).toBe(folder);
+	expect(diff!.inCurrent!.map(({name}) => name)).toContain(folder);
+	expect(diff!.inCurrent!.map(({name}) => name)).toContain(fileB);
+	expect(diff!.inRemote!.map(({name}) => name)).toContain(folder);
+	expect(diff!.inRemote!.map(({name}) => name)).toContain(fileA);
+	expect(diff!.nameOverlaps!).toContain(folder);
 
 	await dev2FS().v!.sync!.adoptAllRemoteItems('').then(
 		() => fail(`Overlapping names require presence of prefix`),
 		exc => {}
 	);
+
+	const postfixForNameOverlaps = `-remote`;
+
+	let version = await dev2FS().v!.sync!.adoptAllRemoteItems('', { postfixForNameOverlaps });
+	expect(version).toBe(diff!.currentVersion + 1);
+	expect(await dev2FS().checkFilePresence(fileA)).toBeTrue();
+	expect(await dev2FS().readTxtFile(fileA)).toBe(await dev1FS().readTxtFile(fileA));
+	expect(deepEqual(
+		await dev2FS().listFolder(`${folder}${postfixForNameOverlaps}`),
+		await dev1FS().listFolder(folder)
+	)).toBeTrue();
 
 };
 specs.its.push(it);

@@ -1281,9 +1281,7 @@ declare namespace web3n.files {
 		 * Returns a state of on-disk cache of an item in fs.
 		 * @param version 
 		 */
-		isRemoteVersionOnDisk(
-			path: string, version: number
-		): Promise<'partial'|'complete'|'none'>;
+		isRemoteVersionOnDisk(path: string, version: number): Promise<'partial'|'complete'|'none'>;
 
 		/**
 		 * This downloads bytes onto disk, skipping decryption, as item's content isn't read here.
@@ -1301,7 +1299,7 @@ declare namespace web3n.files {
 		adoptRemote(path: string, opts?: OptionsToAdopteRemote): Promise<void>;
 
 		/**
-		 * Calculates diff between current local and remote states of folder at given path.
+		 * Calculates diff between current and remote states of folder at given path.
 		 * @param path 
 		 * @param remoteVersion 
 		 */
@@ -1345,32 +1343,83 @@ declare namespace web3n.files {
 	}
 
 	/**
-	 * 
+	 * Difference between two versions of folder node.
+	 * Folder items that same in both versions are not included.
 	 */
 	interface FolderDiff {
+		/**
+		 * Current version against which this diff is done.
+		 */
 		currentVersion: number;
+
+		/**
+		 * Flag indicating if current version is local, i.e. never uploaded.
+		 */
 		isCurrentLocal: boolean;
+
+		/**
+		 * Remote version against which this diff is done.
+		 */
 		remoteVersion?: number;
+
+		/**
+		 * Flag indicating if remote version is archived.
+		 * If remote is archived/delete, it has nothing inside, and with this implicit
+		 * understanding there is no need to have other data fields populated here.
+		 */
 		isRemoteArchived: boolean;
+
+		/**
+		 * Items present only in current version.
+		 */
 		inCurrent?: ListingEntry[];
+
+		/**
+		 * Items present only in remote version.
+		 */
 		inRemote?: ListingEntry[];
 
-		// XXX add indication for items that have different name
+		/**
+		 * Different names are for items that are same nodes but have different names
+		 * in local and remote branches.
+		 */
 		differentNames?: {
 			localName: string;
 			remoteName: string;
 		}[];
+
+		/**
+		 * Different keys identifies items that have different encryption keys in
+		 * local and remote branches. Keys may be changed, hence, given situation
+		 * should be reflected.
+		 */
 		differentKeys?: string[];
 
+		/**
+		 * Name overlaps are items with same name, but different node objects underneath.
+		 */
 		nameOverlaps?: string[];
+
+		/**
+		 * Creation time should always be same.
+		 * But there is no way to enforce it, hence, we have this field.
+		 */
 		ctime: {
 			remote?: Date;
 			current: Date;
 		};
+
+		/**
+		 * Modification time most probably be different between versions.
+		 */
 		mtime: {
 			remote?: Date;
 			current: Date;
 		};
+
+		/**
+		 * Difference between xattrs. Same xattrs in both versions are not included.
+		 */
 		xattrs?: {
 			inCurrent?: { name: string; value: any; }[];
 			inRemote?: { name: string; value: any; }[];

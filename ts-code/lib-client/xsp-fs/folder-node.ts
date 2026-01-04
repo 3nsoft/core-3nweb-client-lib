@@ -533,7 +533,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 						newName = `${newName}${postfix}`;
 					}
 					node.name = newName;
-					state[newName] = node;
+					state.nodes[newName] = node;
 					addedNodes.add(itemName);
 				}
 			}
@@ -542,7 +542,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 					continue;
 				}
 				const node = remoteState.nodes[itemName];
-				state[itemName] = node;
+				state.nodes[itemName] = node;
 			}
 			return [];
 		});
@@ -1294,7 +1294,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	): FolderDiff {
 		const { ctime, mtime } = diffAttrs(this.attrs, attrs);
 		const {
-			inCurrent, inRemote, nameOverlaps
+			inCurrent, inRemote, nameOverlaps, differentKeys, differentNames
 		} = diffNodes(this.currentState, folderInfo);
 		return {
 			currentVersion: this.version,
@@ -1304,6 +1304,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			inCurrent,
 			inRemote,
 			nameOverlaps,
+			differentKeys,
+			differentNames,
 			ctime,
 			mtime,
 			xattrs: diffXAttrs(this.xattrs, xattrs)

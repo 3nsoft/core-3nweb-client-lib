@@ -229,7 +229,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				implExp.v.sync.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.wrapService(
 					(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem
 				);
-				implExp.v.sync.adoptAllRemoteFolderItems = vsAdoptAllRemoteItems.wrapService(
+				implExp.v.sync.adoptAllRemoteItems = vsAdoptAllRemoteItems.wrapService(
 					(fs.v.sync as WritableFSSyncAPI).adoptAllRemoteItems
 				);
 			}
@@ -2779,7 +2779,7 @@ namespace vsAdoptAllRemoteItems {
 		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'adoptAllRemoteItems');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, opts: optionsToMsg(opts) }))
-		.then(buf => valOfOpt(replyType.unpack(buf).newVersion));
+		.then(buf => valOfOptInt(replyType.unpack(buf).newVersion));
 	}
 
 }
@@ -3007,6 +3007,8 @@ interface FolderDiffMsg {
 	inCurrent?: ListingEntryMsg[];
 	inRemote?: ListingEntryMsg[];
 	nameOverlaps?: string[];
+	differentKeys?: string[];
+	differentNames?: FolderDiff['differentNames'];
 	ctime: DiffTimeStampsMsg;
 	mtime: DiffTimeStampsMsg;
 	xattrs?: {
@@ -3033,13 +3035,13 @@ function folderDiffToMsg(
 		inCurrent: diff.inCurrent?.map(lsEntryToMsg),
 		inRemote: diff.inRemote?.map(lsEntryToMsg),
 		nameOverlaps: diff.nameOverlaps,
+		differentKeys: diff.differentKeys,
+		differentNames: diff.differentNames,
 		ctime: diffTStoMsg(diff.ctime),
 		mtime: diffTStoMsg(diff.mtime),
 		xattrs: (diff.xattrs ? {
-			inCurrent: diff.xattrs.inCurrent?.map(
-				({ name, value }) => file.xattrToMsg(name, value)),
-			inRemote: diff.xattrs.inRemote?.map(
-				({ name, value }) => file.xattrToMsg(name, value)),
+			inCurrent: diff.xattrs.inCurrent?.map(({ name, value }) => file.xattrToMsg(name, value)),
+			inRemote: diff.xattrs.inRemote?.map(({ name, value }) => file.xattrToMsg(name, value)),
 			nameOverlaps: diff.xattrs.nameOverlaps
 		} : undefined)
 	};
@@ -3061,21 +3063,23 @@ function folderDiffFromMsg(
 		currentVersion: fixInt(msg.currentVersion),
 		isCurrentLocal: msg.isCurrentLocal,
 		isRemoteArchived: msg.isRemoteArchived,
-		inCurrent: ((msg.inCurrent!.length > 0) ?
-			msg.inCurrent!.map(lsEntryFromMsg) : undefined),
-		inRemote: ((msg.inRemote!.length > 0) ?
-			msg.inRemote!.map(lsEntryFromMsg) : undefined),
-		nameOverlaps: ((msg.nameOverlaps!.length > 0) ?
-			msg.nameOverlaps : undefined),
+		inCurrent: ((msg.inCurrent && (msg.inCurrent!.length > 0)) ? msg.inCurrent!.map(lsEntryFromMsg) : undefined),
+		inRemote: ((msg.inRemote && (msg.inRemote!.length > 0)) ? msg.inRemote!.map(lsEntryFromMsg) : undefined),
+		nameOverlaps: ((msg.nameOverlaps && (msg.nameOverlaps!.length > 0)) ? msg.nameOverlaps : undefined),
+		differentKeys: ((msg.differentKeys && (msg.differentKeys!.length > 0)) ? msg.differentKeys : undefined),
+		differentNames: ((msg.differentNames && (msg.differentNames!.length > 0)) ? msg.differentNames : undefined),
 		ctime: diffTSfromMsg(msg.ctime),
 		mtime: diffTSfromMsg(msg.mtime),
 		xattrs: (msg.xattrs ? {
-			inCurrent: ((msg.xattrs.inCurrent!.length > 0) ?
-				msg.xattrs.inCurrent!.map(file.xattrFromMsg) : undefined),
-			inRemote: ((msg.xattrs.inRemote!.length > 0) ?
-				msg.xattrs.inRemote!.map(file.xattrFromMsg) : undefined),
-			nameOverlaps: ((msg.xattrs.nameOverlaps!.length > 0) ?
-				msg.xattrs.nameOverlaps : undefined)
+			inCurrent: ((msg.xattrs.inCurrent && (msg.xattrs.inCurrent!.length > 0)) ?
+				msg.xattrs.inCurrent!.map(file.xattrFromMsg) : undefined
+			),
+			inRemote: ((msg.xattrs.inRemote && (msg.xattrs.inRemote!.length > 0)) ?
+				msg.xattrs.inRemote!.map(file.xattrFromMsg) : undefined
+			),
+			nameOverlaps: ((msg.xattrs.nameOverlaps && (msg.xattrs.nameOverlaps!.length > 0)) ?
+				msg.xattrs.nameOverlaps : undefined
+			)
 		} : undefined)
 	};
 }
