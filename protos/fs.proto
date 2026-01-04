@@ -516,6 +516,8 @@ message FolderDiff {
 	XAttrs xattrs = 8;
 	repeated string different_keys = 9;
 	repeated DifferentNames different_names = 10;
+	bool is_current_local = 11;
+	bool is_remote_removed = 12;
 }
 
 message RemoteChildRequestBody {

@@ -1278,7 +1278,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return {
 			currentVersion: this.version,
 			isCurrentLocal,
-			isRemoteArchived: true,
+			isRemoteRemoved: true,
 			ctime: {
 				current: new Date(this.attrs.ctime)
 			},
@@ -1299,7 +1299,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return {
 			currentVersion: this.version,
 			isCurrentLocal,
-			isRemoteArchived: false,
+			isRemoteRemoved: false,
 			remoteVersion,
 			inCurrent,
 			inRemote,
@@ -1595,6 +1595,7 @@ function versionFromRemoteBranch(remote: SyncVersionsBranch, remoteVersion: numb
 				message: `Unknown remote version ${remoteVersion}`
 			});
 		}
+		return remoteVersion;
 	} else {
 		return remote.latest!;
 	}

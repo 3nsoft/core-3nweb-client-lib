@@ -415,7 +415,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	syncStatus = await dev2FS().v!.sync!.status('');	// implicit check of server
 	expect(syncStatus.state).toBe('conflicting');
 
-	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('');
+	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('', syncStatus.remote!.latest);
 	expect(diff!.inCurrent!.map(({name}) => name)).toContain(folder);
 	expect(diff!.inCurrent!.map(({name}) => name)).toContain(fileB);
 	expect(diff!.inRemote!.map(({name}) => name)).toContain(folder);

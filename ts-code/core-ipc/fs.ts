@@ -3003,7 +3003,7 @@ interface FolderDiffMsg {
 	remoteVersion?: Value<number>;
 	currentVersion: number;
 	isCurrentLocal: boolean;
-	isRemoteArchived: boolean;
+	isRemoteRemoved: boolean;
 	inCurrent?: ListingEntryMsg[];
 	inRemote?: ListingEntryMsg[];
 	nameOverlaps?: string[];
@@ -3031,7 +3031,7 @@ function folderDiffToMsg(
 		remoteVersion: toOptVal(diff.remoteVersion),
 		currentVersion: diff.currentVersion,
 		isCurrentLocal: diff.isCurrentLocal,
-		isRemoteArchived: diff.isRemoteArchived,
+		isRemoteRemoved: diff.isRemoteRemoved,
 		inCurrent: diff.inCurrent?.map(lsEntryToMsg),
 		inRemote: diff.inRemote?.map(lsEntryToMsg),
 		nameOverlaps: diff.nameOverlaps,
@@ -3062,7 +3062,7 @@ function folderDiffFromMsg(
 		remoteVersion: valOfOptInt(msg.remoteVersion),
 		currentVersion: fixInt(msg.currentVersion),
 		isCurrentLocal: msg.isCurrentLocal,
-		isRemoteArchived: msg.isRemoteArchived,
+		isRemoteRemoved: msg.isRemoteRemoved,
 		inCurrent: ((msg.inCurrent && (msg.inCurrent!.length > 0)) ? msg.inCurrent!.map(lsEntryFromMsg) : undefined),
 		inRemote: ((msg.inRemote && (msg.inRemote!.length > 0)) ? msg.inRemote!.map(lsEntryFromMsg) : undefined),
 		nameOverlaps: ((msg.nameOverlaps && (msg.nameOverlaps!.length > 0)) ? msg.nameOverlaps : undefined),

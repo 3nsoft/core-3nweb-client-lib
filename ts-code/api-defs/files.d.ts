@@ -1363,11 +1363,11 @@ declare namespace web3n.files {
 		remoteVersion?: number;
 
 		/**
-		 * Flag indicating if remote version is archived.
-		 * If remote is archived/delete, it has nothing inside, and with this implicit
+		 * Flag indicating if remote version is removed, i.e. has no current version.
+		 * If remote is removed, it has nothing inside, and with this implicit
 		 * understanding there is no need to have other data fields populated here.
 		 */
-		isRemoteArchived: boolean;
+		isRemoteRemoved: boolean;
 
 		/**
 		 * Items present only in current version.
