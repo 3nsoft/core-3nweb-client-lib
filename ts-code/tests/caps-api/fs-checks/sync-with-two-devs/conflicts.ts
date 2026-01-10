@@ -61,9 +61,9 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff).toBeDefined();
 	expect(diff!.currentVersion).toBe(folderStatus.local!.latest!);
 	expect(diff!.remoteVersion).toBe(folderStatus.remote!.latest!);
-	expect(diff!.inCurrent!.find(item => ((item.name === file) && item.isFile)))
+	expect(diff!.added!.find(({ addedIn, name }) => ((name === file) && (addedIn === 'l'))))
 	.toBeDefined();
-	expect(diff!.inRemote!.find(item => ((item.name === file) && item.isFile)))
+	expect(diff!.added!.find(({ addedIn, name }) => ((name === file) && (addedIn === 'r'))))
 	.toBeDefined();
 	expect(diff!.nameOverlaps!).toContain(file);
 
@@ -145,10 +145,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff).toBeDefined();
 	expect(diff!.currentVersion).toBe(folderStatus.local!.latest!);
 	expect(diff!.remoteVersion).toBe(folderStatus.remote!.latest!);
-	expect(diff!.inCurrent!.find(item => (item.name === file))).toBeDefined();
-	expect(diff!.inCurrent!.find(item => (item.name === fileFromDev2))).toBeDefined();
-	expect(diff!.inRemote!.find(item => (item.name === file))).toBeDefined();
-	expect(diff!.inRemote!.find(item => (item.name === fileFromDev1))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === file) && (addedIn === 'l')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileFromDev2) && (addedIn === 'l')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === file) && (addedIn === 'r')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileFromDev1) && (addedIn === 'r')))).toBeDefined();
 	expect(diff!.nameOverlaps!).toContain(file);
 
 	// we can stat remote child
@@ -416,20 +416,23 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(syncStatus.state).toBe('conflicting');
 
 	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('', syncStatus.remote!.latest);
-	expect(diff!.inCurrent!.map(({name}) => name)).toContain(folder);
-	expect(diff!.inCurrent!.map(({name}) => name)).toContain(fileB);
-	expect(diff!.inRemote!.map(({name}) => name)).toContain(folder);
-	expect(diff!.inRemote!.map(({name}) => name)).toContain(fileA);
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === folder) && (addedIn === 'l')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileB) && (addedIn === 'l')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === folder) && (addedIn === 'r')))).toBeDefined();
+	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileA) && (addedIn === 'r')))).toBeDefined();
 	expect(diff!.nameOverlaps!).toContain(folder);
 
-	await dev2FS().v!.sync!.adoptAllRemoteItems('').then(
+	await dev2FS().v!.sync!.mergeFolderCurrentAndRemoteVersions('').then(
 		() => fail(`Overlapping names require presence of prefix`),
-		exc => {}
+		(exc: FSSyncException) => {
+			expect(exc.type).toBe('fs-sync');
+			expect(Array.isArray(exc.nameOverlaps)).toBeTrue();
+		}
 	);
 
 	const postfixForNameOverlaps = `-remote`;
 
-	let version = await dev2FS().v!.sync!.adoptAllRemoteItems('', { postfixForNameOverlaps });
+	let version = await dev2FS().v!.sync!.mergeFolderCurrentAndRemoteVersions('', { postfixForNameOverlaps });
 	expect(version).toBe(diff!.currentVersion + 1);
 	expect(await dev2FS().checkFilePresence(fileA)).toBeTrue();
 	expect(await dev2FS().readTxtFile(fileA)).toBe(await dev1FS().readTxtFile(fileA));

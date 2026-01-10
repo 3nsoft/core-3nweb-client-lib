@@ -82,9 +82,11 @@ type SyncStatus = web3n.files.SyncStatus;
 type WritableFSVersionedAPI = web3n.files.WritableFSVersionedAPI;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
-type OptionsToAdoptAllRemoteItems = web3n.files.OptionsToAdoptAllRemoteItems;
+type OptionsToDiffFileVersions = web3n.files.OptionsToDiffFileVersions;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type FolderDiff = web3n.files.FolderDiff;
+type FileDiff = web3n.files.FileDiff;
+type OptionsToMergeFolderVersions = web3n.files.OptionsToMergeFolderVersions;
 
 const WRITE_NONEXCL_FLAGS: VersionedFileFlags = {
 	create: true,
@@ -205,8 +207,9 @@ export class XspFS implements WritableFS {
 		const root = this.v.getRootIfNotClosed(path);
 		const parentFolder = await root.getFolderInThisSubTree(parentPath)
 		.catch(setExcPath(parentPath.join('/')));
-		if (typeof folderName !== 'string') { throw new Error(
-			'Cannot remove root folder'); }
+		if (typeof folderName !== 'string') {
+			throw new Error('Cannot remove root folder');
+		}
 		const folder = (await parentFolder.getFolder(folderName)
 		.catch(setExcPath(path)))!;
 		if (!removeContent && !folder.isEmpty()) {
@@ -987,6 +990,26 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
+	private async getFileNode(path: string): Promise<FileNode> {
+		const node = await this.n.get(path);
+		if (node.type !== 'file') {
+			throw makeFileException('notFile', path);
+		}
+		return node as FileNode;
+	}
+
+	async diffCurrentAndRemoteFileVersions(
+		path: string, opts?: OptionsToDiffFileVersions
+	): Promise<FileDiff|undefined> {
+		const node = await this.getFileNode(path);
+		try {
+			return await node.diffCurrentAndRemote(opts?.remoteVersion, !!opts?.compareContentIfSameMTime);
+		} catch (exc) {
+			throw setPathInExc(exc, path);
+		}
+		
+	}
+
 	async adoptRemoteFolderItem(path: string, itemName: string, opts?: OptionsToAdoptRemoteItem): Promise<number> {
 		const node = await this.getFolderNode(path);
 		try {
@@ -1034,11 +1057,27 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	async adoptAllRemoteItems(
-		path: string, opts?: OptionsToAdoptAllRemoteItems
+	// async adoptAllRemoteItems(
+	// 	path: string, opts?: OptionsToAdoptAllRemoteItems
+	// ): Promise<number|undefined> {
+	// 	const folderNode = await this.getFolderNode(path);
+	// 	return await folderNode.adoptItemsFromRemoteVersion(opts);
+	// }
+
+	async mergeFolderCurrentAndRemoteVersions(
+		path: string, opts?: OptionsToMergeFolderVersions
 	): Promise<number|undefined> {
 		const folderNode = await this.getFolderNode(path);
-		return await folderNode.adoptItemsFromRemoteVersion(opts);
+		const newLocalVersion = await folderNode.mergeCurrentAndRemoteVersions(opts);
+		if (newLocalVersion && (newLocalVersion < 0)) {
+			const { folderPath } = split(path);
+			if (folderPath.length > 0) {
+				const parent = await this.n.get(folderPath.join('/'));
+				// XXX removing folder in parent -- what happens with children?
+				await (parent as FolderNode).removeChild(folderNode);
+			}
+		}
+		return newLocalVersion;
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -33,6 +33,7 @@ import { FolderNode } from './folder-node';
 import { ObjSource } from 'xsp-files';
 import { assert } from '../../lib-common/assert';
 import { makeRuntimeException } from '../../lib-common/exceptions/runtime';
+import { deepEqual } from '../../lib-common/json-utils';
 
 
 export type FSEvent = web3n.files.FolderEvent | web3n.files.FileEvent | web3n.files.UploadEvent | web3n.files.DownloadEvent;
@@ -48,6 +49,8 @@ type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type Stats = web3n.files.Stats;
+type CommonDiff = web3n.files.CommonDiff;
+type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 
 
 export abstract class NodeInFS<P extends NodePersistance> implements Node {
@@ -400,8 +403,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		if (this.parentId) {
 			const parent = storage.nodes.get<FolderNode>(this.parentId);
 			if (parent) {
-				status.existsInSyncedParent =
-					await parent.childExistsInSyncedVersion(this.objId);
+				status.existsInSyncedParent = await parent.childExistsInSyncedVersion(this.objId);
 			}
 		}
 		return status;
@@ -585,6 +587,52 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return { localHeader, localVersion, uploadHeader, uploadVersion };
 	}
 
+	private diffWithArchivedRemote(isCurrentLocal: boolean): CommonDiff {
+		return {
+			currentVersion: this.version,
+			isCurrentLocal,
+			isRemoteRemoved: true,
+		};
+	}
+
+	protected commonDiffWithRemote(
+		isCurrentLocal: boolean, remoteVersion: number, remote: { attrs: CommonAttrs; xattrs?: XAttrs; },
+		syncedVersion: number, synced: { attrs: CommonAttrs; xattrs?: XAttrs; }
+	): CommonDiff {
+		const { ctime, mtime } = diffAttrs(this.attrs, remote.attrs, synced.attrs);
+		return {
+			currentVersion: this.version,
+			isCurrentLocal,
+			isRemoteRemoved: false,
+			remoteVersion,
+			syncedVersion,
+			ctime,
+			mtime,
+			xattrs: diffXAttrs(this.xattrs, remote.xattrs, synced.xattrs)
+		};
+	}
+
+	protected async getRemoteVersionToDiff(remoteVersion: number|undefined): Promise<
+		{ rm: false; isCurrentLocal: boolean; remoteVersion: number; syncedVersion?: number; }|
+		{ rm: true; rmDiff: CommonDiff; }|undefined
+	> {
+		const { state, remote, synced } = await this.syncStatus();
+		let isCurrentLocal: boolean;
+		if (state === 'behind') {
+			isCurrentLocal = false;
+		} else if (state === 'conflicting') {
+			isCurrentLocal = true;
+		} else {
+			return;
+		}
+		remoteVersion = versionFromRemoteBranch(remote!, remoteVersion);
+		if (remoteVersion) {
+			return { rm: false, isCurrentLocal, remoteVersion, syncedVersion: synced?.latest };
+		} else {
+			return { rm: true, rmDiff: this.diffWithArchivedRemote(isCurrentLocal) };
+		}
+	}
+
 }
 Object.freeze(NodeInFS.prototype);
 Object.freeze(NodeInFS);
@@ -623,6 +671,125 @@ export function shouldReadCurrentVersion(
 		}
 	}
 	return true;
+}
+
+function diffAttrs(current: CommonAttrs, remote: CommonAttrs, synced: CommonAttrs): {
+	ctime: CommonDiff['ctime']; mtime: CommonDiff['mtime'];
+} {
+	return {
+		ctime: {
+			current: new Date(current.ctime),
+			remote: new Date(remote.ctime),
+			synced: new Date(synced.ctime)
+		},
+		mtime: {
+			current: new Date(current.mtime),
+			remote: new Date(remote.mtime),
+			synced: new Date(synced.mtime)
+		}
+	};
+}
+
+function diffXAttrs(
+	current: XAttrs|undefined, remote: XAttrs|undefined, synced: XAttrs|undefined
+): CommonDiff['xattrs'] {
+	const diff: NonNullable<CommonDiff['xattrs']> = {};
+	const checkedNames = new Set<string>();
+	if (current) {
+		for (const name of current.list()) {
+			const localValue = current.get(name);
+			const syncedValue = synced?.get(name);
+			const remoteValue = remote?.get(name);
+			if (remoteValue === undefined) {
+				if (syncedValue === undefined) {
+					diff[name] = { addedIn: 'l' };
+				} else if (areXAttrValuesEqual(localValue, syncedValue)) {
+					diff[name] = { removedIn: 'r' };
+				} else {
+					diff[name] = { removedIn: 'r', changedIn: 'l' };
+				}
+			} else if (areXAttrValuesEqual(localValue, remoteValue)) {
+				// no differences between local and remote
+			} else {
+				if (syncedValue === undefined) {
+					diff[name] = { addedIn: 'l&r', changedIn: 'l&r' };
+				} else if (areXAttrValuesEqual(localValue, syncedValue)) {
+					diff[name] = { changedIn: 'r' };
+				} else {
+					diff[name] = { changedIn: 'l&r' };
+				}
+			}
+			checkedNames.add(name);
+		}
+	}
+	if (remote) {
+		for (const name of remote.list()) {
+			if (checkedNames.has(name)) {
+				continue;
+			}
+			const remoteValue = remote.get(name);
+			const syncedValue = synced?.get(name);
+			if (syncedValue === undefined) {
+					diff[name] = { addedIn: 'r' };
+			} else if (areXAttrValuesEqual(remoteValue, syncedValue)) {
+					diff[name] = { removedIn: 'l' };
+			} else {
+					diff[name] = { removedIn: 'l', changedIn: 'r' };
+			}
+		}
+	}
+	return ((Object.keys(diff).length > 0) ? diff : undefined);
+}
+
+function areXAttrValuesEqual(v1: any, v2: any): boolean {
+	if (Buffer.isBuffer(v1) || ArrayBuffer.isView(v1)) {
+		if (Buffer.isBuffer(v2) || ArrayBuffer.isView(v2)) {
+			return areBytesEqual(v1 as Uint8Array, v2 as Uint8Array);
+		} {
+			return false;
+		}
+	} else if (typeof v1 === 'string') {
+		if (typeof v2 === 'string') {
+			return (v1 === v2);
+		} else {
+			return false;
+		}
+	} else {
+		if (Buffer.isBuffer(v2) || ArrayBuffer.isView(v2)
+		|| (typeof v2 === 'string')) {
+			return false;
+		} else {
+			return deepEqual(v1, v2);
+		}
+	}
+}
+
+export function areBytesEqual(b1: Uint8Array, b2: Uint8Array): boolean {
+	if (b1.length !== b2.length) { return false; }
+	for (let i=0; i<b1.length; i+=1) {
+		if (b1[i] !== b2[i]) { return false; }
+	}
+	return true;
+}
+
+export function versionFromRemoteBranch(
+	remote: SyncVersionsBranch, remoteVersion: number|undefined
+): number|undefined {
+	if (remote.isArchived) {
+		return;
+	}
+	if (remoteVersion) {
+		if ((remoteVersion !== remote!.latest!)
+		&& !remote.archived?.includes(remoteVersion)) {
+			throw makeFSSyncException(this.name, {
+				versionMismatch: true,
+				message: `Unknown remote version ${remoteVersion}`
+			});
+		}
+		return remoteVersion;
+	} else {
+		return remote.latest!;
+	}
 }
 
 

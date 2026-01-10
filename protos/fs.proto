@@ -483,8 +483,15 @@ message AdoptRemoteRequestBody {
 	file.OptionsToAdopteRemote opts = 2;
 }
 
-// --- ReadonlyFSSyncAPI.diffCurrentAndRemote ---
-message DiffCurrentAndRemoteRequestBody {
+// --- ReadonlyFSSyncAPI.diffCurrentAndRemoteFileVersions ---
+// Reply body is file.DiffCurrentAndRemoteReplyBody
+message DiffCurrentAndRemoteFileVersionsRequestBody {
+	string path = 1;
+	file.OptionsToDiffFileVersions opts = 2;
+}
+
+// --- ReadonlyFSSyncAPI.diffCurrentAndRemoteFolderVersions ---
+message DiffCurrentAndRemoteFolderVersionsRequestBody {
 	string path = 1;
 	common.UInt64Value remote_version = 2;
 }
@@ -493,31 +500,39 @@ message DiffCurrentAndRemoteReplyBody {
 }
 
 message FolderDiff {
-	message TimeStamps {
-		uint64 current = 1;
-		common.UInt64Value remote = 2;
-	}
-	message XAttrs {
-		repeated file.NameAndXAttrValue in_current = 1;
-		repeated file.NameAndXAttrValue in_remote = 2;
-		repeated string name_overlaps = 3;
-	}
-	message DifferentNames {
-		string local_name = 1;
-		string remote_name = 2;
-	}
+	// CommonDiff fields
 	uint64 current_version = 1;
-	common.UInt64Value remote_version = 2;
-	repeated ListingEntryMsg in_current = 3;
-	repeated ListingEntryMsg in_remote = 4;
-	repeated string name_overlaps = 5;
-	TimeStamps ctime = 6;
-	TimeStamps mtime = 7;
-	XAttrs xattrs = 8;
-	repeated string different_keys = 9;
-	repeated DifferentNames different_names = 10;
-	bool is_current_local = 11;
-	bool is_remote_removed = 12;
+	bool is_current_local = 2;
+	common.UInt64Value remote_version = 3;
+	common.UInt64Value synced_version = 4;
+	bool is_remote_removed = 5;
+	file.TimeStampsDiff ctime = 6;
+	file.TimeStampsDiff mtime = 7;
+	repeated file.XAttrDiff xattrs = 8;
+
+	message Removed {
+		string name = 1;
+		string removed_in = 2;
+	}
+	message Renamed {
+		string local = 1;
+		string remote = 2;
+		string renamed_in = 3;
+	}
+	message Added {
+		string name = 1;
+		string added_in = 2;
+	}
+	message Rekeyed {
+		string local = 1;
+		string remote = 2;
+		string rekeyed_in = 3;
+	}
+	repeated Removed removed = 11;
+	repeated Renamed renamed = 12;
+	repeated Added added = 13;
+	repeated Rekeyed rekeyed = 14;
+	repeated string name_overlaps = 15;
 }
 
 message RemoteChildRequestBody {
@@ -570,9 +585,9 @@ message AdoptRemoteFolderItemRequestBody {
 	Options opts = 3;
 }
 
-// --- WritableFSSyncAPI.adoptAllRemoteFolderItems ---
+// --- WritableFSSyncAPI.mergeFolderCurrentAndRemoteVersions ---
 // Reply body is common.UInt64Value
-message AdoptAllRemoteFolderItemsRequestBody {
+message MergeFolderCurrentAndRemoteVersionsRequestBody {
 	message Options {
 		common.UInt64Value local_version = 1;
 		common.StringValue postfix_for_name_overlaps = 2;
@@ -581,6 +596,6 @@ message AdoptAllRemoteFolderItemsRequestBody {
 	string path = 1;
 	Options opts = 2;
 }
-message AdoptAllRemoteFolderItemsReplyBody {
+message MergeFolderCurrentAndRemoteVersionsReplyBody {
 	common.UInt64Value new_version = 1;
 }

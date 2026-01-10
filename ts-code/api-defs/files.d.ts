@@ -84,6 +84,8 @@ declare namespace web3n.files {
 		remoteIsArchived?: true;
 		remoteFolderItemNotFound?: true;
 		overlapsLocalItem?: true;
+		nameOverlaps?: string[];
+		noNamePostfixGiven?: true;
 	}
 
 	/**
@@ -648,6 +650,13 @@ declare namespace web3n.files {
 		 */
 		adoptRemote(opts?: OptionsToAdopteRemote): Promise<void>;
 
+		/**
+		 * Calculates diff between current and remote states of file at given path.
+		 * @param path 
+		 * @param opts 
+		 */
+		diffCurrentAndRemoteVersions(opts?: OptionsToDiffFileVersions): Promise<FileDiff|undefined>;
+
 	}
 
 	interface OptionsToAdopteRemote {
@@ -656,6 +665,11 @@ declare namespace web3n.files {
 		 * In conflicting state this must be present.
 		 */
 		remoteVersion?: number;
+	}
+
+	interface OptionsToDiffFileVersions {
+		remoteVersion?: number;
+		compareContentIfSameMTime?: boolean;
 	}
 
 	interface WritableFileSyncAPI extends ReadonlyFileSyncAPI {
@@ -1104,6 +1118,127 @@ declare namespace web3n.files {
 
 	}
 
+	interface FSEvent {
+		path: string;
+	}
+
+	interface FSChangeEvent {
+		path: string;
+		src: 'local'|'sync';
+	}
+
+	interface RemovedEvent extends FSChangeEvent {
+		type: 'removed';
+	}
+
+	interface VersionChangeOnUpload extends FSChangeEvent {
+		type: 'version-change-on-upload';
+		src: 'sync';
+		newVersion: number;
+	}
+
+	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
+		EntryRenamingEvent | RemovedEvent | VersionChangeOnUpload;
+
+	interface EntryRemovalEvent extends FSChangeEvent {
+		type: 'entry-removal';
+		name: string;
+		moveLabel?: number;
+		newVersion?: number;
+	}
+
+	interface EntryAdditionEvent extends FSChangeEvent {
+		type: 'entry-addition';
+		entry: ListingEntry;
+		moveLabel?: number;
+		newVersion?: number;
+	}
+
+	interface EntryRenamingEvent extends FSChangeEvent {
+		type: 'entry-renaming';
+		oldName: string;
+		newName: string;
+		newVersion?: number;
+	}
+
+	type FileEvent = FileChangeEvent | RemovedEvent | VersionChangeOnUpload;
+
+	interface FileChangeEvent extends FSChangeEvent {
+		type: 'file-change';
+		newVersion?: number;
+	}
+
+	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
+		RemoteRemovalEvent | RemoteChangeEvent;
+
+	interface RemoteVersionArchivalEvent extends FSEvent {
+		type: 'remote-version-archival';
+		archivedVersion: number;
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteArchVerRemovalEvent extends FSEvent {
+		type: 'remote-arch-ver-removal';
+		removedArchVer: number;
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteRemovalEvent extends FSEvent {
+		type: 'remote-removal';
+		syncStatus: SyncStatus;
+	}
+
+	interface RemoteChangeEvent extends FSEvent {
+		type: 'remote-change';
+		newRemoteVersion: number;
+		syncStatus: SyncStatus;
+	}
+
+	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDoneEvent;
+
+	interface UploadEventBase extends FSEvent {
+		uploadTaskId: number;
+		localVersion: number;
+		uploadVersion: number;
+	}
+
+	interface UploadStartEvent extends UploadEventBase {
+		type: 'upload-started';
+		totalBytesToUpload: number;
+	}
+
+	interface UploadProgressEvent extends UploadEventBase {
+		type: 'upload-progress';
+		totalBytesToUpload: number;
+		bytesLeftToUpload: number;
+	}
+
+	interface UploadDoneEvent extends UploadEventBase {
+		type: 'upload-done';
+	}
+
+	type DownloadEvent = DownloadStartEvent | DownloadProgressEvent | DownloadDoneEvent;
+
+	interface DownloadEventBase extends FSEvent {
+		downloadTaskId: number;
+		version: number;
+	}
+
+	interface DownloadStartEvent extends DownloadEventBase {
+		type: 'download-started';
+		totalBytesToDownload: number;
+	}
+
+	interface DownloadDoneEvent extends DownloadEventBase {
+		type: 'download-done';
+	}
+
+	interface DownloadProgressEvent extends DownloadEventBase {
+		type: 'download-progress';
+		totalBytesToDownload: number;
+		bytesLeftToDownload: number;
+	}
+
 	interface VersionedFileWriteFlags extends FileFlags {
 
 		/**
@@ -1306,6 +1441,15 @@ declare namespace web3n.files {
 		diffCurrentAndRemoteFolderVersions(path: string, remoteVersion?: number): Promise<FolderDiff|undefined>;
 
 		/**
+		 * Calculates diff between current and remote states of file at given path.
+		 * @param path 
+		 * @param opts 
+		 */
+		diffCurrentAndRemoteFileVersions(
+			path: string, opts?: OptionsToDiffFileVersions
+		): Promise<FileDiff|undefined>;
+
+		/**
 		 * Returns stats of a child from remote version of a folder.
 		 * @param path of folder
 		 * @param remoteItemName 
@@ -1342,11 +1486,7 @@ declare namespace web3n.files {
 
 	}
 
-	/**
-	 * Difference between two versions of folder node.
-	 * Folder items that same in both versions are not included.
-	 */
-	interface FolderDiff {
+	interface CommonDiff {
 		/**
 		 * Current version against which this diff is done.
 		 */
@@ -1370,60 +1510,112 @@ declare namespace web3n.files {
 		isRemoteRemoved: boolean;
 
 		/**
-		 * Items present only in current version.
+		 * Synced version against which this diff is done.
 		 */
-		inCurrent?: ListingEntry[];
+		syncedVersion?: number;
 
 		/**
-		 * Items present only in remote version.
+		 * Creation time should always be same, but if not, this field will show different values.
+		 * If remote is removed, this field will be undefined.
 		 */
-		inRemote?: ListingEntry[];
-
-		/**
-		 * Different names are for items that are same nodes but have different names
-		 * in local and remote branches.
-		 */
-		differentNames?: {
-			localName: string;
-			remoteName: string;
-		}[];
-
-		/**
-		 * Different keys identifies items that have different encryption keys in
-		 * local and remote branches. Keys may be changed, hence, given situation
-		 * should be reflected.
-		 */
-		differentKeys?: string[];
-
-		/**
-		 * Name overlaps are items with same name, but different node objects underneath.
-		 */
-		nameOverlaps?: string[];
-
-		/**
-		 * Creation time should always be same.
-		 * But there is no way to enforce it, hence, we have this field.
-		 */
-		ctime: {
-			remote?: Date;
+		ctime?: {
+			remote: Date;
 			current: Date;
+			synced: Date;
 		};
 
 		/**
-		 * Modification time most probably be different between versions.
+		 * This field shows different modification times. If they are same, field will be undefined.
+		 * If remote is removed, this field will be undefined.
 		 */
-		mtime: {
-			remote?: Date;
+		mtime?: {
+			remote: Date;
 			current: Date;
+			synced: Date;
 		};
 
 		/**
 		 * Difference between xattrs. Same xattrs in both versions are not included.
 		 */
 		xattrs?: {
-			inCurrent?: { name: string; value: any; }[];
-			inRemote?: { name: string; value: any; }[];
-			nameOverlaps?: string[];
+			[name: string]: {
+				addedIn?: 'l'|'r'|'l&r';
+				removedIn?: 'l'|'r';
+				changedIn?: 'l'|'r'|'l&r';
+			};
+		};
+	}
+
+	/**
+	 * Difference of remote and local folder versions expressed as changes relative to synced version.
+	 * 
+	 * Consider the following example.
+	 * There is an item in local version, but not in remote.
+	 * Such difference can come about in two ways: addition in local branch, or removal in remote.
+	 * 
+	 * Contexts where versions are compared need information about change actions in folder.
+	 * Hence, this diff is a three point comparison, yielding richer info.
+	 */
+	interface FolderDiff extends CommonDiff {
+
+		/**
+		 * Items that were removed. Pointing to where removal is done in remote (r), or local (l) branches.
+		 * 
+		 * Consider the following example.
+		 * Item that is removed in local version is present in both remote and synced versions.
+		 * Hence, difference between local and remote versions is due to removal in local branch.
+		 */
+		removed?: {
+			name: string;
+			removedIn: 'l'|'r';
+		}[];
+
+		/**
+		 * Items that were renamed. Pointing to where renaming is done in remote (r), or local (l) branches.
+		 * 
+		 * When item is renamed local branch, then local name was changed from synced value,
+		 * while remote name is still equal to synced (older) value.
+		 */
+		renamed?: {
+			local: string;
+			remote: string;
+			renamedIn: 'l'|'r'|'l&r';
+		}[];
+
+		/**
+		 * Items that were added. Pointing to where addition is done in remote (r), or local (l) branches.
+		 * 
+		 * When item added in remote branch, then it is present in remote version under the referenced name.
+		 * Synced (older) state of folder doesn't have it, and neither does local.
+		 */
+		added?: {
+			name: string;
+			addedIn: 'l'|'r';
+		}[];
+
+		/**
+		 * Items that reencrypted and now have different keys.
+		 */
+		rekeyed?: {
+			local: string;
+			remote: string;
+			rekeyedIn: 'l'|'r'|'l&r';
+		}[];
+
+		/**
+		 * Name overlaps are items with same name, but different node objects underneath.
+		 */
+		nameOverlaps?: string[];
+	}
+
+	interface FileDiff extends CommonDiff {
+		areContentsSame: boolean;
+		/**
+		 * If sizes are different this field will have respective values.
+		 */
+		size?: {
+			remote: number;
+			current: number;
 		};
 	}
 
@@ -1465,12 +1657,14 @@ declare namespace web3n.files {
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It adopts all folder items, that are present in remote version and are missing in local version.
+		 * It merges folder changes from remote version.
 		 * Returns new local version, if there were remote items to adopt and their were added to local state.
 		 * @param path 
 		 * @param opts
 		 */
-		adoptAllRemoteItems(path: string, opts?: OptionsToAdoptAllRemoteItems): Promise<number|undefined>;
+		mergeFolderCurrentAndRemoteVersions(
+			path: string, opts?: OptionsToMergeFolderVersions
+		): Promise<number|undefined>;
 
 	}
 
@@ -1494,7 +1688,7 @@ declare namespace web3n.files {
 		newItemName?: string;
 	}
 
-	interface OptionsToAdoptAllRemoteItems {
+	interface OptionsToMergeFolderVersions {
 		/**
 		 * Folder's local version. If not given, current local version is used.
 		 */
@@ -1508,127 +1702,6 @@ declare namespace web3n.files {
 		 * If there are name overlaps and postfix isn't given, then exception is thrown.
 		 */
 		postfixForNameOverlaps?: string;
-	}
-
-	interface FSEvent {
-		path: string;
-	}
-
-	interface FSChangeEvent {
-		path: string;
-		src: 'local'|'sync';
-	}
-
-	interface RemovedEvent extends FSChangeEvent {
-		type: 'removed';
-	}
-
-	interface VersionChangeOnUpload extends FSChangeEvent {
-		type: 'version-change-on-upload';
-		src: 'sync';
-		newVersion: number;
-	}
-
-	type FolderEvent = EntryRemovalEvent | EntryAdditionEvent |
-		EntryRenamingEvent | RemovedEvent | VersionChangeOnUpload;
-
-	interface EntryRemovalEvent extends FSChangeEvent {
-		type: 'entry-removal';
-		name: string;
-		moveLabel?: number;
-		newVersion?: number;
-	}
-
-	interface EntryAdditionEvent extends FSChangeEvent {
-		type: 'entry-addition';
-		entry: ListingEntry;
-		moveLabel?: number;
-		newVersion?: number;
-	}
-
-	interface EntryRenamingEvent extends FSChangeEvent {
-		type: 'entry-renaming';
-		oldName: string;
-		newName: string;
-		newVersion?: number;
-	}
-
-	type FileEvent = FileChangeEvent | RemovedEvent | VersionChangeOnUpload;
-
-	interface FileChangeEvent extends FSChangeEvent {
-		type: 'file-change';
-		newVersion?: number;
-	}
-
-	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
-		RemoteRemovalEvent | RemoteChangeEvent;
-
-	interface RemoteVersionArchivalEvent extends FSEvent {
-		type: 'remote-version-archival';
-		archivedVersion: number;
-		syncStatus: SyncStatus;
-	}
-
-	interface RemoteArchVerRemovalEvent extends FSEvent {
-		type: 'remote-arch-ver-removal';
-		removedArchVer: number;
-		syncStatus: SyncStatus;
-	}
-
-	interface RemoteRemovalEvent extends FSEvent {
-		type: 'remote-removal';
-		syncStatus: SyncStatus;
-	}
-
-	interface RemoteChangeEvent extends FSEvent {
-		type: 'remote-change';
-		newRemoteVersion: number;
-		syncStatus: SyncStatus;
-	}
-
-	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDoneEvent;
-
-	interface UploadEventBase extends FSEvent {
-		uploadTaskId: number;
-		localVersion: number;
-		uploadVersion: number;
-	}
-
-	interface UploadStartEvent extends UploadEventBase {
-		type: 'upload-started';
-		totalBytesToUpload: number;
-	}
-
-	interface UploadProgressEvent extends UploadEventBase {
-		type: 'upload-progress';
-		totalBytesToUpload: number;
-		bytesLeftToUpload: number;
-	}
-
-	interface UploadDoneEvent extends UploadEventBase {
-		type: 'upload-done';
-	}
-
-	type DownloadEvent = DownloadStartEvent | DownloadProgressEvent | DownloadDoneEvent;
-
-	interface DownloadEventBase extends FSEvent {
-		downloadTaskId: number;
-		version: number;
-	}
-
-	interface DownloadStartEvent extends DownloadEventBase {
-		type: 'download-started';
-		totalBytesToDownload: number;
-	}
-
-	interface DownloadDoneEvent extends DownloadEventBase {
-		type: 'download-done';
-	}
-
-	interface DownloadProgressEvent extends DownloadEventBase {
-		type: 'download-progress';
-		totalBytesToDownload: number;
-		bytesLeftToDownload: number;
 	}
 
 }

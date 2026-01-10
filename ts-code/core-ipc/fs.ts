@@ -52,7 +52,7 @@ type FSCollection = web3n.files.FSCollection;
 type CollectionEvent = web3n.files.CollectionEvent;
 type FolderDiff = web3n.files.FolderDiff;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
-type OptionsToAdoptAllRemoteItems = web3n.files.OptionsToAdoptAllRemoteItems;
+type OptionsToMergeFolderVersions = web3n.files.OptionsToMergeFolderVersions;
 
 export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	checkRefObjTypeIs('FSImpl', fsMsg.impl);
@@ -129,6 +129,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				startDownload: vsDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.makeCaller(caller, vsPath),
+				diffCurrentAndRemoteFileVersions: vsDiffCurrentAndRemoteFileVersions.makeCaller(caller, vsPath),
 				statRemoteItem: vsStatRemoteItem.makeCaller(caller, vsPath),
 				listRemoteFolderItem: vsListRemoteFolderItem.makeCaller(caller, vsPath),
 				getRemoteFileItem: vsGetRemoteFileItem.makeCaller(caller, vsPath),
@@ -138,7 +139,9 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				fs.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
-				fs.v.sync!.adoptAllRemoteItems = vsAdoptAllRemoteItems.makeCaller(caller, vsPath);
+				fs.v.sync!.mergeFolderCurrentAndRemoteVersions = vsMergeFolderCurrentAndRemoteVersions.makeCaller(
+					caller, vsPath
+				);
 			}
 		}
 	}
@@ -221,6 +224,9 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				getRemoteFolderItem: vsGetRemoteFolderItem.wrapService(fs.v.sync.getRemoteFolderItem, expServices),
 				diffCurrentAndRemoteFolderVersions: vsDiffCurrentAndRemoteFolderVersions.wrapService(
 					fs.v.sync.diffCurrentAndRemoteFolderVersions
+				),
+				diffCurrentAndRemoteFileVersions: vsDiffCurrentAndRemoteFileVersions.wrapService(
+					fs.v.sync.diffCurrentAndRemoteFileVersions
 				)
 			} as ExposedObj<WritableFSSyncAPI>;
 			if (fs.writable) {
@@ -229,14 +235,13 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				implExp.v.sync.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.wrapService(
 					(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem
 				);
-				implExp.v.sync.adoptAllRemoteItems = vsAdoptAllRemoteItems.wrapService(
-					(fs.v.sync as WritableFSSyncAPI).adoptAllRemoteItems
+				implExp.v.sync.mergeFolderCurrentAndRemoteVersions = vsMergeFolderCurrentAndRemoteVersions.wrapService(
+					(fs.v.sync as WritableFSSyncAPI).mergeFolderCurrentAndRemoteVersions
 				);
 			}
 		}
 	}
-	const impl = expServices.exposeDroppableService<'FSImpl'>(
-		'FSImpl', implExp, fs);
+	const impl = expServices.exposeDroppableService<'FSImpl'>('FSImpl', implExp, fs);
 	const fsMsg: FSMsg = {
 		impl,
 		isVersioned: !!fs.v,
@@ -409,9 +414,7 @@ interface SymLinkTarget {
 const symLinkTargetType = ProtoType.for<SymLinkTarget>(
 	pb.SymLinkTargetReplyBody);
 
-function exposeSymLink(
-	link: SymLink, expServices: CoreSideServices
-): SymLinkMsg {
+function exposeSymLink(link: SymLink, expServices: CoreSideServices): SymLinkMsg {
 	const exp: ExposedFn = () => {
 		if (link.isFile) {
 			const promise = link.target()
@@ -431,8 +434,7 @@ function exposeSymLink(
 			assert(false);
 		}
 	};
-	const ref = expServices.exposeDroppableService<'SymLinkImpl'>(
-		'SymLinkImpl', exp, link);
+	const ref = expServices.exposeDroppableService<'SymLinkImpl'>('SymLinkImpl', exp, link);
 	const msg: SymLinkMsg = {
 		readonly: link.readonly,
 		isFile: toOptVal(link.isFile),
@@ -442,9 +444,7 @@ function exposeSymLink(
 	return msg;
 }
 
-function makeSymLinkCaller(
-	caller: Caller, linkMsg: SymLinkMsg
-): SymLink {
+function makeSymLinkCaller(caller: Caller, linkMsg: SymLinkMsg): SymLink {
 	checkRefObjTypeIs('SymLinkImpl', linkMsg.impl);
 	const link: SymLink = {
 		readonly: linkMsg.readonly,
@@ -498,20 +498,6 @@ namespace readLink {
 }
 Object.freeze(readLink);
 
-
-interface FSEventMsg {
-	type: (FolderEvent|FileEvent|RemoteEvent)['type'];
-	path: string;
-	src?: Value<FileEvent['src']>;
-	newVersion?: Value<number>;
-	name?: Value<string>;
-	oldName?: Value<string>;
-	newName?: Value<string>;
-	entry?: ListingEntryMsg;
-	moveLabel?: Value<number>;
-	removedArchVer?: Value<number>;
-	archivedVersion?: Value<number>;
-}
 
 interface ListingEntryMsg {
 	name: string;
@@ -2725,9 +2711,9 @@ namespace vsAdoptRemoteFolderItem {
 Object.freeze(vsAdoptRemoteFolderItem);
 
 
-namespace vsAdoptAllRemoteItems {
+namespace vsMergeFolderCurrentAndRemoteVersions {
 
-	interface OptionsToAdoptAllRemoteItemsMsg {
+	interface OptionsToMergeFolderVersionsMsg {
 		localVersion?: Value<number>;
 		remoteVersion?: Value<number>;
 		postfixForNameOverlaps?: Value<string>;
@@ -2735,12 +2721,12 @@ namespace vsAdoptAllRemoteItems {
 
 	const requestType = ProtoType.for<{
 		path: string;
-		opts?: OptionsToAdoptAllRemoteItemsMsg;
-	}>(pb.AdoptAllRemoteFolderItemsRequestBody);
+		opts?: OptionsToMergeFolderVersionsMsg;
+	}>(pb.MergeFolderCurrentAndRemoteVersionsRequestBody);
 
 	function optionsFromMsg(
-		msg: OptionsToAdoptAllRemoteItemsMsg|undefined
-	): OptionsToAdoptAllRemoteItems|undefined {
+		msg: OptionsToMergeFolderVersionsMsg|undefined
+	): OptionsToMergeFolderVersions|undefined {
 		if (!msg) { return; }
 		return {
 			localVersion: valOfOptInt(msg.localVersion),
@@ -2749,7 +2735,7 @@ namespace vsAdoptAllRemoteItems {
 		};
 	}
 
-	function optionsToMsg(opts: OptionsToAdoptAllRemoteItems|undefined): OptionsToAdoptAllRemoteItemsMsg|undefined {
+	function optionsToMsg(opts: OptionsToMergeFolderVersions|undefined): OptionsToMergeFolderVersionsMsg|undefined {
 		if (!opts) { return; }
 		return {
 			localVersion: toOptVal(opts.localVersion),
@@ -2760,10 +2746,10 @@ namespace vsAdoptAllRemoteItems {
 
 	const replyType = ProtoType.for<{
 		newVersion?: Value<number>;
-	}>(pb.AdoptAllRemoteFolderItemsReplyBody);
+	}>(pb.MergeFolderCurrentAndRemoteVersionsReplyBody);
 
 	export function wrapService(
-		fn: WritableFSSyncAPI['adoptAllRemoteItems']
+		fn: WritableFSSyncAPI['mergeFolderCurrentAndRemoteVersions']
 	): ExposedFn {
 		return buf => {
 			const { path, opts } = requestType.unpack(buf);
@@ -2775,15 +2761,15 @@ namespace vsAdoptAllRemoteItems {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['adoptAllRemoteItems'] {
-		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'adoptAllRemoteItems');
+	): WritableFSSyncAPI['mergeFolderCurrentAndRemoteVersions'] {
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'mergeFolderCurrentAndRemoteVersions');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, opts: optionsToMsg(opts) }))
 		.then(buf => valOfOptInt(replyType.unpack(buf).newVersion));
 	}
 
 }
-Object.freeze(vsAdoptAllRemoteItems);
+Object.freeze(vsMergeFolderCurrentAndRemoteVersions);
 
 
 namespace vsAdoptRemote {
@@ -2999,95 +2985,80 @@ namespace vArchiveCurrent {
 Object.freeze(vArchiveCurrent);
 
 
-interface FolderDiffMsg {
-	remoteVersion?: Value<number>;
-	currentVersion: number;
-	isCurrentLocal: boolean;
-	isRemoteRemoved: boolean;
-	inCurrent?: ListingEntryMsg[];
-	inRemote?: ListingEntryMsg[];
-	nameOverlaps?: string[];
-	differentKeys?: string[];
-	differentNames?: FolderDiff['differentNames'];
-	ctime: DiffTimeStampsMsg;
-	mtime: DiffTimeStampsMsg;
-	xattrs?: {
-		inCurrent?: file.XAttrMsg[];
-		inRemote?: file.XAttrMsg[];
-		nameOverlaps?: string[];
-	};
+namespace vsDiffCurrentAndRemoteFileVersions {
+
+	const requestType = ProtoType.for<{
+		path: string;
+		opts?: file.vsDiffCurrentAndRemoteVersions.OptionsMsg;
+	}>(pb.DiffCurrentAndRemoteFileVersionsRequestBody);
+
+	const replyType = file.vsDiffCurrentAndRemoteVersions.replyType;
+
+	export function wrapService(
+		fn: ReadonlyFSSyncAPI['diffCurrentAndRemoteFileVersions']
+	): ExposedFn {
+		return buf => {
+			const { path, opts } = requestType.unpack(buf);
+			const promise = fn(path, file.vsDiffCurrentAndRemoteVersions.optsFromMsg(opts))
+			.then(diff => replyType.pack({ diff: file.fileDiffToMsg(diff) }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFSSyncAPI['diffCurrentAndRemoteFileVersions'] {
+		const ipcPath = methodPathFor<ReadonlyFSSyncAPI>(
+			objPath, 'diffCurrentAndRemoteFileVersions'
+		);
+		return (path, opts) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			path, opts: file.vsDiffCurrentAndRemoteVersions.optsToMsg(opts)
+		}))
+		.then(buf => file.fileDiffFromMsg(replyType.unpack(buf).diff));
+	}
+
+}
+Object.freeze(vsDiffCurrentAndRemoteFileVersions);
+
+
+interface FolderDiffMsg extends file.CommonDiffMsg {
+	added?: FolderDiff['added'];
+	removed?: FolderDiff['removed'];
+	renamed?: FolderDiff['renamed'];
+	rekeyed?: FolderDiff['rekeyed'];
+	nameOverlaps?: FolderDiff['nameOverlaps'];
 }
 
-interface DiffTimeStampsMsg {
-	remote?: Value<number>;
-	current: number;
-}
-
-function folderDiffToMsg(
-	diff?: FolderDiff|undefined
-): FolderDiffMsg|undefined {
+function folderDiffToMsg(diff?: FolderDiff|undefined): FolderDiffMsg|undefined {
 	if (!diff) { return; }
 	return {
-		remoteVersion: toOptVal(diff.remoteVersion),
-		currentVersion: diff.currentVersion,
-		isCurrentLocal: diff.isCurrentLocal,
-		isRemoteRemoved: diff.isRemoteRemoved,
-		inCurrent: diff.inCurrent?.map(lsEntryToMsg),
-		inRemote: diff.inRemote?.map(lsEntryToMsg),
-		nameOverlaps: diff.nameOverlaps,
-		differentKeys: diff.differentKeys,
-		differentNames: diff.differentNames,
-		ctime: diffTStoMsg(diff.ctime),
-		mtime: diffTStoMsg(diff.mtime),
-		xattrs: (diff.xattrs ? {
-			inCurrent: diff.xattrs.inCurrent?.map(({ name, value }) => file.xattrToMsg(name, value)),
-			inRemote: diff.xattrs.inRemote?.map(({ name, value }) => file.xattrToMsg(name, value)),
-			nameOverlaps: diff.xattrs.nameOverlaps
-		} : undefined)
+		...file.commonDiffToMsg(diff),
+		added: (diff.added && (diff.added.length > 0) ?
+			diff.added.map(({ name, addedIn }) => ({ name, addedIn })) : undefined
+		),
+		removed: (diff.removed && (diff.removed.length > 0) ?
+			diff.removed.map(({ name, removedIn }) => ({ name, removedIn })) : undefined
+		),
+		renamed: (diff.renamed && (diff.renamed.length > 0) ?
+			diff.renamed.map(({ local, remote, renamedIn }) => ({ local, remote, renamedIn })) : undefined
+		),
+		rekeyed: (diff.rekeyed && (diff.rekeyed.length > 0) ?
+			diff.rekeyed.map(({ local, remote, rekeyedIn }) => ({ local, remote, rekeyedIn })) : undefined
+		),
+		nameOverlaps: (diff.nameOverlaps && (diff.nameOverlaps.length > 0) ? diff.nameOverlaps.concat() : undefined)
 	};
 }
 
-function diffTStoMsg(diffTS: FolderDiff['ctime']): FolderDiffMsg['ctime'] {
-	return {
-		current: diffTS.current.valueOf(),
-		remote: toOptVal(diffTS.remote?.valueOf())
-	};
-}
-
-function folderDiffFromMsg(
-	msg: FolderDiffMsg|undefined
-): FolderDiff|undefined {
+function folderDiffFromMsg(msg: FolderDiffMsg|undefined): FolderDiff|undefined {
 	if (!msg) { return; }
 	return {
-		remoteVersion: valOfOptInt(msg.remoteVersion),
-		currentVersion: fixInt(msg.currentVersion),
-		isCurrentLocal: msg.isCurrentLocal,
-		isRemoteRemoved: msg.isRemoteRemoved,
-		inCurrent: ((msg.inCurrent && (msg.inCurrent!.length > 0)) ? msg.inCurrent!.map(lsEntryFromMsg) : undefined),
-		inRemote: ((msg.inRemote && (msg.inRemote!.length > 0)) ? msg.inRemote!.map(lsEntryFromMsg) : undefined),
-		nameOverlaps: ((msg.nameOverlaps && (msg.nameOverlaps!.length > 0)) ? msg.nameOverlaps : undefined),
-		differentKeys: ((msg.differentKeys && (msg.differentKeys!.length > 0)) ? msg.differentKeys : undefined),
-		differentNames: ((msg.differentNames && (msg.differentNames!.length > 0)) ? msg.differentNames : undefined),
-		ctime: diffTSfromMsg(msg.ctime),
-		mtime: diffTSfromMsg(msg.mtime),
-		xattrs: (msg.xattrs ? {
-			inCurrent: ((msg.xattrs.inCurrent && (msg.xattrs.inCurrent!.length > 0)) ?
-				msg.xattrs.inCurrent!.map(file.xattrFromMsg) : undefined
-			),
-			inRemote: ((msg.xattrs.inRemote && (msg.xattrs.inRemote!.length > 0)) ?
-				msg.xattrs.inRemote!.map(file.xattrFromMsg) : undefined
-			),
-			nameOverlaps: ((msg.xattrs.nameOverlaps && (msg.xattrs.nameOverlaps!.length > 0)) ?
-				msg.xattrs.nameOverlaps : undefined
-			)
-		} : undefined)
-	};
-}
-
-function diffTSfromMsg(m: FolderDiffMsg['ctime']): FolderDiff['ctime'] {
-	return {
-		current: new Date(fixInt(m.current)),
-		remote: (m.remote ? new Date(intValOf(m.remote)) : undefined)
+		...file.commonDiffFromMsg(msg),
+		added: (msg.added ? msg.added : undefined),
+		removed: (msg.removed ? msg.removed : undefined),
+		renamed: (msg.renamed ? msg.renamed : undefined),
+		rekeyed: (msg.rekeyed ? msg.rekeyed : undefined),
+		nameOverlaps: (msg.nameOverlaps ? msg.nameOverlaps : undefined),
 	};
 }
 
@@ -3097,14 +3068,14 @@ namespace vsDiffCurrentAndRemoteFolderVersions {
 	const requestType = ProtoType.for<{
 		path: string;
 		remoteVersion?: Value<number>;
-	}>(pb.DiffCurrentAndRemoteRequestBody);
+	}>(pb.DiffCurrentAndRemoteFolderVersionsRequestBody);
 
 	const replyType = ProtoType.for<{
 		diff?: FolderDiffMsg;
 	}>(pb.DiffCurrentAndRemoteReplyBody);
 
 	export function wrapService(
-		fn: WritableFSSyncAPI['diffCurrentAndRemoteFolderVersions']
+		fn: ReadonlyFSSyncAPI['diffCurrentAndRemoteFolderVersions']
 	): ExposedFn {
 		return buf => {
 			const { path, remoteVersion } = requestType.unpack(buf);

@@ -122,6 +122,7 @@ function wrapWritableFileSyncAPI(
 		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
+		diffCurrentAndRemoteVersions: sImpl.diffCurrentAndRemoteVersions.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -177,6 +178,7 @@ function wrapReadonlyFileSyncAPI(
 		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
 		adoptRemote: sImpl.adoptRemote.bind(sImpl),
+		diffCurrentAndRemoteVersions: sImpl.diffCurrentAndRemoteVersions.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -280,11 +282,12 @@ function wrapWritableFSSyncAPI(
 		startUpload: sImpl.startUpload.bind(sImpl),
 		upload: sImpl.upload.bind(sImpl),
 		adoptRemoteFolderItem: sImpl.adoptRemoteFolderItem.bind(sImpl),
-		adoptAllRemoteItems: sImpl.adoptAllRemoteItems.bind(sImpl),
 		statRemoteItem: sImpl.statRemoteItem.bind(sImpl),
 		listRemoteFolderItem: sImpl.listRemoteFolderItem.bind(sImpl),
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),
 		getRemoteFolderItem: sImpl.getRemoteFolderItem.bind(sImpl),
+		diffCurrentAndRemoteFileVersions: sImpl.diffCurrentAndRemoteFileVersions.bind(sImpl),
+		mergeFolderCurrentAndRemoteVersions: sImpl.mergeFolderCurrentAndRemoteVersions.bind(sImpl),
 	};
 	return Object.freeze(w);
 }
@@ -350,8 +353,8 @@ function wrapReadonlyFSSyncAPI(
 		listRemoteFolderItem: sImpl.listRemoteFolderItem.bind(sImpl),
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),
 		getRemoteFolderItem: sImpl.getRemoteFolderItem.bind(sImpl),
-		diffCurrentAndRemoteFolderVersions:
-			sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
+		diffCurrentAndRemoteFolderVersions: sImpl.diffCurrentAndRemoteFolderVersions.bind(sImpl),
+		diffCurrentAndRemoteFileVersions: sImpl.diffCurrentAndRemoteFileVersions.bind(sImpl),
 	};
 	return Object.freeze(w);
 }

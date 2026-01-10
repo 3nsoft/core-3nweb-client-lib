@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -43,7 +43,8 @@ type WritableFileVersionedAPI = web3n.files.WritableFileVersionedAPI;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
-type UploadEvent = web3n.files.UploadEvent;
+type OptionsToDiffFileVersions = web3n.files.OptionsToDiffFileVersions;
+type FileDiff = web3n.files.FileDiff;
 
 
 export class FileObject implements WritableFile, Linkable {
@@ -377,6 +378,11 @@ class S implements WritableFileSyncAPI {
 	async adoptRemote(opts?: OptionsToAdopteRemote): Promise<void> {
 		const node = await this.n.getNode();
 		await node.adoptRemote(opts);
+	}
+
+	async diffCurrentAndRemoteVersions(opts?: OptionsToDiffFileVersions): Promise<FileDiff|undefined> {
+		const node = await this.n.getNode();
+		return await node.diffCurrentAndRemote(opts?.remoteVersion, !!opts?.compareContentIfSameMTime);
 	}
 
 }

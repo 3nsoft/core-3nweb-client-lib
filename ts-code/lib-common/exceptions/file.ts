@@ -102,13 +102,14 @@ export function makeNoAttrsExc(path: string): FileException {
 	};
 }
 
-export function makeVersionMismatchExc(path: string): FileException {
+export function makeVersionMismatchExc(path: string, message?: string): FileException {
 	return {
 		runtimeException: true,
 		type: 'file',
 		code: undefined,
 		path,
-		versionMismatch: true
+		versionMismatch: true,
+		message
 	}
 }
 

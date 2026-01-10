@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -44,7 +44,9 @@ type SyncVersionsBranch = web3n.files.SyncVersionsBranch;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
-type UploadEvent = web3n.files.UploadEvent;
+type FileDiff = web3n.files.FileDiff;
+type CommonDiff = web3n.files.CommonDiff;
+type OptionsToDiffFileVersions = web3n.files.OptionsToDiffFileVersions;
 
 export function makeFileCaller(
 	caller: Caller, fileMsg: FileMsg
@@ -100,6 +102,7 @@ export function makeFileCaller(
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				startDownload: vsStartDownload.makeCaller(caller, vsPath),
 				adoptRemote: vsAdoptRemote.makeCaller(caller, vsPath),
+				diffCurrentAndRemoteVersions: vsDiffCurrentAndRemoteVersions.makeCaller(caller, vsPath)
 			} as WritableFileSyncAPI;
 			if (file.writable) {
 				file.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
@@ -162,6 +165,9 @@ export function exposeFileService(
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(file.v.sync.isRemoteVersionOnDisk),
 				startDownload: vsStartDownload.wrapService(file.v.sync.startDownload),
 				adoptRemote: vsAdoptRemote.wrapService(file.v.sync.adoptRemote),
+				diffCurrentAndRemoteVersions: vsDiffCurrentAndRemoteVersions.wrapService(
+					file.v.sync.diffCurrentAndRemoteVersions
+				),
 			} as ExposedObj<WritableFileSyncAPI>;
 			if (file.writable) {
 				implExp.v.sync.startedUpload = vsStartUpload.wrapService((file.v.sync as WritableFileSyncAPI).startUpload);
@@ -1694,7 +1700,7 @@ namespace vsAdoptRemote {
 	}>(pb.AdoptRemoteRequestBody);
 
 	export function wrapService(
-		fn: WritableFileSyncAPI['adoptRemote']
+		fn: ReadonlyFileSyncAPI['adoptRemote']
 	): ExposedFn {
 		return buf => {
 			const { opts } = requestType.unpack(buf);
@@ -1705,7 +1711,7 @@ namespace vsAdoptRemote {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFileSyncAPI['adoptRemote'] {
+	): ReadonlyFileSyncAPI['adoptRemote'] {
 		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'adoptRemote');
 		return opts => caller
 		.startPromiseCall(path, requestType.pack({
@@ -1799,6 +1805,171 @@ namespace vArchiveCurrent {
 
 }
 Object.freeze(vArchiveCurrent);
+
+
+export interface CommonDiffMsg {
+	remoteVersion?: Value<number>;
+	currentVersion: number;
+	syncedVersion?: Value<number>;
+	isCurrentLocal: boolean;
+	isRemoteRemoved: boolean;
+	ctime?: DiffTimeStampsMsg;
+	mtime?: DiffTimeStampsMsg;
+	xattrs?: {
+		name: string;
+		addedIn?: Value<'l'|'r'|'l&r'>;
+		removedIn?: Value<'l'|'r'>;
+		changedIn?: Value<'l'|'r'|'l&r'>;
+	}[];
+}
+
+export interface DiffTimeStampsMsg {
+	remote: number;
+	current: number;
+	synced: number;
+}
+
+export interface FileDiffMsg extends CommonDiffMsg {
+	areContentsSame: boolean;
+	size?: {
+		remote: number;
+		current: number;
+	};
+}
+
+function diffTStoMsg(diffTS: CommonDiff['ctime']): CommonDiffMsg['ctime'] {
+	return (diffTS ? {
+		current: diffTS.current.valueOf(),
+		remote: diffTS.remote.valueOf(),
+		synced: diffTS.synced.valueOf(),
+	} : undefined);
+}
+
+function diffTSfromMsg(msg: CommonDiffMsg['ctime']): CommonDiff['ctime'] {
+	return (msg ? {
+		current: new Date(fixInt(msg.current)),
+		remote: new Date(fixInt(msg.remote)),
+		synced: new Date(fixInt(msg.synced)),
+	} : undefined);
+}
+
+export function commonDiffToMsg(diff: CommonDiff): CommonDiffMsg {
+	return {
+		remoteVersion: toOptVal(diff.remoteVersion),
+		currentVersion: diff.currentVersion,
+		syncedVersion: toOptVal(diff.syncedVersion),
+		isCurrentLocal: diff.isCurrentLocal,
+		isRemoteRemoved: diff.isRemoteRemoved,
+		ctime: diffTStoMsg((diff.ctime)),
+		mtime: diffTStoMsg(diff.mtime),
+		xattrs: (diff.xattrs ? Object.entries(diff.xattrs).map(([name, { addedIn, changedIn, removedIn }]) => ({
+			name,
+			addedIn: toOptVal(addedIn),
+			changedIn: toOptVal(changedIn),
+			removedIn: toOptVal(removedIn)
+		})) : undefined)
+	};
+}
+
+export function commonDiffFromMsg(msg: CommonDiffMsg): CommonDiff {
+	let xattrs: CommonDiff['xattrs'] = undefined;
+	if (msg.xattrs && (msg.xattrs.length > 0)) {
+		xattrs = {};
+		for (const { name, addedIn, changedIn, removedIn } of msg.xattrs) {
+			xattrs[name] = {
+				addedIn: valOfOpt(addedIn),
+				changedIn: valOfOpt(changedIn),
+				removedIn: valOfOpt(removedIn),
+			};
+		}
+	}
+	return {
+		remoteVersion: valOfOptInt(msg.remoteVersion),
+		currentVersion: fixInt(msg.currentVersion),
+		syncedVersion: valOfOptInt(msg.syncedVersion),
+		isCurrentLocal: msg.isCurrentLocal,
+		isRemoteRemoved: msg.isRemoteRemoved,
+		ctime: diffTSfromMsg(msg.ctime),
+		mtime: diffTSfromMsg(msg.mtime),
+		xattrs
+	};
+}
+
+export function fileDiffToMsg(diff: FileDiff|undefined): FileDiffMsg|undefined {
+	if (!diff) { return; }
+	return {
+		...commonDiffToMsg(diff),
+		areContentsSame: diff.areContentsSame,
+		size: diff.size
+	};
+}
+
+export function fileDiffFromMsg(msg: FileDiffMsg|undefined): FileDiff|undefined {
+	if (!msg) { return; }
+	return {
+		...commonDiffFromMsg(msg),
+		areContentsSame: msg.areContentsSame,
+		size: (msg.size ? {
+			current: fixInt(msg.size.current),
+			remote: fixInt(msg.size.remote)
+		} : undefined)
+	};
+}
+
+
+export namespace vsDiffCurrentAndRemoteVersions {
+
+	export interface OptionsMsg {
+		remoteVersion?: Value<number>;
+		compareContentIfSameMTime?: Value<boolean>;
+	}
+
+	export function optsFromMsg(opts: OptionsMsg|undefined): OptionsToDiffFileVersions|undefined {
+		return (opts ? {
+			remoteVersion: valOfOptInt(opts.remoteVersion),
+			compareContentIfSameMTime: valOfOpt(opts.compareContentIfSameMTime)
+		} : undefined);
+	}
+
+	export function optsToMsg(opts: OptionsToDiffFileVersions|undefined): OptionsMsg|undefined {
+		return (opts ? {
+			remoteVersion: toOptVal(opts.remoteVersion),
+			compareContentIfSameMTime: toOptVal(opts.compareContentIfSameMTime)
+		} : undefined);
+	}
+
+	const requestType = ProtoType.for<{
+		opts?: OptionsMsg;
+	}>(pb.DiffCurrentAndRemoteRequestBody);
+
+	export const replyType = ProtoType.for<{
+		diff?: FileDiffMsg;
+	}>(pb.DiffCurrentAndRemoteReplyBody);
+
+	export function wrapService(
+		fn: ReadonlyFileSyncAPI['diffCurrentAndRemoteVersions']
+	): ExposedFn {
+		return buf => {
+			const { opts } = requestType.unpack(buf);
+			const promise = fn(optsFromMsg(opts))
+			.then(diff => replyType.pack({ diff: fileDiffToMsg(diff) }));
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFileSyncAPI['diffCurrentAndRemoteVersions'] {
+		const ipcPath = methodPathFor<ReadonlyFileSyncAPI>(
+			objPath, 'diffCurrentAndRemoteVersions'
+		);
+		return opts => caller
+		.startPromiseCall(ipcPath, requestType.pack({ opts: optsToMsg(opts) }))
+		.then(buf => fileDiffFromMsg(replyType.unpack(buf).diff));
+	}
+
+}
+Object.freeze(vsDiffCurrentAndRemoteVersions);
 
 
 Object.freeze(exports);

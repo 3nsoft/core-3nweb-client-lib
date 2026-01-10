@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,7 @@
  * reliance set.
  */
 
-import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
+import { areBytesEqual, NodeInFS } from './node-in-fs';
 import { LinkParameters } from '../fs-utils/files';
 import { Storage, AsyncSBoxCryptor } from './common';
 import { base64, byteLengthIn } from '../../lib-common/buffer-utils';
@@ -29,13 +29,14 @@ import { idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
 import { assert } from '../../lib-common/assert';
 import { CommonAttrs, XAttrs } from './attrs';
 import { makeVersionMismatchExc } from '../../lib-common/exceptions/file';
-import { Attrs, NodePersistance } from './node-persistence';
+import { NodePersistance } from './node-persistence';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
 type XAttrsChanges = web3n.files.XAttrsChanges;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type Stats = web3n.files.Stats;
+type FileDiff = web3n.files.FileDiff;
 
 interface FileAttrs {
 	attrs: CommonAttrs;
@@ -325,22 +326,19 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		bytes: Uint8Array|Uint8Array[], changes?: XAttrsChanges
 	): Promise<number> {
 		return this.doChange(false, async () => {
-			const {
-				attrs, xattrs, newVersion
-			} = super.getParamsForUpdate(changes);
-			const encSub = await this.crypto.saveBytes(
-				bytes, newVersion, attrs, xattrs);
-			const newSize = Promise.resolve(Array.isArray(bytes) ?
-				byteLengthIn(bytes) : bytes.length);
-			await this.savingObjInsideChange(
-				attrs, newSize, xattrs, newVersion, encSub);
+			const { attrs, xattrs, newVersion } = super.getParamsForUpdate(changes);
+			const encSub = await this.crypto.saveBytes(bytes, newVersion, attrs, xattrs);
+			const newSize = Promise.resolve(Array.isArray(bytes) ? byteLengthIn(bytes) : bytes.length);
+			await this.savingObjInsideChange(attrs, newSize, xattrs, newVersion, encSub);
 			return this.version;
 		});
 	}
 
 	getParamsForLink(): LinkParameters<FileLinkParams> {
 		if ((this.storage.type !== 'synced') && (this.storage.type !== 'local')) {
-			throw new Error(`Creating link parameters to object in ${this.storage.type} file system, is not implemented.`);
+			throw new Error(
+				`Creating link parameters to object in ${this.storage.type} file system, is not implemented.`
+			);
 		}
 		const params: FileLinkParams = {
 			fileName: (undefined as any),
@@ -355,11 +353,71 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		return linkParams;
 	}
 
+	private async readRemoteVersion(remoteVersion: number): ReturnType<FilePersistance['getFileAttrs']> {
+		const storage = this.syncedStorage();
+		const srcOfRemote = await storage.getObjSrcOfRemoteVersion(this.objId, remoteVersion);
+		return await this.crypto.getFileAttrs(srcOfRemote);
+	}
+
+	async diffCurrentAndRemote(
+		remoteVersion: number|undefined, compareContentIfSameMTime: boolean
+	): Promise<FileDiff|undefined> {
+		const v = await this.getRemoteVersionToDiff(remoteVersion);
+		if (!v) {
+			return;
+		} else if (v.rm) {
+			return {
+				...v.rmDiff,
+				areContentsSame: false
+			};
+		} else {
+			const { isCurrentLocal, remoteVersion, syncedVersion } = v;
+			const remoteAttrs = await this.readRemoteVersion(remoteVersion);
+			const synced = await this.readRemoteVersion(syncedVersion!);
+			const commonDiff = this.commonDiffWithRemote(
+				isCurrentLocal, remoteVersion, remoteAttrs, syncedVersion!, synced
+			);
+			const current = await this.readSrc(undefined);
+			const remote = await this.readSrc({ remoteVersion });
+			const size = {
+				current: await remote.src.getSize(),
+				remote: await current.src.getSize()
+			};
+			let areContentsSame = (size.current === size.remote);
+			if (areContentsSame && (commonDiff.mtime || compareContentIfSameMTime)) {
+				areContentsSame = await areAllBytesEqualIn(current.src, remote.src);
+			}
+			return {
+				...commonDiff,
+				areContentsSame,
+				size
+			};
+		}
+	}
+
 }
 Object.freeze(FileNode.prototype);
 Object.freeze(FileNode);
 
 
 function noop () {}
+
+const COMPARE_BUF_SIZE = 64*1024;
+
+async function areAllBytesEqualIn(src1: FileByteSource, src2: FileByteSource): Promise<boolean> {
+	await src1.seek(0);
+	await src2.seek(0);
+	let chunk1 = await src1.readNext(COMPARE_BUF_SIZE);
+	let chunk2 = await src2.readNext(COMPARE_BUF_SIZE);
+	while (chunk1 && chunk2) {
+		if (!areBytesEqual(chunk1, chunk2)) {
+			return false;
+		}
+		chunk1 = await src1.readNext(COMPARE_BUF_SIZE);
+		chunk2 = await src2.readNext(COMPARE_BUF_SIZE);
+	}
+	return true;
+}
+
 
 Object.freeze(exports);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2016, 2019, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2016, 2019, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -45,9 +45,7 @@ export interface StorageExceptionFlags {
 	storageIsClosed?: true;
 }
 
-export function makeStorageException(
-	fields: Partial<StorageException>
-): StorageException {
+export function makeStorageException(fields: Partial<StorageException>): StorageException {
 	const exc: StorageException = {
 		runtimeException: true,
 		type: 'storage'
@@ -58,25 +56,19 @@ export function makeStorageException(
 	return exc;
 }
 
-export function makeObjNotFoundExc(
-	objId: ObjId, remoteStorage?: true
-): StorageException {
+export function makeObjNotFoundExc(objId: ObjId, remoteStorage?: true): StorageException {
 	return makeStorageException({
 		objId, objNotFound: true, remoteStorage
 	});
 }
 
-export function makeObjVersionNotFoundExc(
-	objId: ObjId, version: number, remoteStorage?: true
-): StorageException {
+export function makeObjVersionNotFoundExc(objId: ObjId, version: number, remoteStorage?: true): StorageException {
 	return makeStorageException({
 		objId, version, objVersionNotFound: true, remoteStorage
 	});
 }
 
-export function makeObjExistsExc(
-	objId: ObjId, version?: number, remoteStorage?: true
-): StorageException {
+export function makeObjExistsExc(objId: ObjId, version?: number, remoteStorage?: true): StorageException {
 	return makeStorageException({
 		objId, version, objExists: true, remoteStorage
 	});
@@ -94,9 +86,7 @@ export function makeUnknownTransactionExc(objId: ObjId): StorageException {
 	});
 }
 
-export function makeVersionMismatchExc(
-	objId: ObjId, currentVersion: number
-): StorageException {
+export function makeVersionMismatchExc(objId: ObjId, currentVersion: number): StorageException {
 	return makeStorageException({
 		objId, versionMismatch: true, currentVersion, remoteStorage: true
 	});
@@ -106,9 +96,7 @@ export function makeStorageIsClosedExc(): StorageException {
 	return makeStorageException({ storageIsClosed: true });
 }
 
-export function makeFSSyncException(
-	path: string, fields: Partial<FSSyncException>
-): FSSyncException {
+export function makeFSSyncException(path: string, fields: Partial<FSSyncException>): FSSyncException {
 	const exc: FSSyncException = {
 		runtimeException: true,
 		type: 'fs-sync',

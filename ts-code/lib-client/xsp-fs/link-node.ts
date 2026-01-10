@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,7 @@
  * reliance set.
  */
 
-import { NodeInFS, shouldReadCurrentVersion } from './node-in-fs';
+import { NodeInFS } from './node-in-fs';
 import { utf8 } from '../../lib-common/buffer-utils';
 import { LinkParameters } from '../fs-utils/files';
 import { DeviceFS } from '../local-files/device-fs';

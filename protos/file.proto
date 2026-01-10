@@ -303,6 +303,50 @@ message OptionsToAdopteRemote {
 	common.UInt64Value remote_version = 2;
 }
 
+// --- ReadonlyFileSyncAPI.diffCurrentAndRemoteVersions ---
+message DiffCurrentAndRemoteRequestBody {
+	OptionsToDiffFileVersions opts = 1;
+}
+message DiffCurrentAndRemoteReplyBody {
+	FileDiff diff = 1;
+}
+
+message OptionsToDiffFileVersions {
+	common.UInt64Value remote_version = 1;
+	common.BooleanValue compare_content_if_same_m_time = 2;
+}
+
+message TimeStampsDiff {
+	uint64 current = 1;
+	uint64 remote = 2;
+	uint64 synced = 3;
+}
+message XAttrDiff {
+	string name = 1;
+	common.StringValue added_in = 2;
+	common.StringValue removed_in = 3;
+	common.StringValue changed_in = 4;
+}
+
+message FileDiff {
+	// CommonDiff fields
+	uint64 current_version = 1;
+	bool is_current_local = 2;
+	common.UInt64Value remote_version = 3;
+	common.UInt64Value synced_version = 4;
+	bool is_remote_removed = 5;
+	TimeStampsDiff ctime = 6;
+	TimeStampsDiff mtime = 7;
+	repeated XAttrDiff xattrs = 8;
+
+	message Size {
+		uint64 current = 1;
+		uint64 remote = 2;
+	}
+	bool are_contents_same = 11;
+	Size size = 12;
+}
+
 
 // ==== WritableFileSyncAPI referable object ====
 
