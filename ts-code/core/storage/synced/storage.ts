@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -314,6 +314,10 @@ export class SyncedStore implements ISyncedStorage {
 
 	resumeNetworkActivity(): void {
 		this.remoteEvents.resumeNetworkActivity();
+	}
+
+	get connectionEvent$() {
+		return this.remoteEvents.connectionEvent$;
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -504,7 +504,8 @@ export class Core {
 
 	get connectivityEvents() {
 		return {
-			inbox$: this.asmail.connectivityEvent$
+			inbox$: this.asmail.connectivityEvent$,
+			storage$: this.storages.connectivityEvent$
 		};
 	}
 

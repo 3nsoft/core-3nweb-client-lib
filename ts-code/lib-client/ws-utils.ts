@@ -50,21 +50,16 @@ export function openSocket(
 	ws.on('error', initOnError);
 	ws.on('unexpected-response', onNonOkReply);
 	ws.once('open', () => {
-		const okReply: Reply<WebSocket> = {
+		opening?.resolve({
 			url,
 			method: 'GET',
 			status: 200,
 			data: ws
-		};
-		opening?.resolve(okReply);
+		});
 		opening = undefined;
 		ws.removeListener('error', initOnError);
 		ws.removeListener('unexpected-response', onNonOkReply);
 	});
-	ws.on('error', err => {
-		// XXX we need 
-		console.error(`Error in ${ws.url} connection`, err);
-	})
 	return opening.promise;
 }
 

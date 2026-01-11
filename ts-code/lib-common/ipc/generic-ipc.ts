@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -741,13 +741,9 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 		for (const listener of listeners) {
 			try {
 				if (err === undefined) {
-					if (listener.observer.complete) {
-						listener.observer.complete();
-					}
+					listener.observer.complete?.();
 				} else {
-					if (listener.observer.error) {
-						listener.observer.error(err);
-					}
+					listener.observer.error?.(err);
 				}
 			} catch (err2) {
 				console.error(err2);
@@ -757,6 +753,20 @@ class EventsReceivingSide extends RequestingSide implements SubscribingClient {
 
 	protected handleCompletion(err?: any): void {
 		super.handleCompletion(err);
+		for (const ipcChannel of this.listeners.keys()) {
+			const listeners = this.listeners.get(ipcChannel) ?? [];
+			for (const listener of listeners) {
+				try {
+					if (err === undefined) {
+						listener.observer.complete?.();
+					} else {
+						listener.observer.error?.(err);
+					}
+				} catch (err2) {
+					console.error(err2);
+				}
+			}
+		}
 		this.listeners.clear();
 	}
 
@@ -877,16 +887,14 @@ export class MultiObserverWrap<T> {
 	next(o: T): void {
 		if (this.isDone) { return; }
 		for (const obs of this.obs) {
-			if (!obs.next) { continue; }
-			obs.next(o);
+			obs.next?.(o);
 		}
 	}
 	
 	error(err: any): void {
 		if (this.isDone) { return; }
 		for (const obs of this.obs) {
-			if (!obs.error) { continue; }
-			obs.error(err);
+			obs.error?.(err);
 		}
 		this.setDone();
 	}
@@ -894,8 +902,7 @@ export class MultiObserverWrap<T> {
 	complete(): void {
 		if (this.isDone) { return; }
 		for (const obs of this.obs) {
-			if (!obs.complete) { continue; }
-			obs.complete();
+			obs.complete?.();
 		}
 		this.setDone();
 	}
@@ -935,24 +942,18 @@ export class SingleObserverWrap<T> {
 	
 	next(o: T): void {
 		if (this.isDone || !this.obs) { return; }
-		if (this.obs.next) {
-			this.obs.next(o);
-		}
+		this.obs?.next?.(o);
 	}
 	
 	error(err: any): void {
 		if (this.isDone) { return; }
-		if (this.obs && this.obs.error) {
-			this.obs.error(err);
-		}
+		this.obs?.error?.(err);
 		this.setDone();
 	}
 
 	complete(): void {
 		if (this.isDone) { return; }
-		if (this.obs && this.obs.complete) {
-			this.obs.complete();
-		}
+		this.obs?.complete?.();
 		this.setDone();
 	}
 	

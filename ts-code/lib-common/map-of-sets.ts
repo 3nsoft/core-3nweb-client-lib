@@ -52,6 +52,10 @@ export class MapOfSets<TKey, TValue> {
 		this.map.clear();
 	}
 
+	keys(): MapIterator<TKey> {
+		return this.map.keys();
+	}
+
 }
 Object.freeze(MapOfSets.prototype);
 Object.freeze(MapOfSets);

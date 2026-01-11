@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2025 3NSoft Inc.
+ Copyright (C) 2017, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { Observable, share, Subject, Subscription } from 'rxjs';
 import { makeRuntimeException } from '../exceptions/runtime';
@@ -34,6 +35,7 @@ export function makeWSException(params: Partial<WSException>, flags?: Partial<WS
 }
 
 const MAX_TXT_BUFFER = 64*1024;
+const CLIENT_SIDE_PING_PERIOD = 10*1000;
 
 /**
  * This creates a json communication point on a given web socket.
@@ -49,6 +51,22 @@ function makeJsonCommPoint(ws: WebSocket): {
 
 	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat(ws.url);
 
+	let outstandingPongs = 0;
+	let closedByPingProc = false;
+	const pingRepeat = setInterval(() => {
+		if (outstandingPongs >= 2) {
+			ws.close();
+			closedByPingProc = true;
+			clearInterval(pingRepeat);
+			return;
+		}
+		if (outstandingPongs > 0) {
+			otherBeat('heartbeat-skip', { missingPongsFromServer: outstandingPongs });
+		}
+		ws.ping();
+		outstandingPongs += 1;
+	}, CLIENT_SIDE_PING_PERIOD);
+
 	ws.on('message', data => {
 		if (observers.done) { return; }
 
@@ -57,7 +75,8 @@ function makeJsonCommPoint(ws: WebSocket): {
 			env = JSON.parse((data as Buffer).toString('utf8'));
 		} catch (err) {
 			ws.close();
-			otherBeat(err, true);
+			clearInterval(pingRepeat);
+			otherBeat('disconnected', err, true);
 			observers.error(err);
 			return;
 		}
@@ -67,11 +86,12 @@ function makeJsonCommPoint(ws: WebSocket): {
 	});
 
 	ws.on('close', (code, reason) => {
+		clearInterval(pingRepeat);
 		if (code === 1000) {
-			otherBeat({ socketClosed: true }, true);
+			otherBeat('disconnected', { socketClosed: true }, true);
 			observers.complete();
 		} else {
-			otherBeat({ error: { code, reason } }, true);
+			otherBeat('disconnected', { error: { code, reason } }, true);
 			observers.error(makeWSException({
 				socketClosed: true,
 				cause: { code, reason }
@@ -80,8 +100,9 @@ function makeJsonCommPoint(ws: WebSocket): {
 	});
 
 	ws.on('error', (err?: any): void => {
-		otherBeat(err, true);
+		otherBeat('disconnected', err, true);
 		observers.error(makeWSException({ cause: err }));
+		clearInterval(pingRepeat);
 		ws.close();
 	});
 
@@ -90,16 +111,23 @@ function makeJsonCommPoint(ws: WebSocket): {
 		healthyBeat();
 	});
 
+	ws.on('pong', () => {
+		healthyBeat();
+		outstandingPongs = 0;
+	});
+
 	const comm: RawDuplex<Envelope> = {
 		subscribe: obs => observers.add(obs),
 		postMessage(env: Envelope): void {
 			if ((ws as any).bufferedAmount > MAX_TXT_BUFFER) {
-				otherBeat({ slowSocket: true });
+				otherBeat('heartbeat', { slowSocket: true });
 				throw makeWSException({ socketSlow: true });
 			}
 			ws.send(JSON.stringify(env));
 		}
 	};
+
+	otherBeat('connected', {});
 
 	return { comm, heartbeat };
 }
@@ -113,14 +141,16 @@ function makeHeartbeat(url: string) {
 	function healthyBeat(): void {
 		const now = Date.now();
 		status.next({
+			type: 'heartbeat',
 			url,
 			ping: now - lastInfo
 		});
 		lastInfo = now;
 	}
 
-	function otherBeat(params: Partial<ConnectionStatus>, end = false): void {
+	function otherBeat(type: ConnectionStatus['type'], params: Partial<ConnectionStatus>, end = false): void {
 		status.next({
+			type,
 			url,
 			...params				
 		});
@@ -138,6 +168,8 @@ function makeHeartbeat(url: string) {
 
 export interface ConnectionStatus {
 
+	type: 'heartbeat' | 'heartbeat-skip' | 'disconnected' | 'connected';
+
 	url: string;
 
 	/**
@@ -149,6 +181,8 @@ export interface ConnectionStatus {
 	 * This mirrors a "slow socket" exception, thrown to data sending process.
 	 */
 	slowSocket?: true;
+
+	missingPongsFromServer?: number;
 
 	socketClosed?: true;
 

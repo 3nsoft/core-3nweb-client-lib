@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2019 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2019 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,7 @@ import type { ScryptGenParams } from '../key-derivation';
 import type { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import type { Observable } from 'rxjs';
 import type { LogError } from '../logging/log-to-file';
+import { StorageConnectionStatus } from '../../core/storage/synced/remote-events';
 
 export type { AsyncSBoxCryptor } from 'xsp-files';
 export type { FolderInJSON } from './folder-node'; 
@@ -264,6 +265,8 @@ export interface SyncedStorage extends Storage {
 
 	resumeNetworkActivity(): void;
 
+	connectionEvent$: Observable<StorageConnectionStatus>;
+
 }
 
 export interface SyncedObjStatus extends LocalObjStatus {
@@ -302,6 +305,7 @@ export function wrapSyncStorageImplementation(impl: SyncedStorage): SyncedStorag
 	wrap.suspendNetworkActivity = impl.suspendNetworkActivity.bind(impl);
 	wrap.resumeNetworkActivity = impl.resumeNetworkActivity.bind(impl);
 	wrap.getNumOfBytesNeedingDownload = impl.getNumOfBytesNeedingDownload.bind(impl);
+	wrap.connectionEvent$ = impl.connectionEvent$;
 	return Object.freeze(wrap);
 }
 

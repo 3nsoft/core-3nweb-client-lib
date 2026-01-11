@@ -35,8 +35,7 @@ export function makeMsgNotFoundException(msgId: string): InboxException {
 	return exc;
 }
 
-export function makeObjNotFoundException(msgId: string, objId: string):
-		InboxException {
+export function makeObjNotFoundException(msgId: string, objId: string): InboxException {
 	const exc: InboxException = {
 		runtimeException: true,
 		type: 'inbox',
@@ -65,16 +64,11 @@ const inboxAccessParams: ServiceAccessParams = {
 
 
 export class MailRecipient extends ServiceUser {
-	
+
 	constructor(
-		user: string, getSigner: IGetMailerIdSigner,
-		mainUrlGetter: () => Promise<string>,
-		net: NetClient
+		user: string, getSigner: IGetMailerIdSigner, mainUrlGetter: () => Promise<string>, net: NetClient
 	) {
-		super(
-			user, inboxAccessParams, getSigner,
-			serviceUriGetter(net, mainUrlGetter), net
-		);
+		super(user, inboxAccessParams, getSigner, serviceUriGetter(net, mainUrlGetter), net);
 		Object.seal(this);
 	}
 
@@ -131,7 +125,8 @@ export class MailRecipient extends ServiceUser {
 	 * request.
 	 */
 	async getObj(msgId: string, objId: string, limit: number): Promise<{
-			segsTotalLen: number; header: Uint8Array; segsChunk: Uint8Array; }> {
+		segsTotalLen: number; header: Uint8Array; segsChunk: Uint8Array;
+	}> {
 		const opts: api.GetObjQueryOpts = { header: true, limit };
 		const rep = await this.doBodylessSessionRequest<Uint8Array>({
 			appPath: api.msgObj.genUrlEnd(msgId, objId, opts),
@@ -171,17 +166,19 @@ export class MailRecipient extends ServiceUser {
 	 * @param start is a start read position in segments
 	 * @param end is an end, excluded, read position in segments
 	 */
-	async getObjSegs(msgId: string, objId: string, start: number, end: number):
-			Promise<Uint8Array> {
-		if (start >= end) { throw new Error(
-			`Start parameter ${start} is not smaller than end ${end}`); }
+	async getObjSegs(msgId: string, objId: string, start: number, end: number): Promise<Uint8Array> {
+		if (start >= end) {
+			throw new Error(`Start parameter ${start} is not smaller than end ${end}`);
+		}
 		const opts: api.GetObjQueryOpts = { ofs: start, limit: end - start };
 		const rep = await this.doBodylessSessionRequest<Uint8Array>({
 			appPath: api.msgObj.genUrlEnd(msgId, objId, opts),
 			method: 'GET',
 			responseType: 'arraybuffer',
-			responseHeaders: [ api.HTTP_HEADER.objSegmentsLength,
-				api.HTTP_HEADER.objHeaderLength ]
+			responseHeaders: [
+				api.HTTP_HEADER.objSegmentsLength,
+				api.HTTP_HEADER.objHeaderLength
+			]
 		});
 
 		if (rep.status === api.msgObj.SC.ok) {
@@ -218,15 +215,13 @@ export class MailRecipient extends ServiceUser {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}
 	}
-	
+
 }
 Object.freeze(MailRecipient);
 Object.freeze(MailRecipient.prototype);
 
 
-function serviceUriGetter(
-	net: NetClient, mainUrlGetter: () => Promise<string>
-): () => Promise<string> {
+function serviceUriGetter(net: NetClient, mainUrlGetter: () => Promise<string>): () => Promise<string> {
 	return async (): Promise<string> => {
 		const serviceUrl = await mainUrlGetter();
 		const info = await asmailInfoAt(net, serviceUrl);
