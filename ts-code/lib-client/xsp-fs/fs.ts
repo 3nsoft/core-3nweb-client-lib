@@ -1057,27 +1057,11 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	// async adoptAllRemoteItems(
-	// 	path: string, opts?: OptionsToAdoptAllRemoteItems
-	// ): Promise<number|undefined> {
-	// 	const folderNode = await this.getFolderNode(path);
-	// 	return await folderNode.adoptItemsFromRemoteVersion(opts);
-	// }
-
 	async mergeFolderCurrentAndRemoteVersions(
 		path: string, opts?: OptionsToMergeFolderVersions
 	): Promise<number|undefined> {
 		const folderNode = await this.getFolderNode(path);
-		const newLocalVersion = await folderNode.mergeCurrentAndRemoteVersions(opts);
-		if (newLocalVersion && (newLocalVersion < 0)) {
-			const { folderPath } = split(path);
-			if (folderPath.length > 0) {
-				const parent = await this.n.get(folderPath.join('/'));
-				// XXX removing folder in parent -- what happens with children?
-				await (parent as FolderNode).removeChild(folderNode);
-			}
-		}
-		return newLocalVersion;
+		return await folderNode.mergeCurrentAndRemoteVersions(opts);
 	}
 
 }

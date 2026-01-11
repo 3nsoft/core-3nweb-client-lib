@@ -3034,12 +3034,8 @@ function folderDiffToMsg(diff?: FolderDiff|undefined): FolderDiffMsg|undefined {
 	if (!diff) { return; }
 	return {
 		...file.commonDiffToMsg(diff),
-		added: (diff.added && (diff.added.length > 0) ?
-			diff.added.map(({ name, addedIn }) => ({ name, addedIn })) : undefined
-		),
-		removed: (diff.removed && (diff.removed.length > 0) ?
-			diff.removed.map(({ name, removedIn }) => ({ name, removedIn })) : undefined
-		),
+		added: diff.added,
+		removed: diff.removed,
 		renamed: (diff.renamed && (diff.renamed.length > 0) ?
 			diff.renamed.map(({ local, remote, renamedIn }) => ({ local, remote, renamedIn })) : undefined
 		),
@@ -3054,14 +3050,36 @@ function folderDiffFromMsg(msg: FolderDiffMsg|undefined): FolderDiff|undefined {
 	if (!msg) { return; }
 	return {
 		...file.commonDiffFromMsg(msg),
-		added: (msg.added ? msg.added : undefined),
-		removed: (msg.removed ? msg.removed : undefined),
-		renamed: (msg.renamed ? msg.renamed : undefined),
-		rekeyed: (msg.rekeyed ? msg.rekeyed : undefined),
-		nameOverlaps: (msg.nameOverlaps ? msg.nameOverlaps : undefined),
+		added: reduceEmptyIn(msg.added),
+		removed: reduceEmptyIn(msg.removed),
+		renamed: reduceEmptyArr(msg.renamed),
+		rekeyed: reduceEmptyArr(msg.rekeyed),
+		nameOverlaps: reduceEmptyArr(msg.nameOverlaps),
 	};
 }
 
+function reduceEmptyIn(c: FolderDiff['removed']|FolderDiff['added']) {
+	if (!c) {
+		return;
+	}
+	if (c.inLocal && (c.inLocal.length > 0)) {
+		if (c.inRemote && (c.inRemote.length > 0)) {
+			return c;
+		} else {
+			return { inLocal: c.inLocal };
+		}
+	} else {
+		if (c.inRemote && (c.inRemote.length > 0)) {
+			return { inRemote: c.inRemote };
+		} else {
+			return;
+		}
+	}
+}
+
+function reduceEmptyArr<T>(arr: T[]|undefined) {
+	return (arr && (arr.length > 0) ? arr : undefined);
+} 
 
 namespace vsDiffCurrentAndRemoteFolderVersions {
 

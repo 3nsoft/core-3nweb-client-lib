@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022, 2025 3NSoft Inc.
+ Copyright (C) 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -61,10 +61,8 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff).toBeDefined();
 	expect(diff!.currentVersion).toBe(folderStatus.local!.latest!);
 	expect(diff!.remoteVersion).toBe(folderStatus.remote!.latest!);
-	expect(diff!.added!.find(({ addedIn, name }) => ((name === file) && (addedIn === 'l'))))
-	.toBeDefined();
-	expect(diff!.added!.find(({ addedIn, name }) => ((name === file) && (addedIn === 'r'))))
-	.toBeDefined();
+	expect(diff!.added!.inLocal!.includes(file)).toBeTrue();
+	expect(diff!.added!.inRemote!.includes(file)).toBeTrue();
 	expect(diff!.nameOverlaps!).toContain(file);
 
 	const syncEvents = watchForEvents<FolderEvent|RemoteEvent>(
@@ -145,10 +143,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff).toBeDefined();
 	expect(diff!.currentVersion).toBe(folderStatus.local!.latest!);
 	expect(diff!.remoteVersion).toBe(folderStatus.remote!.latest!);
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === file) && (addedIn === 'l')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileFromDev2) && (addedIn === 'l')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === file) && (addedIn === 'r')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileFromDev1) && (addedIn === 'r')))).toBeDefined();
+	expect(diff!.added!.inLocal!.includes(file)).toBeTrue();
+	expect(diff!.added!.inLocal!.includes(fileFromDev2)).toBeTrue();
+	expect(diff!.added!.inRemote!.includes(file)).toBeTrue();
+	expect(diff!.added!.inRemote!.includes(fileFromDev1)).toBeTrue();
 	expect(diff!.nameOverlaps!).toContain(file);
 
 	// we can stat remote child
@@ -416,10 +414,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(syncStatus.state).toBe('conflicting');
 
 	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('', syncStatus.remote!.latest);
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === folder) && (addedIn === 'l')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileB) && (addedIn === 'l')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === folder) && (addedIn === 'r')))).toBeDefined();
-	expect(diff!.added!.find(({ name, addedIn }) => ((name === fileA) && (addedIn === 'r')))).toBeDefined();
+	expect(diff!.added!.inLocal!.includes(folder)).toBeTrue();
+	expect(diff!.added!.inLocal!.includes(fileB)).toBeTrue();
+	expect(diff!.added!.inRemote!.includes(folder)).toBeTrue();
+	expect(diff!.added!.inRemote!.includes(fileA)).toBeTrue();
 	expect(diff!.nameOverlaps!).toContain(folder);
 
 	await dev2FS().v!.sync!.mergeFolderCurrentAndRemoteVersions('').then(

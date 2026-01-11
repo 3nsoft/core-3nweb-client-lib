@@ -1242,13 +1242,11 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			const nodes = state.nodes;
 			const remoteNodes = remote.folderInfo.nodes;
 			const events: Awaited<ReturnType<TransactionChange>> = [];
-			if (removed) {
-				for (const { name, removedIn } of removed) {
-					if (removedIn === 'r') {
-						const node = nodes[name];
-						delete nodes[name];
-						events.push(this.makeEntryRemovalEvent(newVersion, 'sync', node));
-					}
+			if (removed?.inRemote) {
+				for (const name of removed.inRemote) {
+					const node = nodes[name];
+					delete nodes[name];
+					events.push(this.makeEntryRemovalEvent(newVersion, 'sync', node));
 				}
 			}
 			if (renamed) {
@@ -1268,19 +1266,17 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 					}
 				}
 			}
-			if (added) {
-				for (const { name, addedIn } of added) {
-					if (addedIn === 'r') {
-						const node = remoteNodes[name];
-						assert(!!node);
-						if (nameOverlaps?.includes(name)) {
-							while (nodes[node.name]) {
-								node.name = `${node.name}${opts?.postfixForNameOverlaps}`;
-							}
+			if (added?.inRemote) {
+				for (const name of added.inRemote) {
+					const node = remoteNodes[name];
+					assert(!!node);
+					if (nameOverlaps?.includes(name)) {
+						while (nodes[node.name]) {
+							node.name = `${node.name}${opts?.postfixForNameOverlaps}`;
 						}
-						nodes[node.name] = node;
-						events.push(this.makeEntryAdditionEvent(newVersion, 'sync', node));
 					}
+					nodes[node.name] = node;
+					events.push(this.makeEntryAdditionEvent(newVersion, 'sync', node));
 				}
 			}
 			return events;
@@ -1342,9 +1338,9 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 } {
 	const currentNodesById = orderByIds(current.nodes);
 	const syncedNodesById = orderByIds(synced.nodes);
-	const removed: NonNullable<FolderDiff['removed']> = [];
+	const removed: NonNullable<FolderDiff['removed']> = { inLocal: [], inRemote: [] };
 	const renamed: NonNullable<FolderDiff['renamed']> = [];
-	const added: NonNullable<FolderDiff['added']> = [];
+	const added: NonNullable<FolderDiff['added']> = { inLocal: [], inRemote: [] };
 	const rekeyed: NonNullable<FolderDiff['rekeyed']> = [];
 	const nameOverlaps: string[] = [];
 	for (const remoteNode of Object.values(remote.nodes)) {
@@ -1381,9 +1377,9 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 		} else {
 			const syncedNode = syncedNodesById.get(remoteNode.objId)!;
 			if (syncedNode) {
-				removed.push({ name: remoteNode.name, removedIn: 'l' });
+				removed.inLocal!.push(remoteNode.name);
 			} else {
-				added.push({ name: remoteNode.name, addedIn: 'r' });
+				added.inRemote!.push(remoteNode.name);
 			}
 			if (current.nodes[remoteNode.name]) {
 				nameOverlaps.push(remoteNode.name);
@@ -1393,13 +1389,13 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 	for (const localNode of currentNodesById.values()) {
 		const syncedNode = syncedNodesById.get(localNode.objId)!;
 		if (!syncedNode) {
-			added.push({ name: localNode.name, addedIn: 'l' });
+			added.inLocal!.push(localNode.name);
 		}
 	}
 	return {
-		removed: ((removed.length > 0) ? removed : undefined),
+		removed: reduceEmptyIn(removed),
 		renamed: ((renamed.length > 0) ? renamed : undefined),
-		added: ((added.length > 0) ? added : undefined),
+		added: reduceEmptyIn(added),
 		rekeyed: ((rekeyed.length > 0) ? rekeyed : undefined),
 		nameOverlaps: ((nameOverlaps.length > 0) ? nameOverlaps : undefined),
 	};
@@ -1443,6 +1439,22 @@ function identifyChanges(
 		}
 	}
 	return { addedNodes, removedNodes, renamedNodes };
+}
+
+function reduceEmptyIn(c: NonNullable<FolderDiff['removed']|FolderDiff['added']>) {
+	if (c.inLocal!.length > 0) {
+		if (c.inRemote!.length > 0) {
+			return c;
+		} else {
+			return { inLocal: c.inLocal };
+		}
+	} else {
+		if (c.inRemote!.length > 0) {
+			return { inRemote: c.inRemote };
+		} else {
+			return;
+		}
+	}
 }
 
 

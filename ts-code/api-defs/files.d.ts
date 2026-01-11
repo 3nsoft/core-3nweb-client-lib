@@ -1559,16 +1559,16 @@ declare namespace web3n.files {
 	interface FolderDiff extends CommonDiff {
 
 		/**
-		 * Items that were removed. Pointing to where removal is done in remote (r), or local (l) branches.
+		 * Items that were removed.
 		 * 
 		 * Consider the following example.
 		 * Item that is removed in local version is present in both remote and synced versions.
 		 * Hence, difference between local and remote versions is due to removal in local branch.
 		 */
 		removed?: {
-			name: string;
-			removedIn: 'l'|'r';
-		}[];
+			inRemote?: string[];
+			inLocal?: string[];
+		};
 
 		/**
 		 * Items that were renamed. Pointing to where renaming is done in remote (r), or local (l) branches.
@@ -1583,15 +1583,15 @@ declare namespace web3n.files {
 		}[];
 
 		/**
-		 * Items that were added. Pointing to where addition is done in remote (r), or local (l) branches.
+		 * Items that were added.
 		 * 
 		 * When item added in remote branch, then it is present in remote version under the referenced name.
 		 * Synced (older) state of folder doesn't have it, and neither does local.
 		 */
 		added?: {
-			name: string;
-			addedIn: 'l'|'r';
-		}[];
+			inRemote?: string[];
+			inLocal?: string[];
+		};
 
 		/**
 		 * Items that reencrypted and now have different keys.

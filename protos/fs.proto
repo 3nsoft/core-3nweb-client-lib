@@ -510,27 +510,23 @@ message FolderDiff {
 	file.TimeStampsDiff mtime = 7;
 	repeated file.XAttrDiff xattrs = 8;
 
-	message Removed {
-		string name = 1;
-		string removed_in = 2;
+	message ItemsByBranches {
+		repeated string in_local = 1;
+		repeated string in_remote = 2;
 	}
 	message Renamed {
 		string local = 1;
 		string remote = 2;
 		string renamed_in = 3;
 	}
-	message Added {
-		string name = 1;
-		string added_in = 2;
-	}
 	message Rekeyed {
 		string local = 1;
 		string remote = 2;
 		string rekeyed_in = 3;
 	}
-	repeated Removed removed = 11;
+	ItemsByBranches removed = 11;
 	repeated Renamed renamed = 12;
-	repeated Added added = 13;
+	ItemsByBranches added = 13;
 	repeated Rekeyed rekeyed = 14;
 	repeated string name_overlaps = 15;
 }
