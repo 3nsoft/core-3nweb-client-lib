@@ -267,6 +267,8 @@ export interface SyncedStorage extends Storage {
 
 	connectionEvent$: Observable<StorageConnectionStatus>;
 
+	whenConnected(): Promise<void>;
+
 }
 
 export interface SyncedObjStatus extends LocalObjStatus {
@@ -306,6 +308,7 @@ export function wrapSyncStorageImplementation(impl: SyncedStorage): SyncedStorag
 	wrap.resumeNetworkActivity = impl.resumeNetworkActivity.bind(impl);
 	wrap.getNumOfBytesNeedingDownload = impl.getNumOfBytesNeedingDownload.bind(impl);
 	wrap.connectionEvent$ = impl.connectionEvent$;
+	wrap.whenConnected = impl.whenConnected.bind(impl);
 	return Object.freeze(wrap);
 }
 

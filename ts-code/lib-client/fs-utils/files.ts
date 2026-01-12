@@ -116,6 +116,7 @@ function wrapWritableFileSyncAPI(
 ): WritableFileSyncAPI|undefined {
 	if (!sImpl) { return; }
 	const w: WritableFileSyncAPI = {
+		whenConnected: sImpl.whenConnected.bind(sImpl),
 		status: sImpl.status.bind(sImpl),
 		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
@@ -174,6 +175,7 @@ function wrapReadonlyFileSyncAPI(
 ): ReadonlyFileSyncAPI|undefined {
 	if (!sImpl) { return; }
 	const w: ReadonlyFileSyncAPI = {
+		whenConnected: sImpl.whenConnected.bind(sImpl),
 		status: sImpl.status.bind(sImpl),
 		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
@@ -274,6 +276,7 @@ function wrapWritableFSSyncAPI(
 ): WritableFSSyncAPI|undefined {
 	if (!sImpl) { return; }
 	const w: WritableFSSyncAPI = {
+		whenConnected: sImpl.whenConnected.bind(sImpl),
 		status: sImpl.status.bind(sImpl),
 		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),
@@ -345,6 +348,7 @@ function wrapReadonlyFSSyncAPI(
 ): ReadonlyFSSyncAPI|undefined {
 	if (!sImpl) { return; }
 	const w: ReadonlyFSSyncAPI = {
+		whenConnected: sImpl.whenConnected.bind(sImpl),
 		status: sImpl.status.bind(sImpl),
 		startDownload: sImpl.startDownload.bind(sImpl),
 		isRemoteVersionOnDisk: sImpl.isRemoteVersionOnDisk.bind(sImpl),

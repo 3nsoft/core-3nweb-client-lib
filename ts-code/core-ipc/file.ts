@@ -98,6 +98,7 @@ export function makeFileCaller(
 		if (fileMsg.isSynced) {
 			const vsPath = methodPathFor<ReadonlyFileVersionedAPI>(vPath, 'sync');
 			file.v.sync = {
+				whenConnected: vsWhenConnected.makeCaller(caller, vsPath),
 				status: vsStatus.makeCaller(caller, vsPath),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				startDownload: vsStartDownload.makeCaller(caller, vsPath),
@@ -161,6 +162,7 @@ export function exposeFileService(
 		}
 		if (file.v.sync) {
 			implExp.v.sync = {
+				whenConnected: vsWhenConnected.wrapService(file.v.sync.whenConnected),
 				status: vsStatus.wrapService(file.v.sync.status),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(file.v.sync.isRemoteVersionOnDisk),
 				startDownload: vsStartDownload.wrapService(file.v.sync.startDownload),
@@ -1461,6 +1463,31 @@ export namespace vGetByteSink {
 
 }
 Object.freeze(vGetByteSink);
+
+
+export namespace vsWhenConnected {
+
+	export function wrapService(fn: ReadonlyFileSyncAPI['whenConnected']): ExposedFn {
+		return buf => {
+			const promise = fn();
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): ReadonlyFileSyncAPI['whenConnected'] {
+		const path = methodPathFor<ReadonlyFileSyncAPI>(objPath, 'whenConnected');
+		return () => caller
+		.startPromiseCall(path, undefined)
+		.then(noop);
+	}
+
+}
+Object.freeze(vsWhenConnected);
+
+
+function noop() {}
 
 
 namespace vsStatus {

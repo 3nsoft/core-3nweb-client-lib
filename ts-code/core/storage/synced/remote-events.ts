@@ -23,6 +23,7 @@ import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter, share } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { addToStatus, ConnectionStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import { defer, Deferred } from '../../../lib-common/processes/deferred';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -49,6 +50,7 @@ export class RemoteEvents {
 	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private readonly wsProc: WebSocketListening;
+	private deferredConnection: Deferred<void>|undefined = defer();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -65,8 +67,18 @@ export class RemoteEvents {
 
 	private makeProc(): Observable<void> {
 		return from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
+			this.signalConnected();
 			heartbeat.subscribe({
-				next: ev => this.connectionEvents.next(toStorageConnectionStatus(ev))
+				next: ev => {
+					this.connectionEvents.next(toStorageConnectionStatus(ev));
+					if (ev.type === 'heartbeat') {
+						this.signalConnected();
+					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
+						if (!this.deferredConnection) {
+							this.deferredConnection = defer();
+						}
+					}
+				}
 			});
 			return [
 				this.absorbObjChange(client),
@@ -90,6 +102,17 @@ export class RemoteEvents {
 	async close(): Promise<void> {
 		this.connectionEvents.complete();
 		this.wsProc.close();
+	}
+
+	async whenConnected(): Promise<void> {
+		return this.deferredConnection?.promise;
+	}
+
+	private signalConnected(): void {
+		if (this.deferredConnection) {
+			this.deferredConnection.resolve();
+			this.deferredConnection = undefined;
+		}
 	}
 
 	private absorbObjChange(client: SubscribingClient): Observable<void> {

@@ -24,7 +24,7 @@ import { makeFileException } from '../../lib-common/exceptions/file';
 import { Linkable, LinkParameters, wrapReadonlyFile, wrapWritableFile } from '../fs-utils/files';
 import { FileNode, FileLinkParams } from './file-node';
 import { utf8 } from '../../lib-common/buffer-utils';
-import { Storage } from './common';
+import { Storage, SyncedStorage } from './common';
 import { pipe } from '../../lib-common/byte-streaming/pipe';
 import { toRxObserver } from '../../lib-common/utils-for-observables';
 
@@ -323,6 +323,10 @@ class S implements WritableFileSyncAPI {
 		private readonly n: N
 	) {
 		Object.freeze(this);
+	}
+
+	async whenConnected(): Promise<void> {
+		return ((await this.n.getNode()).getStorage() as SyncedStorage).whenConnected();
 	}
 
 	async startUpload(

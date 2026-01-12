@@ -187,6 +187,10 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		super.setUpdatedParams(version, fileAttrs.attrs, fileAttrs.xattrs);
 	}
 
+	getStorage(): Storage {
+		return this.storage;
+	}
+
 	async getStats(flags?: VersionedReadFlags): Promise<Stats> {
 		const { stats, attrs } = await this.getStatsAndSize(flags);
 		stats.size = (attrs ? attrs.size : this.fileSize);

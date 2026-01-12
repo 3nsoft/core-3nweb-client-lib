@@ -124,6 +124,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 		if (fsMsg.isSynced) {
 			const vsPath = methodPathFor<ReadonlyFSVersionedAPI>(vPath, 'sync');
 			fs.v.sync = {
+				whenConnected: file.vsWhenConnected.makeCaller(caller, vsPath),
 				status: vsStatus.makeCaller(caller, vsPath),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.makeCaller(caller, vsPath),
 				startDownload: vsDownload.makeCaller(caller, vsPath),
@@ -214,6 +215,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 		}
 		if (fs.v.sync) {
 			implExp.v.sync = {
+				whenConnected: file.vsWhenConnected.wrapService(fs.v.sync.whenConnected),
 				status: vsStatus.wrapService(fs.v.sync.status),
 				isRemoteVersionOnDisk: vsIsRemoteVersionOnDisk.wrapService(fs.v.sync.isRemoteVersionOnDisk),
 				startDownload: vsDownload.wrapService(fs.v.sync.startDownload),

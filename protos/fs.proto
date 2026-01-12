@@ -216,6 +216,10 @@ message CollectionEvent {
 
 // ==== ReadonlyFSVersionedAPI referable object ====
 
+// --- ReadonlyFSVersionedAPI.whenConnected ---
+// Request body is empty
+// Reply body is empty
+
 // --- ReadonlyFSVersionedAPI.stat ---
 // Request body is PathAndFlagsRequestBody
 // Reply body is file.StatsMsg

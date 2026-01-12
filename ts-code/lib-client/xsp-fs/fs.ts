@@ -24,7 +24,7 @@ import { makeFileException, FileException } from '../../lib-common/exceptions/fi
 import { FolderNode, FolderLinkParams, FolderInJSON } from './folder-node';
 import { FileNode } from './file-node';
 import { FileObject } from './file';
-import { Storage, NodeType, ObjId, NodeEvent, setPathInExc, isSyncedStorage } from './common';
+import { Storage, NodeType, ObjId, NodeEvent, setPathInExc, isSyncedStorage, SyncedStorage } from './common';
 import { Linkable, LinkParameters, wrapWritableFS, wrapReadonlyFile, wrapReadonlyFS, wrapWritableFile, wrapIntoVersionlessReadonlyFS } from '../fs-utils/files';
 import { selectInFS } from '../fs-utils/files-select';
 import { posix } from 'path';
@@ -896,6 +896,10 @@ class S implements WritableFSSyncAPI {
 		private readonly n: N,
 	) {
 		Object.freeze(this);
+	}
+
+	whenConnected(): Promise<void> {
+		return ((this.n as V).getRootIfNotClosed('').getStorage() as SyncedStorage).whenConnected();
 	}
 
 	async startUpload(

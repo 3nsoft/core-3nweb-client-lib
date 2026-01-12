@@ -320,6 +320,10 @@ export class SyncedStore implements ISyncedStorage {
 		return this.remoteEvents.connectionEvent$;
 	}
 
+	whenConnected(): Promise<void> {
+		return this.remoteEvents.whenConnected();
+	}
+
 }
 Object.freeze(SyncedStore.prototype);
 Object.freeze(SyncedStore);

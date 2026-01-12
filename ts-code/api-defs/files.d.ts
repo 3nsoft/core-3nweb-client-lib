@@ -623,6 +623,12 @@ declare namespace web3n.files {
 	interface ReadonlyFileSyncAPI {
 
 		/**
+		 * When connection exception is caught, use this to await connection to continue.
+		 * This returns a promise, resolvable when connected to storage server.
+		 */
+		whenConnected(): Promise<void>;
+
+		/**
 		 * Returns synchronization status of this object.
 		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
 		 * situations. Default is false.
@@ -1405,6 +1411,12 @@ declare namespace web3n.files {
 	interface ReadonlyFSSyncAPI {
 
 		/**
+		 * When connection exception is caught, use this to await connection to continue.
+		 * This returns a promise, resolvable when connected to storage server.
+		 */
+		whenConnected(): Promise<void>;
+
+		/**
 		 * Returns synchronization status of item at given path.
 		 * @param path
 		 * @param skipServerCheck is optional parameter to skip server check, that may be handy in offline 
@@ -1481,7 +1493,7 @@ declare namespace web3n.files {
 		 */
 		getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS>;
 
-		// XXX method to work around demaged files
+		// XXX method to work around damaged files
 		// reloadFromServer(path: string): Promise<SyncStatus>;
 
 	}

@@ -21,6 +21,7 @@ import { errWithCause } from "../../lib-common/exceptions/error";
 
 type WritableFS = web3n.files.WritableFS;
 type FileException = web3n.files.FileException;
+type ConnectException = web3n.ConnectException;
 type JsonKey = web3n.keys.JsonKey;
 
 const LOGIN_KEY_FILE_NAME = 'login-keys';
@@ -95,11 +96,6 @@ export class IdKeysStorage {
 		this.fs = fs;
 		if (keysToSave) {
 			await this.fs.writeJSONFile(LOGIN_KEY_FILE_NAME, keysToSave);
-
-			// XXX must add work with not-online condition
-
-			await this.fs.v!.sync!.upload(LOGIN_KEY_FILE_NAME);
-			await this.fs.v!.sync!.upload('');
 		} else {
 			try {
 				await this.fs.readJSONFile(LOGIN_KEY_FILE_NAME);
@@ -107,6 +103,25 @@ export class IdKeysStorage {
 				throw errWithCause(exc, `Fail expection read of login MailerId keys from the storage`);
 			}
 		}
+		this.ensureDataFolderIsUploaded();
+	}
+
+	private async ensureDataFolderIsUploaded(): Promise<void> {
+		try {
+			const fileStatus = await this.fs!.v!.sync!.status(LOGIN_KEY_FILE_NAME, false);
+			if (fileStatus.state === 'unsynced') {
+				await this.fs!.v!.sync!.upload(LOGIN_KEY_FILE_NAME);
+			}
+			const folderStatus = await this.fs!.v!.sync!.status('', true);
+			if (folderStatus.state === 'unsynced') {
+				await this.fs!.v!.sync!.upload('');
+			}
+		} catch (exc) {
+			if ((exc as ConnectException).type === 'connect') {
+				return this.fs!.v!.sync!.whenConnected().then(() => this.ensureDataFolderIsUploaded());
+			}
+		}
+
 	}
 
 }
