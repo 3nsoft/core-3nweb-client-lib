@@ -332,13 +332,13 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 			if (upload.type === 'removal') {
 				return;
 			} else {
-			throw makeRuntimeException<FileException>(
-				'file', {
-					path: join(this.objFolder, STATUS_FILE_NAME),
-					fsEtityType: 'file', message: `Upload is in progress`
-				},
-				{ concurrentUpdate: true }
-			);
+				throw makeRuntimeException<FileException>(
+					'file', {
+						path: join(this.objFolder, STATUS_FILE_NAME),
+						fsEtityType: 'file', message: `Upload is in progress`
+					},
+					{ concurrentUpdate: true }
+				);
 			}
 		}
 		if (!remote.isArchived && remote.current) {

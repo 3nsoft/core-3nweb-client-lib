@@ -290,7 +290,7 @@ function wrapWritableFSSyncAPI(
 		getRemoteFileItem: sImpl.getRemoteFileItem.bind(sImpl),
 		getRemoteFolderItem: sImpl.getRemoteFolderItem.bind(sImpl),
 		diffCurrentAndRemoteFileVersions: sImpl.diffCurrentAndRemoteFileVersions.bind(sImpl),
-		mergeFolderCurrentAndRemoteVersions: sImpl.mergeFolderCurrentAndRemoteVersions.bind(sImpl),
+		absorbRemoteFolderChanges: sImpl.absorbRemoteFolderChanges.bind(sImpl),
 	};
 	return Object.freeze(w);
 }

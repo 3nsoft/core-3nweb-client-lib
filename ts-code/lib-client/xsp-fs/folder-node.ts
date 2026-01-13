@@ -50,7 +50,7 @@ type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type Stats = web3n.files.Stats;
-type OptionsToMergeFolderVersions = web3n.files.OptionsToMergeFolderVersions;
+type OptionsToAdoptRemoteFolderChanges = web3n.files.OptionsToAdoptRemoteFolderChanges;
 
 export interface NodeInfo {
 	/**
@@ -447,15 +447,51 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			deferred.resolve(node as T);
 			return nodeSet;
 		} catch (exc) {
-			if (exc.objNotFound && fromCurrentNodes) {
-				await this.fixMissingChildAndThrow(exc, info);
-			} else if ((exc as web3n.EncryptionException).failedCipherVerification) {
+			if ((exc as web3n.EncryptionException).failedCipherVerification) {
 				exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
+			} else if (exc.objNotFound) {
+				if (fromCurrentNodes) {
+					await this.fixMissingChildAndThrow(exc, info);
+				} else {
+					try {
+						const node = await this.getNonLocal(info);
+						if (node) {
+							deferred.resolve(node as T);
+							return nodeSet;
+						} else {
+							throw exc;
+						}
+					} catch (exc2) {
+						exc = exc2;
+					}
+				}
 			}
-			// XXX why and what ?
 			deferred.reject(errWithCause(exc, `Failed to instantiate fs node '${this.name}/${info.name}'`));
 			return nodeSet;
 		}
+	}
+
+	private async getNonLocal<T extends NodeInFS<any>>(info: NodeInfo): Promise<T|undefined> {
+		const storage = this.syncedStorage();
+		const { objId, name, key } = info;
+		const status = await storage.status(objId);
+		const { remote, synced } = status.syncStatus();
+		const remoteVersion = remote?.latest ?? synced?.latest;
+		if (!remoteVersion) {
+			return;
+		}
+		const src = await storage.getObjSrcOfRemoteVersion(info.objId, remoteVersion);
+		let node: Node;
+		if (info.isFile) {
+			node = await FileNode.readNodeFromObjBytes(storage, undefined, name, objId, src, key);
+		} else if (info.isFolder) {
+			node = await FolderNode.readNodeFromObjBytes(storage, undefined, objId, src, key);
+		} else if (info.isLink) {
+			node = await LinkNode.readNodeFromObjBytes(storage, undefined, name, objId, src, key);
+		} else {
+			throw new Error(`Unknown type of fs node`);
+		}
+		return node as T;
 	}
 
 	getFolder(name: string, undefOnMissing = false): Promise<FolderNode|undefined> {
@@ -483,62 +519,6 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		fileExc.inconsistentStateOfFS = true;
 		throw fileExc;
 	}
-
-	// XXX should we keep this, when merge with certain inputs will do same action
-	// async adoptItemsFromRemoteVersion(opts: OptionsToAdoptAllRemoteItems|undefined): Promise<number|undefined> {
-	// 	const { state, remote } = await this.syncStatus();
-	// 	if ((state !== 'conflicting') && (state !== 'behind')) {
-	// 		return;
-	// 	}
-	// 	const remoteVersion = versionFromRemoteBranch(remote!, opts?.remoteVersion);
-	// 	if (!remoteVersion) {
-	// 		throw 'something';
-	// 	}
-	// 	const { folderInfo: remoteState } = await this.readRemoteVersion(remoteVersion);
-	// 	const synced = undefined;
-	// 	return await this.doChangeWhileTrackingVersion(opts?.localVersion, async (state, newVersion) => {
-	// 		const { inRemote, nameOverlaps, differentKeys } = diffNodes(state, remoteState, synced);
-	// 		if (differentKeys) {
-	// 			throw makeFSSyncException(this.name, {
-	// 				message: `There are different keys, and implementation for it is not implemented, yet.`
-	// 			});
-	// 		}
-	// 		const events: { event: FSEvent; childObjId: string; }[] = [];
-	// 		if (!inRemote) {
-	// 			return events;
-	// 		}
-	// 		const addedNodes = new Set<string>();
-	// 		if (nameOverlaps) {
-	// 			const postfix = opts?.postfixForNameOverlaps;
-	// 			if ((postfix === undefined) || (postfix.length < 0)) {
-	// 				// XXX better exception
-	// 				throw 'something';
-	// 			}
-	// 			for (const itemName of nameOverlaps) {
-	// 				const node = remoteState.nodes[itemName];
-	// 				let newName = `${itemName}${postfix}`;
-	// 				while (state.nodes[newName]) {
-	// 					newName = `${newName}${postfix}`;
-	// 				}
-	// 				node.name = newName;
-	// 				state.nodes[newName] = node;
-	// 				addedNodes.add(itemName);
-	// 				const { event, childObjId } = this.makeEntryAdditionEvent(newVersion, 'sync', node);
-	// 				events.push({ event, childObjId });
-	// 			}
-	// 		}
-	// 		for (const { name: itemName } of inRemote) {
-	// 			if (addedNodes.has(itemName)) {
-	// 				continue;
-	// 			}
-	// 			const node = remoteState.nodes[itemName];
-	// 			state.nodes[itemName] = node;
-	// 			const { event, childObjId } = this.makeEntryAdditionEvent(newVersion, 'sync', node);
-	// 			events.push({ event, childObjId });
-	// 		}
-	// 		return events;
-	// 	});
-	// }
 
 	/**
 	 * If no initial local version given, then this performs like doTransition(change) method.
@@ -1204,7 +1184,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return this.storage;
 	}
 
-	async mergeCurrentAndRemoteVersions(opts: OptionsToMergeFolderVersions|undefined): Promise<number|undefined> {
+	async absorbRemoteChanges(opts: OptionsToAdoptRemoteFolderChanges|undefined): Promise<number|undefined> {
 		const diff = await this.diffCurrentAndRemote(opts?.remoteVersion);
 		if (!diff) {
 			return;

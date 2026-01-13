@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import { makeRuntimeException } from "./runtime";
 
@@ -21,9 +22,7 @@ type RuntimeException = web3n.RuntimeException;
 
 export type ErrorWithCause = (Error & { cause: any; }) | RuntimeException;
 
-export function errWithCause(
-	cause: any, message: string
-): ErrorWithCause|RuntimeException {
+export function errWithCause(cause: any, message: string): ErrorWithCause|RuntimeException {
 	if ((cause as RuntimeException).runtimeException) {
 		return makeRuntimeException('secondary', { message, cause }, {});
 	} else {

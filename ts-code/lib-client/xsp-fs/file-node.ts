@@ -145,34 +145,26 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	}
 
 	static async makeForExisting(
-		storage: Storage, parentId: string, fileName: string,
-		objId: string, key: Uint8Array
+		storage: Storage, parentId: string, fileName: string, objId: string, key: Uint8Array
 	): Promise<FileNode> {
 		if (!parentId) { throw new Error("Bad parent id"); }
-		const file = await FileNode.initWithAttrs(
-			storage, parentId, fileName, objId, key
-		);
+		const src = await storage.getObjSrc(objId);
+		const file = await FileNode.readNodeFromObjBytes(storage, parentId, fileName, objId, src, key);
 		return file;
 	}
 
-	static async makeFromLinkParams(
-		storage: Storage, params: FileLinkParams
-	): Promise<FileNode> {
+	static async makeFromLinkParams(storage: Storage, params: FileLinkParams): Promise<FileNode> {
 		const { objId, fileName } = params;
 		const key = base64.open(params.fKey);
-		const file = await FileNode.initWithAttrs(
-			storage, undefined, fileName, objId, key);
+		const src = await storage.getObjSrc(objId);
+		const file = await FileNode.readNodeFromObjBytes(storage, undefined, fileName, objId, src, key);
 		return file;
 	}
 
-	private static async initWithAttrs(
-		storage: Storage, parentId: string|undefined, fileName: string,
-		objId: string, key: Uint8Array
+	static async readNodeFromObjBytes(
+		storage: Storage, parentId: string|undefined, fileName: string, objId: string, src: ObjSource, key: Uint8Array
 	): Promise<FileNode> {
-		const src = await storage.getObjSrc(objId);
-		const file = new FileNode(
-			storage, fileName, objId, src.version, parentId, key
-		);
+		const file = new FileNode(storage, fileName, objId, src.version, parentId, key);
 		await file.setCurrentStateFrom(src);
 		return file;
 	}
@@ -206,9 +198,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		return stats;
 	}
 
-	async readSrc(
-		flags: VersionedReadFlags|undefined
-	): Promise<{ src: FileByteSource; version: number; }> {
+	async readSrc(flags: VersionedReadFlags|undefined): Promise<{ src: FileByteSource; version: number; }> {
 		const objSrc = await this.getObjSrcOfVersion(flags);
 		let version: number;
 		if ((this.storage.type === 'synced')
@@ -223,8 +213,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 	}
 
 	async readBytes(
-		start: number|undefined, end: number|undefined,
-		flags: VersionedReadFlags|undefined
+		start: number|undefined, end: number|undefined, flags: VersionedReadFlags|undefined
 	): Promise<{ bytes: Uint8Array|undefined; version: number; }> {
 		const objSrc = await this.getObjSrcOfVersion(flags);
 		let version: number;

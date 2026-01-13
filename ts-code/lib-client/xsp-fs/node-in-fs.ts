@@ -91,9 +91,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		this.isInSyncedStorage = isSyncedStorage(this.storage);
 	}
 
-	protected getObjSrcOfVersion(
-		flags: VersionedReadFlags|undefined
-	): Promise<ObjSource> {
+	protected getObjSrcOfVersion(flags: VersionedReadFlags|undefined): Promise<ObjSource> {
 		if (flags) {
 			const { remoteVersion, archivedVersion } = flags;
 			if (remoteVersion) {
@@ -112,9 +110,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			(changes ? XAttrs.makeEmpty().makeUpdated(changes) : undefined));
 	}
 
-	protected setUpdatedParams(
-		version: number, attrs: CommonAttrs|undefined, xattrs: XAttrs|undefined
-	): void {
+	protected setUpdatedParams(version: number, attrs: CommonAttrs|undefined, xattrs: XAttrs|undefined): void {
 		if (attrs) {
 			this.attrs = attrs;
 		}
@@ -144,9 +140,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		});
 	}
 
-	async getXAttr(
-		xaName: string, flags: VersionedReadFlags|undefined
-	): Promise<{ attr: any; version: number; }> {
+	async getXAttr(xaName: string, flags: VersionedReadFlags|undefined): Promise<{ attr: any; version: number; }> {
 		if (shouldReadCurrentVersion(flags)) {
 			return {
 				attr: (this.xattrs ? this.xattrs.get(xaName) : undefined),
@@ -163,9 +157,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 	}
 
-	async listXAttrs(
-		flags: VersionedReadFlags|undefined
-	):Promise<{ lst: string[]; version: number; }> {
+	async listXAttrs(flags: VersionedReadFlags|undefined):Promise<{ lst: string[]; version: number; }> {
 		if (shouldReadCurrentVersion(flags)) {
 			return {
 				lst: (this.xattrs ? this.xattrs.list() : []),
@@ -295,9 +287,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	 * version to another, performing respective storage operations, and setting
 	 * new current version, when change has been successful.
 	 */
-	protected async doChange<T>(
-		awaitPrevChange: boolean, change: () => Promise<T>
-	): Promise<T> {
+	protected async doChange<T>(awaitPrevChange: boolean, change: () => Promise<T>): Promise<T> {
 		if (!this.writeProc) {
 			this.writeProc = new SingleProc();
 		}
@@ -340,9 +330,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return res;
 	}
 
-	protected broadcastEvent(
-		event: FSEvent, complete?: boolean, childObjId?: string
-	): void {
+	protected broadcastEvent(event: FSEvent, complete?: boolean, childObjId?: string): void {
 		if (this.events && complete) {
 			this.events.sink.next(event);
 			this.events.sink.complete();
@@ -415,9 +403,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		return status;
 	}
 
-	isSyncedVersionOnDisk(
-		version: number
-	): Promise<'partial'|'complete'|'none'> {
+	isSyncedVersionOnDisk(version: number): Promise<'partial'|'complete'|'none'> {
 		const storage = this.syncedStorage();
 		return storage.isRemoteVersionOnDisk(this.objId, version);
 	}
@@ -620,12 +606,16 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		let isCurrentLocal: boolean;
 		if (state === 'behind') {
 			isCurrentLocal = false;
+			remoteVersion = versionFromBranch(remote!, remoteVersion);
 		} else if (state === 'conflicting') {
 			isCurrentLocal = true;
+			remoteVersion = versionFromBranch(remote!, remoteVersion);
+		} else if (state === 'unsynced') {
+			isCurrentLocal = true;
+			remoteVersion = versionFromBranch(synced!, remoteVersion);
 		} else {
 			return;
 		}
-		remoteVersion = versionFromRemoteBranch(remote!, remoteVersion);
 		if (remoteVersion) {
 			return { rm: false, isCurrentLocal, remoteVersion, syncedVersion: synced?.latest };
 		} else {
@@ -772,23 +762,20 @@ export function areBytesEqual(b1: Uint8Array, b2: Uint8Array): boolean {
 	return true;
 }
 
-export function versionFromRemoteBranch(
-	remote: SyncVersionsBranch, remoteVersion: number|undefined
+export function versionFromBranch(
+	branch: SyncVersionsBranch, versionInBranch: number|undefined
 ): number|undefined {
-	if (remote.isArchived) {
-		return;
-	}
-	if (remoteVersion) {
-		if ((remoteVersion !== remote!.latest!)
-		&& !remote.archived?.includes(remoteVersion)) {
+	if (versionInBranch) {
+		if ((versionInBranch !== branch!.latest!)
+		&& !branch.archived?.includes(versionInBranch)) {
 			throw makeFSSyncException(this.name, {
 				versionMismatch: true,
-				message: `Unknown remote version ${remoteVersion}`
+				message: `Unknown version in branch: ${versionInBranch}`
 			});
 		}
-		return remoteVersion;
+		return versionInBranch;
 	} else {
-		return remote.latest!;
+		return branch.latest!;
 	}
 }
 

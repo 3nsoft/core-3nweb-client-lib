@@ -118,9 +118,7 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 		Object.seal(this);
 	}
 
-	static async makeForNew(
-		storage: Storage, parentId: string, name: string, key: Uint8Array
-	): Promise<LinkNode> {
+	static async makeForNew(storage: Storage, parentId: string, name: string, key: Uint8Array): Promise<LinkNode> {
 		const objId = await storage.generateNewObjId();
 		const link = new LinkNode(storage, name, objId, 0, parentId, key);
 		link.attrs = CommonAttrs.makeForTimeNow();
@@ -128,12 +126,16 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 	}
 
 	static async makeForExisting(
-		storage: Storage, parentId: string, name: string,
-		objId: string, key: Uint8Array
+		storage: Storage, parentId: string, name: string, objId: string, key: Uint8Array
 	): Promise<LinkNode> {
 		const src = await storage.getObjSrc(objId);
-		const link = new LinkNode(
-			storage, name, objId, src.version, parentId, key);
+		return await LinkNode.readNodeFromObjBytes(storage, parentId, name, objId, src, key);
+	}
+
+	static async readNodeFromObjBytes(
+		storage: Storage, parentId: string|undefined, name: string, objId: string, src: ObjSource, key: Uint8Array
+	): Promise<LinkNode> {
+		const link = new LinkNode(storage, name, objId, src.version, parentId, key);
 		const { params, attrs, xattrs } = await link.crypto.read(src);
 		link.setUpdatedState(params, src.version, attrs, xattrs);
 		link.setCurrentStateFrom(src);

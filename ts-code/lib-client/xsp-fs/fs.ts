@@ -86,7 +86,7 @@ type OptionsToDiffFileVersions = web3n.files.OptionsToDiffFileVersions;
 type OptionsToUploadLocal = web3n.files.OptionsToUploadLocal;
 type FolderDiff = web3n.files.FolderDiff;
 type FileDiff = web3n.files.FileDiff;
-type OptionsToMergeFolderVersions = web3n.files.OptionsToMergeFolderVersions;
+type OptionsToAdoptRemoteFolderChanges = web3n.files.OptionsToAdoptRemoteFolderChanges;
 
 const WRITE_NONEXCL_FLAGS: VersionedFileFlags = {
 	create: true,
@@ -1061,11 +1061,11 @@ class S implements WritableFSSyncAPI {
 		}
 	}
 
-	async mergeFolderCurrentAndRemoteVersions(
-		path: string, opts?: OptionsToMergeFolderVersions
+	async absorbRemoteFolderChanges(
+		path: string, opts?: OptionsToAdoptRemoteFolderChanges
 	): Promise<number|undefined> {
 		const folderNode = await this.getFolderNode(path);
-		return await folderNode.mergeCurrentAndRemoteVersions(opts);
+		return await folderNode.absorbRemoteChanges(opts);
 	}
 
 }

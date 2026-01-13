@@ -135,9 +135,7 @@ export class SyncedStore implements ISyncedStorage {
 		return obj.syncStatus();
 	}
 
-	async adoptRemote(
-		objId: ObjId, opts: OptionsToAdopteRemote|undefined
-	): Promise<number|undefined> {
+	async adoptRemote(objId: ObjId, opts: OptionsToAdopteRemote|undefined): Promise<number|undefined> {
 		const obj = await this.getObjOrThrow(objId);
 		const objStatus = obj.statusObj();
 		await objStatus.adoptRemoteVersion(opts?.remoteVersion);
@@ -163,9 +161,7 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	async isRemoteVersionOnDisk(
-		objId: ObjId, version: number
-	): Promise<'complete'|'partial'|'none'> {
+	async isRemoteVersionOnDisk(objId: ObjId, version: number): Promise<'complete'|'partial'|'none'> {
 		const obj = await this.getObjOrThrow(objId, true);
 		return obj.isRemoteVersionOnDisk(version);
 	}
@@ -238,9 +234,7 @@ export class SyncedStore implements ISyncedStorage {
 		return await this.files.makeByDownloadingCurrentVersion(objId);
 	}
 
-	private async getObjOrThrow(
-		objId: ObjId, allowArchived = false
-	): Promise<SyncedObj> {
+	private async getObjOrThrow(objId: ObjId, allowArchived = false): Promise<SyncedObj> {
 		const obj = await this.objFromDiskOrDownload(objId);
 		if (!allowArchived && obj.statusObj().isArchived()) {
 			throw makeObjNotFoundExc(objId);
@@ -249,9 +243,7 @@ export class SyncedStore implements ISyncedStorage {
 		}
 	}
 
-	async getObjSrc(
-		objId: ObjId, version?: number, allowArchived = false
-	): Promise<ObjSource> {
+	async getObjSrc(objId: ObjId, version?: number, allowArchived = false): Promise<ObjSource> {
 		const obj = await this.getObjOrThrow(objId, allowArchived);
 		if (!version) {
 			version = obj.statusObj().getCurrentLocalOrSynced();
@@ -259,16 +251,12 @@ export class SyncedStore implements ISyncedStorage {
 		return obj.getObjSrcFromLocalAndSyncedBranch(version);
 	}
 
-	async getObjSrcOfRemoteVersion(
-		objId: ObjId, version: number
-	): Promise<ObjSource> {
-		const obj = await this.getObjOrThrow(objId);
+	async getObjSrcOfRemoteVersion(objId: ObjId, version: number): Promise<ObjSource> {
+		const obj = await this.getObjOrThrow(objId, true);
 		return obj.getObjSrcFromRemoteAndSyncedBranch(version);
 	}
 
-	async saveObj(
-		objId: ObjId, version: number, encSub: Subscribe
-	): Promise<void> {
+	async saveObj(objId: ObjId, version: number, encSub: Subscribe): Promise<void> {
 		if (version === 1) {
 			const obj = await this.files.findObj(objId);
 			if (obj) { throw makeObjExistsExc(objId); }
@@ -293,7 +281,7 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	async getNumOfBytesNeedingDownload(objId: string, version: number): Promise<number|'unknown'> {
-		const obj = await this.getObjOrThrow(objId);
+		const obj = await this.getObjOrThrow(objId, true);
 		return obj.getNumOfBytesNeedingDownload(version);
 	}
 

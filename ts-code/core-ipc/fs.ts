@@ -52,7 +52,7 @@ type FSCollection = web3n.files.FSCollection;
 type CollectionEvent = web3n.files.CollectionEvent;
 type FolderDiff = web3n.files.FolderDiff;
 type OptionsToAdoptRemoteItem = web3n.files.OptionsToAdoptRemoteItem;
-type OptionsToMergeFolderVersions = web3n.files.OptionsToMergeFolderVersions;
+type OptionsToAdoptRemoteFolderChanges = web3n.files.OptionsToAdoptRemoteFolderChanges;
 
 export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	checkRefObjTypeIs('FSImpl', fsMsg.impl);
@@ -140,9 +140,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 				fs.v.sync!.startUpload = vsStartUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.upload = vsUpload.makeCaller(caller, vsPath);
 				fs.v.sync!.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.makeCaller(caller, vsPath);
-				fs.v.sync!.mergeFolderCurrentAndRemoteVersions = vsMergeFolderCurrentAndRemoteVersions.makeCaller(
-					caller, vsPath
-				);
+				fs.v.sync!.absorbRemoteFolderChanges = vsAbsorbRemoteFolderChanges.makeCaller(caller, vsPath);
 			}
 		}
 	}
@@ -237,8 +235,8 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 				implExp.v.sync.adoptRemoteFolderItem = vsAdoptRemoteFolderItem.wrapService(
 					(fs.v.sync as WritableFSSyncAPI).adoptRemoteFolderItem
 				);
-				implExp.v.sync.mergeFolderCurrentAndRemoteVersions = vsMergeFolderCurrentAndRemoteVersions.wrapService(
-					(fs.v.sync as WritableFSSyncAPI).mergeFolderCurrentAndRemoteVersions
+				implExp.v.sync.absorbRemoteFolderChanges = vsAbsorbRemoteFolderChanges.wrapService(
+					(fs.v.sync as WritableFSSyncAPI).absorbRemoteFolderChanges
 				);
 			}
 		}
@@ -2713,7 +2711,7 @@ namespace vsAdoptRemoteFolderItem {
 Object.freeze(vsAdoptRemoteFolderItem);
 
 
-namespace vsMergeFolderCurrentAndRemoteVersions {
+namespace vsAbsorbRemoteFolderChanges {
 
 	interface OptionsToMergeFolderVersionsMsg {
 		localVersion?: Value<number>;
@@ -2724,11 +2722,11 @@ namespace vsMergeFolderCurrentAndRemoteVersions {
 	const requestType = ProtoType.for<{
 		path: string;
 		opts?: OptionsToMergeFolderVersionsMsg;
-	}>(pb.MergeFolderCurrentAndRemoteVersionsRequestBody);
+	}>(pb.AbsorbRemoteFolderChangesRequestBody);
 
 	function optionsFromMsg(
 		msg: OptionsToMergeFolderVersionsMsg|undefined
-	): OptionsToMergeFolderVersions|undefined {
+	): OptionsToAdoptRemoteFolderChanges|undefined {
 		if (!msg) { return; }
 		return {
 			localVersion: valOfOptInt(msg.localVersion),
@@ -2737,7 +2735,7 @@ namespace vsMergeFolderCurrentAndRemoteVersions {
 		};
 	}
 
-	function optionsToMsg(opts: OptionsToMergeFolderVersions|undefined): OptionsToMergeFolderVersionsMsg|undefined {
+	function optionsToMsg(opts: OptionsToAdoptRemoteFolderChanges|undefined): OptionsToMergeFolderVersionsMsg|undefined {
 		if (!opts) { return; }
 		return {
 			localVersion: toOptVal(opts.localVersion),
@@ -2748,10 +2746,10 @@ namespace vsMergeFolderCurrentAndRemoteVersions {
 
 	const replyType = ProtoType.for<{
 		newVersion?: Value<number>;
-	}>(pb.MergeFolderCurrentAndRemoteVersionsReplyBody);
+	}>(pb.AbsorbRemoteFolderChangesReplyBody);
 
 	export function wrapService(
-		fn: WritableFSSyncAPI['mergeFolderCurrentAndRemoteVersions']
+		fn: WritableFSSyncAPI['absorbRemoteFolderChanges']
 	): ExposedFn {
 		return buf => {
 			const { path, opts } = requestType.unpack(buf);
@@ -2763,15 +2761,15 @@ namespace vsMergeFolderCurrentAndRemoteVersions {
 
 	export function makeCaller(
 		caller: Caller, objPath: string[]
-	): WritableFSSyncAPI['mergeFolderCurrentAndRemoteVersions'] {
-		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'mergeFolderCurrentAndRemoteVersions');
+	): WritableFSSyncAPI['absorbRemoteFolderChanges'] {
+		const ipcPath = methodPathFor<WritableFSSyncAPI>(objPath, 'absorbRemoteFolderChanges');
 		return (path, opts) => caller
 		.startPromiseCall(ipcPath, requestType.pack({ path, opts: optionsToMsg(opts) }))
 		.then(buf => valOfOptInt(replyType.unpack(buf).newVersion));
 	}
 
 }
-Object.freeze(vsMergeFolderCurrentAndRemoteVersions);
+Object.freeze(vsAbsorbRemoteFolderChanges);
 
 
 namespace vsAdoptRemote {

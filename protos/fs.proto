@@ -585,9 +585,8 @@ message AdoptRemoteFolderItemRequestBody {
 	Options opts = 3;
 }
 
-// --- WritableFSSyncAPI.mergeFolderCurrentAndRemoteVersions ---
-// Reply body is common.UInt64Value
-message MergeFolderCurrentAndRemoteVersionsRequestBody {
+// --- WritableFSSyncAPI.absorbRemoteFolderChanges ---
+message AbsorbRemoteFolderChangesRequestBody {
 	message Options {
 		common.UInt64Value local_version = 1;
 		common.StringValue postfix_for_name_overlaps = 2;
@@ -596,6 +595,6 @@ message MergeFolderCurrentAndRemoteVersionsRequestBody {
 	string path = 1;
 	Options opts = 2;
 }
-message MergeFolderCurrentAndRemoteVersionsReplyBody {
+message AbsorbRemoteFolderChangesReplyBody {
 	common.UInt64Value new_version = 1;
 }

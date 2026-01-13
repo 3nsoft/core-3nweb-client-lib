@@ -420,7 +420,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	expect(diff!.added!.inRemote!.includes(fileA)).toBeTrue();
 	expect(diff!.nameOverlaps!).toContain(folder);
 
-	await dev2FS().v!.sync!.mergeFolderCurrentAndRemoteVersions('').then(
+	await dev2FS().v!.sync!.absorbRemoteFolderChanges('').then(
 		() => fail(`Overlapping names require presence of prefix`),
 		(exc: FSSyncException) => {
 			expect(exc.type).toBe('fs-sync');
@@ -430,7 +430,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	const postfixForNameOverlaps = `-remote`;
 
-	let version = await dev2FS().v!.sync!.mergeFolderCurrentAndRemoteVersions('', { postfixForNameOverlaps });
+	let version = await dev2FS().v!.sync!.absorbRemoteFolderChanges('', { postfixForNameOverlaps });
 	expect(version).toBe(diff!.currentVersion + 1);
 	expect(await dev2FS().checkFilePresence(fileA)).toBeTrue();
 	expect(await dev2FS().readTxtFile(fileA)).toBe(await dev1FS().readTxtFile(fileA));
@@ -438,6 +438,36 @@ it.func = async function({ dev1FS, dev2FS }) {
 		await dev2FS().listFolder(`${folder}${postfixForNameOverlaps}`),
 		await dev1FS().listFolder(folder)
 	)).toBeTrue();
+
+};
+specs.its.push(it);
+
+it = {
+	expectation: `viewing remote folder item when it wasn't local or was removed locally`
+};
+it.func = async function({ dev1FS, dev2FS }) {
+	const file = `file_to_remove`;
+	const fileA = `file-A`;
+	// make file on dev1 and upload
+	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
+	await dev1FS().v!.sync!.upload(file);
+	await dev1FS().v!.sync!.upload('');
+	await dev2FS().v!.sync!.adoptRemote('');
+	expect(await dev2FS().checkFilePresence(file, true)).toBeTrue();
+	// change dev1 for conflict condition on folder path
+	await dev1FS().writeTxtFile(fileA, stringOfB64CharsSync(50));
+	await dev1FS().v!.sync!.upload(fileA);
+	await dev1FS().v!.sync!.upload('');
+	// remove file on dev2
+	await dev2FS().deleteFile(file);
+
+	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('');
+
+	expect((await dev2FS().v!.sync!.statRemoteItem('', fileA, diff!.remoteVersion)).size)
+	.toBe((await dev1FS().stat(fileA)).size);
+
+	expect((await dev2FS().v!.sync!.statRemoteItem('', file, diff!.remoteVersion)).size)
+	.toBe((await dev1FS().stat(file)).size);
 
 };
 specs.its.push(it);

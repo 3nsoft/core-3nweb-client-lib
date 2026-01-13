@@ -1669,14 +1669,17 @@ declare namespace web3n.files {
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It merges folder changes from remote version.
+		 * It absorbs folder changes done in remote version.
 		 * Returns new local version, if there were remote items to adopt and their were added to local state.
 		 * @param path 
 		 * @param opts
 		 */
-		mergeFolderCurrentAndRemoteVersions(
-			path: string, opts?: OptionsToMergeFolderVersions
+		absorbRemoteFolderChanges(
+			path: string, opts?: OptionsToAdoptRemoteFolderChanges
 		): Promise<number|undefined>;
+
+		// XXX
+		// makeSnapshot(path: string); // -> snapshot points and archives current versions of tree elements
 
 	}
 
@@ -1700,7 +1703,7 @@ declare namespace web3n.files {
 		newItemName?: string;
 	}
 
-	interface OptionsToMergeFolderVersions {
+	interface OptionsToAdoptRemoteFolderChanges {
 		/**
 		 * Folder's local version. If not given, current local version is used.
 		 */

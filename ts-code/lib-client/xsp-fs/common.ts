@@ -70,17 +70,16 @@ export class NodesContainer {
 		this.nodes.set(node.objId, node);
 	}
 
-	getNodeOrPromise<T extends Node>(
-		objId: string
-	): { node?: T, nodePromise?: Promise<T> } {
+	getNodeOrPromise<T extends Node>(objId: string): { node?: T, nodePromise?: Promise<T> } {
 		const node = this.nodes.get(objId);
 		if (node) { return { node: node as T }; }
 		return { nodePromise: this.promises.get(objId) as Promise<T> };
 	}
 
 	setPromise<T extends Node>(objId: string, promise: Promise<T>): Promise<T> {
-		if (this.nodes.get(objId)) { throw new Error(
-			`Cannot set promise for an already set node, id ${objId}.`); }
+		if (this.nodes.get(objId)) {
+			throw new Error(`Cannot set promise for an already set node, id ${objId}.`);
+		}
 		const envelopedPromise = (async () => {
 			try {
 				const node = await promise;
@@ -149,7 +148,7 @@ export interface Storage {
 	 * require further localization, like shared storage.
 	 */
 	storageForLinking(type: StorageType, location?: string): Storage;
-	
+
 	/**
 	 * This returns a new objId, reserving it in nodes container.
 	 */
@@ -158,10 +157,8 @@ export interface Storage {
 	/**
 	 * This returns a promise, resolvable to source for a requested object.
 	 */
-	getObjSrc(
-		objId: ObjId, version?: number, allowArchived?: boolean
-	): Promise<ObjSource>;
-	
+	getObjSrc(objId: ObjId, version?: number, allowArchived?: boolean): Promise<ObjSource>;
+
 	/**
 	 * This saves given object, asynchronously.
 	 * @param objId
@@ -176,7 +173,7 @@ export interface Storage {
 	 * @param objId
 	 */
 	removeObj(objId: ObjId): Promise<void>;
-	
+
 	/**
 	 * This asynchronously runs closing cleanup.
 	 */
@@ -231,15 +228,11 @@ export interface SyncedStorage extends Storage {
 	 */
 	getRootKeyDerivParamsFromServer(): Promise<ScryptGenParams>;
 
-	adoptRemote(
-		objId: ObjId, opts: OptionsToAdopteRemote|undefined
-	): Promise<number|undefined>;
+	adoptRemote(objId: ObjId, opts: OptionsToAdopteRemote|undefined): Promise<number|undefined>;
 
 	updateStatusInfo(objId: ObjId): Promise<SyncStatus>;
 
-	isRemoteVersionOnDisk(
-		objId: ObjId, version: number
-	): Promise<'partial'|'complete'|'none'>;
+	isRemoteVersionOnDisk(objId: ObjId, version: number): Promise<'partial'|'complete'|'none'>;
 
 	startDownload(
 		objId: ObjId, version: number, eventSink: DownloadEventSink
@@ -251,9 +244,7 @@ export interface SyncedStorage extends Storage {
 		eventSink: UploadEventSink|undefined
 	): Promise<{ uploadTaskId: number; completion: Promise<void>; }>;
 
-	dropCachedLocalObjVersionsLessOrEqual(
-		objId: ObjId, localVersion: number
-	): void;
+	dropCachedLocalObjVersionsLessOrEqual(objId: ObjId, localVersion: number): void;
 
 	uploadObjRemoval(objId: ObjId): Promise<void>;
 
@@ -316,10 +307,7 @@ export function isSyncedStorage(storage: Storage) {
 	return !!(storage as SyncedStorage).startUpload;
 }
 
-
-export function setPathInExc(
-	exc: FSSyncException|FileException, path: string
-): FSSyncException|FileException {
+export function setPathInExc(exc: FSSyncException|FileException, path: string): FSSyncException|FileException {
 	if ((exc.type === 'fs-sync') || (exc.type === 'file')) {
 		exc.path = path;
 	}
