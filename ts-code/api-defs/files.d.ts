@@ -675,6 +675,7 @@ declare namespace web3n.files {
 
 	interface OptionsToDiffFileVersions {
 		remoteVersion?: number;
+		// XXX implicit assumption that mtime changes only when file content changes
 		compareContentIfSameMTime?: boolean;
 	}
 
@@ -1493,6 +1494,12 @@ declare namespace web3n.files {
 		 */
 		getRemoteFolderItem(path: string, remoteItemName: string, remoteVersion?: number): Promise<ReadonlyFS>;
 
+		// compareLocalAndRemoteFileItems(path: string, itemName: string, remoteVersion?: number): Promise<FileDiff>;
+
+		// compareLocalAndRemoteFolderItems(
+		// 	path: string, itemName: string, remoteVersion?: number
+		// ): Promise<FolderContentDiff>;
+
 		// XXX method to work around damaged files
 		// reloadFromServer(path: string): Promise<SyncStatus>;
 
@@ -1630,6 +1637,13 @@ declare namespace web3n.files {
 			current: number;
 		};
 	}
+
+	// interface FolderContentDiff extends CommonDiff {
+	// 	local: ({
+
+	// 	} & ListingEntry)[];
+	// 	remote: ({} & ListingEntry)[];
+	// }
 
 	interface WritableFSSyncAPI extends ReadonlyFSSyncAPI {
 

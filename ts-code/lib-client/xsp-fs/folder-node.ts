@@ -485,7 +485,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		if (info.isFile) {
 			node = await FileNode.readNodeFromObjBytes(storage, undefined, name, objId, src, key);
 		} else if (info.isFolder) {
-			node = await FolderNode.readNodeFromObjBytes(storage, undefined, objId, src, key);
+			node = await FolderNode.readNodeFromObjBytes(storage, name, objId, src, key);
 		} else if (info.isLink) {
 			node = await LinkNode.readNodeFromObjBytes(storage, undefined, name, objId, src, key);
 		} else {

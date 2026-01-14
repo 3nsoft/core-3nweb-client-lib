@@ -443,23 +443,30 @@ it.func = async function({ dev1FS, dev2FS }) {
 specs.its.push(it);
 
 it = {
-	expectation: `viewing remote folder item when it wasn't local or was removed locally`
+	expectation: `viewing remote folder items when it wasn't local or was removed locally`
 };
 it.func = async function({ dev1FS, dev2FS }) {
 	const file = `file_to_remove`;
+	const folder = `folder_to_remove`;
 	const fileA = `file-A`;
+	const folderA = `folder-A`;
 	// make file on dev1 and upload
 	await dev1FS().writeTxtFile(file, stringOfB64CharsSync(100));
 	await dev1FS().v!.sync!.upload(file);
+	await dev1FS().makeFolder(folder);
+	await dev1FS().v!.sync!.upload(folder);
 	await dev1FS().v!.sync!.upload('');
 	await dev2FS().v!.sync!.adoptRemote('');
 	expect(await dev2FS().checkFilePresence(file, true)).toBeTrue();
 	// change dev1 for conflict condition on folder path
 	await dev1FS().writeTxtFile(fileA, stringOfB64CharsSync(50));
 	await dev1FS().v!.sync!.upload(fileA);
+	await dev1FS().makeFolder(folderA);
+	await dev1FS().v!.sync!.upload(folderA);
 	await dev1FS().v!.sync!.upload('');
 	// remove file on dev2
 	await dev2FS().deleteFile(file);
+	await dev2FS().deleteFolder(folder);
 
 	const diff = await dev2FS().v!.sync!.diffCurrentAndRemoteFolderVersions('');
 
@@ -468,6 +475,26 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	expect((await dev2FS().v!.sync!.statRemoteItem('', file, diff!.remoteVersion)).size)
 	.toBe((await dev1FS().stat(file)).size);
+
+	expect((await dev2FS().v!.sync!.statRemoteItem('', folderA, diff!.remoteVersion)).mtime!.valueOf())
+	.toBe((await dev1FS().stat(folderA)).mtime!.valueOf());
+
+	expect((await dev2FS().v!.sync!.statRemoteItem('', folder, diff!.remoteVersion)).mtime!.valueOf())
+	.toBe((await dev1FS().stat(folder)).mtime!.valueOf());
+
+	let fileObj = await dev2FS().v!.sync!.getRemoteFileItem('', file, diff!.remoteVersion);
+	expect((await fileObj.readTxt())).toBe(await dev1FS().readTxtFile(file));
+
+	fileObj = await dev2FS().v!.sync!.getRemoteFileItem('', fileA, diff!.remoteVersion);
+	expect((await fileObj.readTxt())).toBe(await dev1FS().readTxtFile(fileA));
+
+	let folderObj = await dev2FS().v!.sync!.getRemoteFolderItem('', folder, diff!.remoteVersion);
+	expect(deepEqual(await folderObj.listFolder(''), await dev1FS().listFolder(folder))).toBeTrue();
+	expect(folderObj.v).toBeUndefined();
+
+	folderObj = await dev2FS().v!.sync!.getRemoteFolderItem('', folderA, diff!.remoteVersion);
+	expect(deepEqual(await folderObj.listFolder(''), await dev1FS().listFolder(folderA))).toBeTrue();
+	expect(folderObj.v).toBeUndefined();
 
 };
 specs.its.push(it);

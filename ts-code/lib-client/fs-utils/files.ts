@@ -129,8 +129,7 @@ function wrapWritableFileSyncAPI(
 }
 
 function addParamsAndFreezeFileWrap<T extends ReadonlyFile>(w: T, fImpl: T): T {
-	(w as any as Linkable).getLinkParams =
-		(fImpl as any as Linkable).getLinkParams.bind(fImpl);
+	(w as any as Linkable).getLinkParams = (fImpl as any as Linkable).getLinkParams.bind(fImpl);
 	return Object.freeze(w);
 }
 
@@ -388,10 +387,8 @@ export function wrapIntoVersionlessReadonlyFS(
 			delete stats.version;
 			return stats;
 		},
-		readonlyFile: async (path: string) => toVersionlessReadonlyFile(
-			await fs.readonlyFile(path)),
-		readonlySubRoot: async (path: string) => wrapIntoVersionlessReadonlyFS(
-			await fs.readonlySubRoot(path)),
+		readonlyFile: async (path: string) => toVersionlessReadonlyFile(await fs.readonlyFile(path)),
+		readonlySubRoot: async (path: string) => wrapIntoVersionlessReadonlyFS(await fs.readonlySubRoot(path)),
 		close: fs.close.bind(fs),
 		checkLinkPresence: fs.checkLinkPresence.bind(fs),
 		readLink: fs.readLink.bind(fs),

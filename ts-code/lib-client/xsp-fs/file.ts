@@ -63,20 +63,15 @@ export class FileObject implements WritableFile, Linkable {
 		Object.seal(this);
 	}
 
-	static makeExisting(
-		node: FileNode, writable: boolean
-	): WritableFile|ReadonlyFile {
-		const f = new FileObject(
-			node.name, false, node, undefined, writable, node.isInSyncedStorage);
+	static makeExisting(node: FileNode, writable: boolean): WritableFile|ReadonlyFile {
+		const f = new FileObject(node.name, false, node, undefined, writable, node.isInSyncedStorage);
 		return (writable ? wrapWritableFile(f) : wrapReadonlyFile(f));
 	}
 
 	static makeForNotExisiting(
-		name: string, makeNode: () => Promise<FileNode>,
-		isInSyncedStorage: boolean
+		name: string, makeNode: () => Promise<FileNode>, isInSyncedStorage: boolean
 	): WritableFile {
-		const f = new FileObject(
-			name, true, undefined, makeNode, true, isInSyncedStorage);
+		const f = new FileObject(name, true, undefined, makeNode, true, isInSyncedStorage);
 		return wrapWritableFile(f);
 	}
 
@@ -85,6 +80,25 @@ export class FileObject implements WritableFile, Linkable {
 	): Promise<WritableFile|ReadonlyFile> {
 		const node = await FileNode.makeFromLinkParams(storage, params.params);
 		return FileObject.makeExisting(node, !params.readonly);
+	}
+
+	static async makeFromRemoteVersion(remote: FileNode): Promise<ReadonlyFile> {
+		const f = new FileObject(remote.name, false, remote, undefined, false, true);
+		const versionFlags = { remoteVersion: remote.version };
+		const wrap: ReadonlyFile = {
+			writable: false,
+			isNew: false,
+			name: f.name,
+			getByteSource: () => f.v.getByteSource(versionFlags).then(({src}) => src),
+			readJSON: <T> () => f.v.readJSON(versionFlags).then(({json}) => json as T),
+			readTxt: () => f.v.readTxt(versionFlags).then(({txt}) => txt),
+			readBytes: (start, end) => f.v.readBytes(start, end, versionFlags).then(({bytes}) => bytes),
+			stat: f.stat.bind(f),
+			watch: f.watch.bind(f),
+			getXAttr: f.getXAttr.bind(f),
+			listXAttrs: f.listXAttrs.bind(f),
+		};
+		return Object.freeze(wrap);
 	}
 
 	async getLinkParams(): Promise<LinkParameters<FileLinkParams>> {
@@ -215,41 +229,36 @@ class V implements WritableFileVersionedAPI, N {
 		return node.updateXAttrs(changes);
 	}
 
-	async getXAttr(
-		xaName: string, flags?: VersionedReadFlags
-	): Promise<{ attr: any; version: number; }> {
+	async getXAttr(xaName: string, flags?: VersionedReadFlags): Promise<{ attr: any; version: number; }> {
 		const node = await this.getNode();
 		return await node.getXAttr(xaName, flags);
 	}
 
-	async listXAttrs(
-		flags?: VersionedReadFlags
-	): Promise<{ lst: string[]; version: number; }> {
+	async listXAttrs(flags?: VersionedReadFlags): Promise<{ lst: string[]; version: number; }> {
 		const node = await this.getNode();
 		return await node.listXAttrs(flags);
 	}
 
 	async getLinkParams(): Promise<LinkParameters<FileLinkParams>> {
-		if (!this.node) { throw new Error(
-			'File does not exist, yet, and cannot be linked.'); }
+		if (!this.node) {
+			throw new Error('File does not exist, yet, and cannot be linked.');
+		}
 		const linkParams = this.node.getParamsForLink();
 		linkParams.params.fileName = this.name;
 		linkParams.readonly = !this.writable;
 		return linkParams;
 	}
 
-	async getByteSink(
-		truncate = true, currentVersion?: number
-	): Promise<{ sink: FileByteSink; version: number; }> {
+	async getByteSink(truncate = true, currentVersion?: number): Promise<{ sink: FileByteSink; version: number; }> {
 		this.ensureIsWritable();
 		const node = await this.getNode();
 		return node.writeSink(truncate, currentVersion);
 	}
 	
-	async getByteSource(
-		flags?: VersionedReadFlags
-	): Promise<{ src: FileByteSource; version: number; }> {
-		if (!this.node) { throw makeFileException('notFound', this.name); }
+	async getByteSource(flags?: VersionedReadFlags): Promise<{ src: FileByteSource; version: number; }> {
+		if (!this.node) {
+			throw makeFileException('notFound', this.name);
+		}
 		return this.node.readSrc(flags);
 	}
 
@@ -275,9 +284,7 @@ class V implements WritableFileVersionedAPI, N {
 		return await this.node.readBytes(start, end, flags);
 	}
 
-	async readTxt(
-		flags?: VersionedReadFlags
-	): Promise<{ txt: string; version: number; }> {
+	async readTxt(flags?: VersionedReadFlags): Promise<{ txt: string; version: number; }> {
 		const {
 			bytes, version
 		} = await this.readBytes(undefined, undefined, flags);
@@ -293,9 +300,7 @@ class V implements WritableFileVersionedAPI, N {
 		return version;
 	}
 
-	async readJSON<T>(
-		flags?: VersionedReadFlags
-	): Promise<{ json: T; version: number; }> {
+	async readJSON<T>(flags?: VersionedReadFlags): Promise<{ json: T; version: number; }> {
 		const { txt, version } = await this.readTxt(flags);
 		const json = JSON.parse(txt);
 		return { json, version };

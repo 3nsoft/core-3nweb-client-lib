@@ -1045,7 +1045,7 @@ class S implements WritableFSSyncAPI {
 		const folderNode = await this.getFolderNode(path);
 		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
 		if (remoteChild.type === 'file') {
-			return wrapReadonlyFile(FileObject.makeExisting(remoteChild as FileNode, false));
+			return FileObject.makeFromRemoteVersion(remoteChild as FileNode)
 		} else {
 			throw makeFileException('notFile', `${path}/${remoteItemName}`);
 		}
