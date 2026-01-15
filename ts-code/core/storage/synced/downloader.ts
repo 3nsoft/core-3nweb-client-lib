@@ -28,7 +28,8 @@ export class Downloader implements ObjDownloader {
 	private readonly runner = new DownloadsRunner();
 
 	constructor(
-		private readonly remoteStorage: StorageOwner
+		private readonly remoteStorage: StorageOwner,
+		readonly whenConnected: () => Promise<void>
 	) {
 		Object.seal(this);
 	}

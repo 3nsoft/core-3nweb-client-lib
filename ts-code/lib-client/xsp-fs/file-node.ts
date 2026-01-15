@@ -388,6 +388,12 @@ export class FileNode extends NodeInFS<FilePersistance> {
 		}
 	}
 
+	// XXX WIP
+	// async compareWithRemote(remoteChild: FileNode): Promise<FileDiff> {
+	// 	// XXX
+	// 	this.v
+	// }
+
 }
 Object.freeze(FileNode.prototype);
 Object.freeze(FileNode);

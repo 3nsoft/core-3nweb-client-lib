@@ -29,7 +29,8 @@ export class MsgDownloader {
 	private readonly runner = new DownloadsRunner();
 
 	constructor(
-		private readonly msgReceiver: MailRecipient
+		private readonly msgReceiver: MailRecipient,
+		private readonly whenConnected: () =>Promise<void>
 	) {
 		Object.freeze(this);
 	}
@@ -43,7 +44,8 @@ export class MsgDownloader {
 			getLayoutWithHeaderAndFirstSegs: (objId, v) => this.getLayoutWithHeaderAndFirstSegs(msgId, objId),
 			getSegs: (objId, v, start, end) => this.getSegs(msgId, objId, start, end),
 			splitSegsDownloads: (start, end) => splitSegsDownloads(start, end, MAX_GETTING_CHUNK),
-			schedule: this.runner.schedule.bind(this.runner)
+			schedule: this.runner.schedule.bind(this.runner),
+			whenConnected: this.whenConnected
 		};
 	}
 

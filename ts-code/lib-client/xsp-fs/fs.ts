@@ -1011,8 +1011,21 @@ class S implements WritableFSSyncAPI {
 		} catch (exc) {
 			throw setPathInExc(exc, path);
 		}
-		
 	}
+
+	// XXX WIP
+	// async compareLocalAndRemoteFileItems(
+	// 	path: string, itemName: string, remoteVersion?: number
+	// ): Promise<FileDiff> {
+	// 	const folderNode = await this.getFolderNode(path);
+	// 	const localChild = (await folderNode.getFile(itemName))!;
+	// 	const remoteChild = await folderNode.getRemoteItemNode(itemName, remoteVersion);
+	// 	if (remoteChild.type === 'file') {
+	// 		return await localChild.compareWithRemote(remoteChild);
+	// 	} else {
+	// 		throw makeFileException('notFile', `${path}/${itemName}`);
+	// 	}
+	// }
 
 	async adoptRemoteFolderItem(path: string, itemName: string, opts?: OptionsToAdoptRemoteItem): Promise<number> {
 		const node = await this.getFolderNode(path);
@@ -1045,7 +1058,7 @@ class S implements WritableFSSyncAPI {
 		const folderNode = await this.getFolderNode(path);
 		const remoteChild = await folderNode.getRemoteItemNode(remoteItemName, remoteVersion);
 		if (remoteChild.type === 'file') {
-			return FileObject.makeFromRemoteVersion(remoteChild as FileNode)
+			return FileObject.makeFromRemoteVersion(remoteChild as FileNode);
 		} else {
 			throw makeFileException('notFile', `${path}/${remoteItemName}`);
 		}

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -40,7 +40,6 @@ import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { saveUploadHeaderFile } from './upload-header-file';
 import { noop } from '../common/utils';
 import { makeObjVersionNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
-import { isPromise } from 'util/types';
 
 export const UNSYNCED_FILE_NAME_EXT = 'unsynced';
 export const REMOTE_FILE_NAME_EXT = 'v';
@@ -61,10 +60,10 @@ export class ObjFiles {
 	
 	private constructor(
 		private readonly folders: ObjFolders,
-		remote: RemoteStorage,
+		remote: RemoteStorage, whenConnected: () => Promise<void>,
 		private readonly logError: LogError
 	) {
-		this.downloader = new Downloader(remote);
+		this.downloader = new Downloader(remote, whenConnected);
 		this.gc = new GC(
 			this.sync,
 			obj => {
@@ -78,7 +77,7 @@ export class ObjFiles {
 	}
 
 	static async makeFor(
-		path: string, remote: RemoteStorage, logError: LogError
+		path: string, remote: RemoteStorage, whenConnected: () => Promise<void>, logError: LogError
 	): Promise<ObjFiles> {
 		const canMove: CanMoveObjToDeeperCache = (
 			objId, objFolderPath
@@ -86,7 +85,7 @@ export class ObjFiles {
 		const folders = await ObjFolders.makeWithGenerations(
 			path, canMove, logError
 		);
-		const objFiles = new ObjFiles(folders, remote, logError);
+		const objFiles = new ObjFiles(folders, remote, whenConnected, logError);
 		return objFiles;
 	}
 
@@ -386,7 +385,8 @@ export class SyncedObj {
 		const fPath = this.localVerPath(version);
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, this.downloader,
-			this.localAndSyncedObjSegsGetterFromDisk);
+			this.localAndSyncedObjSegsGetterFromDisk
+		);
 		this.localVers.set(version, obj);
 		const fileWrite$ = write$.pipe(
 			tap({

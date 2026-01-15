@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2018 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2018 - 2020, 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -31,6 +31,7 @@ import { isPromise } from 'util/types';
 import { defer, Deferred } from '../../lib-common/processes/deferred';
 
 type DownloadEvent = web3n.files.DownloadEvent;
+type ConnectException = web3n.ConnectException;
 
 export type GetBaseSegsOnDisk = (
 	version: number, ofs: number, len: number
@@ -57,17 +58,15 @@ export class ObjOnDisk {
 	}
 
 	static async forExistingFile(
-		objId: ObjId, version: number, path: string,
-		downloader?: ObjDownloader, getBase?: GetBaseSegsOnDisk
+		objId: ObjId, version: number, path: string, downloader?: ObjDownloader, getBase?: GetBaseSegsOnDisk
 	): Promise<ObjOnDisk> {
 		const objFile = await ObjVersionFile.forExisting(path);
 		return new ObjOnDisk(objId, version, objFile, downloader, true, getBase);
 	}
 
 	static async createFileForExistingVersion(
-		objId: ObjId, version: number, path: string,
-		downloader: ObjDownloader, getBase?: GetBaseSegsOnDisk,
-		initDownload?: InitDownloadParts
+		objId: ObjId, version: number, path: string, downloader: ObjDownloader,
+		getBase?: GetBaseSegsOnDisk, initDownload?: InitDownloadParts
 	): Promise<ObjOnDisk> {
 		let download: Download|undefined;
 		if (!initDownload) {
@@ -501,7 +500,11 @@ export class Download {
 			});
 			this.inBkgrnd.runData.currentDownload.deferred.resolve(bytes);
 		} catch (exc) {
-			this.inBkgrnd.runData.currentDownload.deferred.reject(exc);
+			if ((exc as ConnectException).type === 'connect') {
+				await this.downloader.whenConnected();
+			} else {
+				this.inBkgrnd.runData.currentDownload.deferred.reject(exc);
+			}
 		} finally {
 			this.inBkgrnd.runData.currentDownload = undefined;
 		}
@@ -544,6 +547,8 @@ export interface ObjDownloader {
 	splitSegsDownloads: (start: number, end: number) => Section[];
 
 	schedule: (download: Download) => void;
+
+	whenConnected: () => Promise<void>;
 
 }
 

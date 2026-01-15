@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -39,6 +39,7 @@ const MAX_FAST_UPLOAD = 2*1024*1024;
 type UploadExecLabel = 'long' | 'fast';
 type UploadNeedInfo = NonNullable<NewVersionUpload['needUpload']>;
 type UploadEvent = web3n.files.UploadEvent;
+type ConnectException = web3n.ConnectException;
 
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 
@@ -52,6 +53,7 @@ export class UpSyncer {
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
+		private readonly whenConnected: () => Promise<void>,
 		private readonly logError: LogError
 	) {
 		this.execPools = new LabelledExecPools([
@@ -69,31 +71,17 @@ export class UpSyncer {
 		await this.execPools.stop();	// implicitly cancels all upsync tasks
 	}
 
-	/**
-	 * Creates an rxjs operator to tap saving process, starting upload while
-	 * writing is ongoing.
-	 */
-	tapFileWrite(
-		obj: SyncedObj, isNew: boolean, newVersion: number, baseVersion?: number
-	): FileWriteTapOperator {
-
-		throw new Error('UpSyncer.tapFileWrite() not implemented');
-
-		// const objUploads = this.getOrMakeUploadsFor(obj);
-		// return objUploads.tapFileWrite(isNew, newVersion, baseVersion);
-	}
-
 	async removeCurrentVersionOf(obj: SyncedObj): Promise<void> {
 		try {
 			await this.remoteStorage.deleteObj(obj.objId!);
 		} catch (exc) {
-
-			// XXX
-			//  - we need to distinguish errors and put this work somewhere
-			//    to run when we go online, for example.
-
-			await this.logError(exc, `Uploading of obj removal failed.`);
-			return;
+			if ((exc as ConnectException).type === 'connect') {
+				await this.whenConnected();
+				return this.removeCurrentVersionOf(obj);
+			} else {
+				await this.logError(exc, `Uploading of obj removal failed.`);
+				return;
+			}
 		}
 		await obj.recordRemovalUploadAndGC();
 	}
@@ -128,7 +116,7 @@ export class UpSyncer {
 			}
 			const task = await UploadTask.for(
 				obj, localVersion, uploadVersion, uploadHeader?.uploadHeader, syncedBase,
-				createOnRemote, uploadTaskId, eventSink, this.remoteStorage,
+				createOnRemote, uploadTaskId, eventSink, this.remoteStorage, this.whenConnected,
 				async () => {
 					if (this.tasksByIds.delete(task.taskId)) {
 						this.tasksByObjIds.delete(task.objId);
@@ -174,6 +162,7 @@ class UploadTask implements Task<UploadExecLabel> {
 	private constructor(
 		public readonly taskId: number,
 		private readonly remoteStorage: StorageOwner,
+		private readonly whenConnected: () => Promise<void>,
 		public readonly objId: ObjId,
 		private readonly objStatus: UploadStatusRecorder,
 		private readonly src: ObjSource,
@@ -192,7 +181,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		obj: SyncedObj, localVersion: number, uploadVersion: number,
 		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
 		createObj: boolean, taskId: number, eventSink: UploadEventSink|undefined,
-		remoteStorage: StorageOwner, doAtCompletion: () => Promise<void>
+		remoteStorage: StorageOwner, whenConnected: () =>Promise<void>, doAtCompletion: () => Promise<void>
 	): Promise<UploadTask> {
 		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
 		let needUpload: UploadNeedInfo;
@@ -212,7 +201,8 @@ class UploadTask implements Task<UploadExecLabel> {
 		const objStatus = obj.statusObj();
 		await objStatus.recordUploadStart(info);
 		return new UploadTask(
-			taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader, doAtCompletion, eventSink
+			taskId, remoteStorage, whenConnected, obj.objId, objStatus, src, info, uploadHeader,
+			doAtCompletion, eventSink
 		);
 	}
 
@@ -273,14 +263,20 @@ class UploadTask implements Task<UploadExecLabel> {
 				return true;
 			}
 		} catch (exc) {
-			this.info.needUpload = undefined;
-			this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
-				message: `Fail to upload local version ${this.info.uploadVersion}`,
-				localVersion: this.info.uploadVersion,
-				cause: exc
-			}));
-			await this.objStatus.recordUploadCancellation(this.info);
-			return true;
+			if ((exc as ConnectException).type === 'connect') {
+				this.emitUploadEvent('upload-disconnected', {});
+				await this.whenConnected();
+				return false;
+			} else {
+				this.info.needUpload = undefined;
+				this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
+					message: `Fail to upload local version ${this.info.uploadVersion}`,
+					localVersion: this.info.uploadVersion,
+					cause: exc
+				}));
+				await this.objStatus.recordUploadCancellation(this.info);
+				return true;
+			}
 		}
 	}
 

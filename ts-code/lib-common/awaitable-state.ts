@@ -15,27 +15,35 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export async function asyncIteration<T>(iter: web3n.AsyncIterator<T>,
-		func: (v: T) => Promise<void>): Promise<void> {
-	let item: IteratorResult<T>;
-	do {
-		item = await iter.next();
-		if (item.done) { return; }
-		await func(item.value);
-	} while (true);
+import { defer, Deferred } from "./processes/deferred";
+
+
+export class AwaitableState {
+
+	private deferredStateSetPoint: Deferred<void>|undefined = defer();
+
+	constructor() {
+		Object.seal(this);
+	}
+
+	setState(): void {
+		if (this.deferredStateSetPoint) {
+			this.deferredStateSetPoint.resolve();
+			this.deferredStateSetPoint = undefined;
+		}
+	}
+
+	clearState(): void {
+		if (!this.deferredStateSetPoint) {
+			this.deferredStateSetPoint = defer();
+		}
+	}
+
+	async whenStateIsSet(): Promise<void> {
+		return this.deferredStateSetPoint?.promise;
+	}
+
 }
 
-export async function asyncFind<T>(iter: web3n.AsyncIterator<T>,
-		predicate: (v: T) => boolean|Promise<boolean>): Promise<T|undefined> {
-	let item: IteratorResult<T>;
-	do {
-		item = await iter.next();
-		if (item.done) { return; }
-		const check = predicate(item.value);
-		if ((typeof check === 'boolean') ? check : await check) {
-			return item.value;
-		}
-	} while (true);
-}
 
 Object.freeze(exports);

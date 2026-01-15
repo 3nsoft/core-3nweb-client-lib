@@ -56,10 +56,9 @@ export class SyncedStore implements ISyncedStorage {
 		public readonly logError: LogError
 	) {
 		this.remoteEvents = new RemoteEvents(
-			this.remoteStorage, this.files,
-			this.broadcastNodeEvent.bind(this), this.logError
+			this.remoteStorage, this.files, this.broadcastNodeEvent.bind(this), this.logError
 		);
-		this.uploader = new UpSyncer(this.remoteStorage, this.logError);
+		this.uploader = new UpSyncer(this.remoteStorage, this.whenConnected.bind(this), this.logError);
 		Object.seal(this);
 	}
 
@@ -70,10 +69,8 @@ export class SyncedStore implements ISyncedStorage {
 		net: NetClient, logError: LogError
 	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
 		const remote = RemoteStorage.make(user, getSigner, remoteServiceUrl, net);
-		const objFiles = await ObjFiles.makeFor(path, remote, logError);
-		const s = new SyncedStore(
-			objFiles, remote, getStorages, cryptor, logError
-		);
+		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
+		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, logError);
 		s.uploader.start();
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
@@ -95,10 +92,8 @@ export class SyncedStore implements ISyncedStorage {
 		const {
 			remote, setMid
 		} = RemoteStorage.makeBeforeMidSetup(user, remoteServiceUrl, net);
-		const objFiles = await ObjFiles.makeFor(path, remote, logError);
-		const s = new SyncedStore(
-			objFiles, remote, getStorages, cryptor, logError
-		);
+		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
+		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, logError);
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			setupRemoteAndStartObjProcs: getSigner => {

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2019 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,6 +24,7 @@ import { mergeMap, filter, share } from 'rxjs/operators';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { addToStatus, ConnectionStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 import { defer, Deferred } from '../../../lib-common/processes/deferred';
+import { AwaitableState } from '../../../lib-common/awaitable-state';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -50,7 +51,7 @@ export class RemoteEvents {
 	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private readonly wsProc: WebSocketListening;
-	private deferredConnection: Deferred<void>|undefined = defer();
+	private connection = new AwaitableState();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -67,16 +68,14 @@ export class RemoteEvents {
 
 	private makeProc(): Observable<void> {
 		return from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
-			this.signalConnected();
+			this.connection.setState();
 			heartbeat.subscribe({
 				next: ev => {
 					this.connectionEvents.next(toStorageConnectionStatus(ev));
 					if (ev.type === 'heartbeat') {
-						this.signalConnected();
+						this.connection.setState();
 					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
-						if (!this.deferredConnection) {
-							this.deferredConnection = defer();
-						}
+						this.connection.clearState();
 					}
 				}
 			});
@@ -105,14 +104,7 @@ export class RemoteEvents {
 	}
 
 	async whenConnected(): Promise<void> {
-		return this.deferredConnection?.promise;
-	}
-
-	private signalConnected(): void {
-		if (this.deferredConnection) {
-			this.deferredConnection.resolve();
-			this.deferredConnection = undefined;
-		}
+		return this.connection.whenStateIsSet();
 	}
 
 	private absorbObjChange(client: SubscribingClient): Observable<void> {

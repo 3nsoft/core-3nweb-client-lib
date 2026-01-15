@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019, 2022, 2024 - 2025 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2022, 2024 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,7 @@ import { filter, mergeMap, share, tap } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
 import { addToStatus, ConnectionStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 import { ConnectException } from '../../../lib-common/exceptions/http';
+import { AwaitableState } from '../../../lib-common/awaitable-state';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxEventType = web3n.asmail.InboxEventType;
@@ -64,6 +65,7 @@ export class InboxEvents {
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private readonly wsProc: WebSocketListening;
 	private disconnectedAt: number|undefined = undefined;
+	private connection = new AwaitableState();
 
 	constructor(
 		private readonly msgReceiver: MailRecipient,
@@ -84,7 +86,14 @@ export class InboxEvents {
 		const proc$ = from(this.msgReceiver.openEventSource().then(({ client, heartbeat }) => {
 			const channel = msgRecievedCompletely.EVENT_NAME;
 			heartbeat.subscribe({
-				next: ev => this.connectionEvents.next(toInboxConnectionStatus(ev))
+				next: ev => {
+					this.connectionEvents.next(toInboxConnectionStatus(ev));
+					if (ev.type === 'heartbeat') {
+						this.connection.setState();
+					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
+						this.connection.clearState();
+					}
+				}
 			});
 			return new Observable<Events>(obs => client.subscribe(channel, obs));
 		}))
@@ -104,6 +113,10 @@ export class InboxEvents {
 		// list messages as a side effect of starting, or at point of starting.
 		this.listMsgsFromDisconnectedPeriod();
 		return proc$;
+	}
+
+	async whenConnected(): Promise<void> {
+		return this.connection.whenStateIsSet();
 	}
 
 	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {

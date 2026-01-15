@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -130,9 +130,7 @@ export class InboxOnServer {
 
 	private readonly inboxEvents: InboxEvents;
 	private readonly procs = new NamedProcs();
-	private readonly recentlyOpenedMsgs = makeTimedCache<string, OpenedMsg>(
-		60*1000
-	);
+	private readonly recentlyOpenedMsgs = makeTimedCache<string, OpenedMsg>(60*1000);
 
 	private constructor(
 		private readonly r: R,
@@ -145,7 +143,8 @@ export class InboxOnServer {
 		private readonly logError: LogError
 	) {
 		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.listNewMsgs.bind(this), this.removeMsg.bind(this), this.logError
+			this.msgReceiver, this.getMsg.bind(this), this.listNewMsgs.bind(this), this.removeMsg.bind(this),
+			this.logError
 		);
 		Object.seal(this);
 	}
@@ -156,22 +155,17 @@ export class InboxOnServer {
 		try {
 			ensureCorrectFS(syncedFS, 'synced', true);
 			const msgReceiver = new MailRecipient(
-				r.address, r.getSigner,
-				() => r.asmailResolver(r.address), r.makeNet()
+				r.address, r.getSigner, () => r.asmailResolver(r.address), r.makeNet()
 			);
-			const downloader = new MsgDownloader(msgReceiver);
-			const cache = await CachedMessages.makeFor(
-				cachePath, downloader, r.logError
-			);
-			const indexSyncedFS = await getOrMakeAndUploadFolderIn(
-				syncedFS, MSG_INDEX_FOLDER
-			);
+			const downloader = new MsgDownloader(msgReceiver, () => inbox.inboxEvents.whenConnected());
+			const cache = await CachedMessages.makeFor(cachePath, downloader, r.logError);
+			const indexSyncedFS = await getOrMakeAndUploadFolderIn(syncedFS, MSG_INDEX_FOLDER);
 			const index = await MsgIndex.make(indexSyncedFS);
 			await uploadFolderChangesIfAny(syncedFS);
-			return new InboxOnServer(
-				r.correspondents, msgReceiver, r.getStorages, r.cryptor,
-				downloader, cache, index, r.logError
+			const inbox =  new InboxOnServer(
+				r.correspondents, msgReceiver, r.getStorages, r.cryptor, downloader, cache, index, r.logError
 			);
+			return inbox;
 		} catch (err) {
 			throw errWithCause(err, 'Failed to initialize Inbox');
 		}
