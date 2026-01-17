@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -699,6 +699,10 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		if (this.status.remote.current === version) { return true; }
 		if (this.status.remote.archived?.includes(version)) { return true; }
 		return false;
+	}
+
+	isLocalOnlyVersion(version: number): boolean {
+		return (this.status.local?.current === version);
 	}
 
 }

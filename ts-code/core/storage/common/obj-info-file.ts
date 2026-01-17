@@ -74,8 +74,9 @@ export interface VersionsInfo {
 export function addBaseToDiffLinkInVersInfo(
 	versions: VersionsInfo, diffVer: number, baseVer: number
 ): void {
-	if (diffVer <= baseVer) { throw new Error(
-		`Given diff version ${diffVer} is not greater than base version ${baseVer}`); }
+	if (diffVer <= baseVer) {
+		throw new Error(`Given diff version ${diffVer} is not greater than base version ${baseVer}`);
+	}
 	versions.diffToBase[diffVer] = baseVer;
 	versions.baseToDiff[baseVer] = diffVer;
 }

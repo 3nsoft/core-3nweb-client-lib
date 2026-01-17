@@ -53,6 +53,8 @@ export function makeStorageException(fields: Partial<StorageException>): Storage
 	for (const [ key, value ] of Object.entries(fields)) {
 		exc[key] = value;
 	}
+	const err = new Error(`runtime exception stack`);
+	exc['stack'] = err.stack;
 	return exc;
 }
 

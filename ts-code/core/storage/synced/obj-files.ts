@@ -529,7 +529,7 @@ export class SyncedObj {
 
 	async getNumOfBytesNeedingDownload(version: number): Promise<number|'unknown'> {
 		if (!this.status.isAmongRemote(version)) {
-			if (this.localVers.has(version)) {
+			if (this.status.isLocalOnlyVersion(version)) {
 				return 0;
 			} else {
 				throw makeObjVersionNotFoundExc(this.objId, version);
