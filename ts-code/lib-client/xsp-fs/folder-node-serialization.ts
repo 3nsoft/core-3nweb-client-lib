@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2022 3NSoft Inc.
+ Copyright (C) 2017, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,6 +20,7 @@ import { FolderInfo, NodeInfo } from './folder-node';
 import { KEY_LENGTH } from 'xsp-files';
 import { packUintTo4Bytes, uintFrom4Bytes } from '../../lib-common/big-endian';
 import { assert } from '../../lib-common/assert';
+import { getStackHere } from '../../lib-common/exceptions/runtime';
 
 const ver1Serialization = new Uint8Array([ 1 ]);
 
@@ -45,7 +46,8 @@ function parsingException(msg: string, cause?: any): ParsingException {
 		runtimeException: true,
 		type: 'folder-parsing',
 		message: msg,
-		cause
+		cause,
+		stack: getStackHere(1)
 	};
 }
 

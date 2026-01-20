@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2025 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,6 +22,7 @@ import { asmailInfoAt } from '../service-locator';
 import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { LogError } from '../logging/log-to-file';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
+import { getStackHere } from '../../lib-common/exceptions/runtime';
 
 type InboxException = web3n.asmail.InboxException;
 
@@ -30,7 +31,8 @@ export function makeMsgNotFoundException(msgId: string): InboxException {
 		runtimeException: true,
 		type: 'inbox',
 		msgId,
-		msgNotFound: true
+		msgNotFound: true,
+		stack: getStackHere(1)
 	};
 	return exc;
 }
@@ -41,7 +43,8 @@ export function makeObjNotFoundException(msgId: string, objId: string): InboxExc
 		type: 'inbox',
 		msgId,
 		objNotFound: true,
-		objId
+		objId,
+		stack: getStackHere(1)
 	};
 	return exc;
 }
@@ -51,7 +54,8 @@ export function makeMsgIsBrokenException(msgId: string): InboxException {
 		runtimeException: true,
 		type: 'inbox',
 		msgId,
-		msgIsBroken: true
+		msgIsBroken: true,
+		stack: getStackHere(1)
 	};
 	return exc;
 }

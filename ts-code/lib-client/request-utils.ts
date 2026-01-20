@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,6 @@ import { makeHTTPException, makeConnectionException, HTTPException, makeMalforme
 import { BytesFIFOBuffer } from '../lib-common/byte-streaming/bytes-fifo-buffer';
 import * as https from 'https';
 import { IncomingMessage, IncomingHttpHeaders, ClientRequest } from 'http';
-import { parse as parseUrl } from 'url';
 import { fromEvent, lastValueFrom, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { defer } from '../lib-common/processes/deferred';
@@ -86,17 +85,19 @@ export async function processRequest<T>(
 export function formHttpsReqOpts(
 	opts: RequestOpts, contentType?: ContentType, reqBody?: Uint8Array
 ): https.RequestOptions {
-	if (!opts.url) { throw new Error(
-		`Cannot send net request, cause url is not set in given options.`); }
+	if (!opts.url) {
+		throw new Error(`Cannot send net request, cause url is not set in given options.`);
+	}
 	if (reqBody && (opts.method !== 'POST') && (opts.method !== 'PUT')) {
-		throw new Error(`Cannot have body in ${opts.method} request.`); }
-	const url = parseUrl(opts.url);
+		throw new Error(`Cannot have body in ${opts.method} request.`);
+	}
+	const url = new URL(opts.url);
 	const netReqOpts: https.RequestOptions = {
 		protocol: url.protocol,
 		method: opts.method,
 		hostname: url.hostname,
 		port: url.port,
-		path: url.path,
+		path: url.pathname + url.search,
 		headers: {}
 	};
 	if (reqBody) {
@@ -157,8 +158,9 @@ async function attachRequestReaders(
 
 const TIMEOUT_FLAG = 'Request Timeout';
 
-function isTimeoutErr(err: HTTPException, opts: RequestOpts,
-		currentAttempt: number): { isTimeout: boolean; canRetry: boolean; } {
+function isTimeoutErr(
+	err: HTTPException, opts: RequestOpts, currentAttempt: number
+): { isTimeout: boolean; canRetry: boolean; } {
 	if (err.cause !== TIMEOUT_FLAG) {
 		return { isTimeout: false, canRetry :false };
 	}
@@ -167,8 +169,7 @@ function isTimeoutErr(err: HTTPException, opts: RequestOpts,
 	return { isTimeout: true, canRetry };
 }
 
-async function readAllBytesFrom(stream: NodeJS.ReadableStream):
-		Promise<Uint8Array|undefined> {
+async function readAllBytesFrom(stream: NodeJS.ReadableStream): Promise<Uint8Array|undefined> {
 	const buf = new BytesFIFOBuffer();
 	const deferred = defer<Uint8Array|undefined>();
 	stream.on('error', e => deferred.reject(e));
@@ -181,8 +182,7 @@ async function readAllBytesFrom(stream: NodeJS.ReadableStream):
 
 const EMPTY_ARR = new Uint8Array(0);
 
-function formReply<T>(res: IncomingMessage, resBody: Uint8Array|undefined,
-		reqOpts: RequestOpts): Reply<T> {
+function formReply<T>(res: IncomingMessage, resBody: Uint8Array|undefined, reqOpts: RequestOpts): Reply<T> {
 	const status = res.statusCode!;
 	const resContentType =
 		res.headers[CONTENT_TYPE_HEADER.toLowerCase()] as ContentType;
@@ -208,15 +208,13 @@ function formReply<T>(res: IncomingMessage, resBody: Uint8Array|undefined,
 		status,
 		data,
 		headers: (reqOpts.responseHeaders ?
-			makeHeaders(filterHeaders(res.headers, reqOpts.responseHeaders)) :
-			undefined
+			makeHeaders(filterHeaders(res.headers, reqOpts.responseHeaders)) : undefined
 		)
 	};
 	return rep;
 }
 
-function filterHeaders(resHeaders: IncomingHttpHeaders,
-		responseHeaders: string[]): { [h:string]: string; } {
+function filterHeaders(resHeaders: IncomingHttpHeaders, responseHeaders: string[]): { [h:string]: string; } {
 	const filteredHeaders: { [h:string]: string; } = {};
 	for (const h of responseHeaders) {
 		const hVal = resHeaders[h.toLocaleLowerCase()];
@@ -234,15 +232,6 @@ function makeHeaders(headers: { [h:string]: string; }): Headers {
 		}
 	};
 }
-
-// /**
-//  * @param rep
-//  * @param errMsg
-//  * @return http exception based on given reply, with an optional message
-//  */
-// export function makeException(rep: Reply<any>, message?: string): HTTPException {
-// 	return makeHTTPException(rep.url, rep.method, rep.status, { message });
-// }
 
 export function extractIntHeader(rep: Reply<any>, headerName: string): number {
 	const intHeader = parseInt(rep.headers!.get(headerName)!);
@@ -269,16 +258,17 @@ export interface NetClient {
 	 * @param opts
 	 * @param bytes
 	 */
-	doBinaryRequest<T>(opts: RequestOpts, bytes: Uint8Array|Uint8Array[]):
-		Promise<Reply<T>>;
-	
+	doBinaryRequest<T>(opts: RequestOpts, bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>>;
+
 	/**
 	 * This makes a request without body, returning a promise, resolvable to
 	 * reply object.
 	 * @param opts
 	 */
 	doBodylessRequest<T>(opts: RequestOpts): Promise<Reply<T>>;
-	
+
+	reset(): void;
+
 }
 
 function makeNodeRequest<T>(): RequestFn<T> {
@@ -290,14 +280,13 @@ function makeNodeRequest<T>(): RequestFn<T> {
 }
 
 export function makeNetClient(
-	request = makeNodeRequest()
+	request = makeNodeRequest(),
+	reset = () => {}
 ): NetClient {
 
 	const client: NetClient = {
-		
-		doBinaryRequest<T>(
-			opts: RequestOpts, bytes: Uint8Array|Uint8Array[]
-		): Promise<Reply<T>> {
+	
+		doBinaryRequest<T>(opts: RequestOpts, bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>> {
 			let reqBody: Uint8Array|undefined;
 			if (Array.isArray(bytes)) {
 				const fifo = new BytesFIFOBuffer();
@@ -316,15 +305,14 @@ export function makeNetClient(
 		},
 
 		doJsonRequest<T>(opts: RequestOpts, json: any): Promise<Reply<T>> {
-			const reqBody = ((json === undefined) ?
-				new Uint8Array(0) :
-				utf8.pack(JSON.stringify(json))
-			);
+			const reqBody = ((json === undefined) ? new Uint8Array(0) : utf8.pack(JSON.stringify(json)));
 			return (request as RequestFn<T>)(opts, 'application/json', reqBody);
-		}
+		},
+
+		reset
 
 	};
-	
+
 	return Object.freeze(client);
 }
 

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 3NSoft Inc.
+ Copyright (C) 2020, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,6 +20,7 @@ import { scrypt, box, secret_box as sbox, signing as sign, arrays } from 'ecma-n
 import { Code, Func, ReplyMsg, RequestMsg } from './cryptor-in-worker';
 import { stringifyErr } from '../../lib-common/exceptions/error';
 import { CryptorException } from './cryptor';
+import { getStackHere } from '../../lib-common/exceptions/runtime';
 
 
 if (!parentPort) {
@@ -113,7 +114,8 @@ const funcs: { [key in Func]: Code; } = {
 function wrapError(err: any): CryptorException {
 	const exc: CryptorException = {
 		runtimeException: true,
-		type: 'cryptor'
+		type: 'cryptor',
+		stack: getStackHere(1)
 	};
 	if ((err as web3n.EncryptionException).failedCipherVerification) {
 		exc.failedCipherVerification = true;

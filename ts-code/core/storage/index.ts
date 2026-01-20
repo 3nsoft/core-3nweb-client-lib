@@ -69,9 +69,7 @@ function makeNotAllowedToOpenAppFSExc(appFolder: string): StorageException {
 	};
 }
 
-function makeNotAllowedToOpenUserFSExc(
-	storageType: StorageType
-): StorageException {
+function makeNotAllowedToOpenUserFSExc(storageType: StorageType): StorageException {
 	return {
 		runtimeException: true,
 		type: 'storage',
@@ -81,9 +79,7 @@ function makeNotAllowedToOpenUserFSExc(
 	};
 }
 
-function makeNotAllowedToOpenSysFSExc(
-	storageType: StorageType
-): StorageException {
+function makeNotAllowedToOpenSysFSExc(storageType: StorageType): StorageException {
 	return {
 		runtimeException: true,
 		type: 'storage',
@@ -102,9 +98,7 @@ const SYNCED_STORAGE_DIR = 'synced';
  * If not found, function will return undefined.
  * @param folder 
  */
-async function readRootKeyDerivParamsFromCache(
-	folder: string
-): Promise<ScryptGenParams|undefined> {
+async function readRootKeyDerivParamsFromCache(folder: string): Promise<ScryptGenParams|undefined> {
 	try {
 		const str = await fs.readFile(
 			join(folder, KD_PARAMS_FILE_NAME),
@@ -125,9 +119,7 @@ async function getAndCacheRootKeyDerivParamsFromServer(
 	return params;
 }
 
-async function saveRootKeyDerivParamsToDisk(
-	folder: string, params: ScryptGenParams
-): Promise<void> {
+async function saveRootKeyDerivParamsToDisk(folder: string, params: ScryptGenParams): Promise<void> {
 	await fs.writeFile(
 		join(folder, KD_PARAMS_FILE_NAME),
 		JSON.stringify(params),
@@ -148,9 +140,7 @@ class StorageAndFS<T extends Storage> {
 		Object.seal(this);
 	}
 
-	static async existing<T extends Storage>(
-		storage: T, key: Uint8Array
-	): Promise<StorageAndFS<T>|undefined> {
+	static async existing<T extends Storage>(storage: T, key: Uint8Array): Promise<StorageAndFS<T>|undefined> {
 		const s = new StorageAndFS(storage);
 		try {
 			s.rootFS = await xspFS.fromExistingRoot(s.storage, key);
@@ -425,8 +415,7 @@ export class Storages implements FactoryOfFSs {
 	}
 
 	async initFreshForNewUser(
-		user: string, getSigner: GetSigner,
-		params: ScryptGenParams, key: Uint8Array,
+		user: string, getSigner: GetSigner, params: ScryptGenParams, key: Uint8Array,
 		makeNet: MakeNet, resolver: ServiceLocator, logError: LogError
 	): Promise<boolean> {
 		const storageDir = this.storageDirForUser(user);

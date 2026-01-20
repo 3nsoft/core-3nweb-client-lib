@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2021 3NSoft Inc.
+ Copyright (C) 2021, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,7 @@
 */
 
 export function makeRuntimeException<T extends web3n.RuntimeException>(
-	type: NonNullable<T['type']>, params: Partial<T>, flags: Partial<T>
+	type: NonNullable<T['type']>, params: Partial<T>, flags: Partial<T>, addStack = false
 ): T {
 	const exc: web3n.RuntimeException = {
 		runtimeException: true,
@@ -32,7 +32,20 @@ export function makeRuntimeException<T extends web3n.RuntimeException>(
 			exc[field] = val;
 		}
 	}
+	if (addStack) {
+		exc.stack = getStackHere(1);
+	}
 	return exc as T;
+}
+
+/**
+ * 
+ * @param numOfTopLayersToRemove 
+ * @returns 
+ */
+export function getStackHere(numOfTopLayersToRemove = 0): string|undefined {
+	const err = new Error('stack');
+	return err.stack?.split('\n').slice(2+numOfTopLayersToRemove).join('\n');
 }
 
 

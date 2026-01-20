@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -374,23 +374,21 @@ export class DeviceFS implements WritableFS, Linkable {
 		throw makeNoAttrsExc(path);
 	}
 
-	select(
-		path: string, criteria: SelectCriteria
-	): Promise<{ items: FSCollection; completion: Promise<void>; }> {
+	select(path: string, criteria: SelectCriteria): Promise<{ items: FSCollection; completion: Promise<void>; }> {
 		return selectInFS(this, path, criteria);
 	}
 	
-	async readBytes(
-		path: string, start?: number, end?: number
-	): Promise<Uint8Array|undefined> {
-		if ((typeof start === 'number') && (start < 0)) { throw new Error(
-			`Parameter start has bad value: ${start}`); }
-		if ((typeof end === 'number') && (end < 0)) { throw new Error(
-			`Parameter end has bad value: ${end}`); }
-		let fd: number|undefined = undefined;
+	async readBytes(path: string, start?: number, end?: number): Promise<Uint8Array|undefined> {
+		if ((typeof start === 'number') && (start < 0)) {
+			throw new RangeError(`Parameter start has bad value: ${start}`);
+		}
+		if ((typeof end === 'number') && (end < 0)) {
+			throw new RangeError(`Parameter end has bad value: ${end}`);
+		}
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
-			fd = await fs.open(this.fullPath(path), 'r');
-			const size = (await fs.fstat(fd)).size;
+			fh = await fs.open(this.fullPath(path), 'r');
+			const size = (await fh.stat()).size;
 			if (size === 0) { return; }
 			if (typeof start !== 'number') {
 				start = 0;
@@ -398,48 +396,50 @@ export class DeviceFS implements WritableFS, Linkable {
 			} else if ((typeof end !== 'number') || (size < end)) {
 				end = size;
 			}
-			if ((end - start) < 1) { return; }
+			if ((end - start) < 1) {
+				return;
+			}
 			const bytes = Buffer.allocUnsafe(end - start);
-			await fs.readToBuf(fd, start, bytes);
+			await fs.readToBuf(fh, start, bytes);
 			return bytes;
 		} catch (e) {
 			throw maskPathInExc(this.root.length, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 	
-	async getByteSink(
-		path: string, flags = WRITE_NONEXCL_FLAGS
-	): Promise<FileByteSink> {
+	async getByteSink(path: string, flags = WRITE_NONEXCL_FLAGS): Promise<FileByteSink> {
 		const pathSections = splitPathIntoParts(path);
 		const pathStr = this.fullPath(path);
-		let fd: number|undefined = undefined;
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
 			if (flags.create) {
 				if (pathSections.length > 1) {
-					const enclosingFolder = pathSections.slice(
-						0, pathSections.length-1).join('/');
+					const enclosingFolder = pathSections.slice(0, pathSections.length-1).join('/');
 					await this.makeFolder(enclosingFolder);
 				}
 				if (flags.exclusive) {
-					fd = await fs.open(pathStr, 'wx');
+					fh = await fs.open(pathStr, 'wx');
 				} else {
-					fd = await fs.open(pathStr, flags.truncate ? 'w' : 'r+')
+					fh = await fs.open(pathStr, flags.truncate ? 'w' : 'r+')
 					.catch((exc: FileException) => {
-						if (exc.notFound) { return fs.open(pathStr, 'w'); }
-						else { throw exc; }
+						if (exc.notFound) {
+							return fs.open(pathStr, 'w');
+						} else {
+							throw exc;
+						}
 					});
 				}
 			} else {
-				fd = await fs.open(pathStr, flags.truncate ? 'w' : 'r+');
+				fh = await fs.open(pathStr, flags.truncate ? 'w' : 'r+');
 			}
-			const stats = await fs.fstat(fd);
+			const stats = await fh.stat();
 			return DevFileByteSink.make(pathStr, this.root.length, stats);
 		} catch (e) {
 			throw maskPathInExc(this.root.length, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 
@@ -459,12 +459,10 @@ export class DeviceFS implements WritableFS, Linkable {
 		};
 	}
 
-	async writeBytes(
-		path: string, bytes: Uint8Array, flags = WRITE_NONEXCL_FLAGS
-	): Promise<void> {
+	async writeBytes(path: string, bytes: Uint8Array, flags = WRITE_NONEXCL_FLAGS): Promise<void> {
 		const pathSections = splitPathIntoParts(path);
 		const pathStr = this.fullPath(path);
-		let fd: number|undefined = undefined;
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
 			if (flags.create) {
 				if (pathSections.length > 1) {
@@ -472,16 +470,16 @@ export class DeviceFS implements WritableFS, Linkable {
 						0, pathSections.length-1).join('/');
 					await this.makeFolder(enclosingFolder);
 				}
-				fd = await fs.open(pathStr, (flags.exclusive ? 'wx' : 'w'));
+				fh = await fs.open(pathStr, (flags.exclusive ? 'wx' : 'w'));
 			} else {
-				fd = await fs.open(pathStr, 'r+');
-				await fs.ftruncate(fd, 0);
+				fh = await fs.open(pathStr, 'r+');
+				await fh.truncate(0);
 			}
-			await fs.writeFromBuf(fd, 0, toBuffer(bytes));
+			await fs.writeFromBuf(fh, 0, toBuffer(bytes));
 		} catch (e) {
 			throw maskPathInExc(this.root.length, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 

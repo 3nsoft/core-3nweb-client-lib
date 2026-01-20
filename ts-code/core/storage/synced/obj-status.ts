@@ -333,11 +333,10 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 				return;
 			} else {
 				throw makeRuntimeException<FileException>(
-					'file', {
-						path: join(this.objFolder, STATUS_FILE_NAME),
-						fsEtityType: 'file', message: `Upload is in progress`
-					},
-					{ concurrentUpdate: true }
+					'file',
+					{ path: join(this.objFolder, STATUS_FILE_NAME), fsEtityType: 'file', message: `Upload is in progress` },
+					{ concurrentUpdate: true },
+					true
 				);
 			}
 		}
@@ -374,6 +373,10 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 				throw exc;
 			}
 		}
+	}
+
+	get upload(): UploadInfo|undefined {
+		return this.status.upload;
 	}
 
 	recordUploadStart(info: NewVersionUpload): Promise<void> {

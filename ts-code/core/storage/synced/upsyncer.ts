@@ -40,6 +40,7 @@ type UploadExecLabel = 'long' | 'fast';
 type UploadNeedInfo = NonNullable<NewVersionUpload['needUpload']>;
 type UploadEvent = web3n.files.UploadEvent;
 type ConnectException = web3n.ConnectException;
+type HTTPException = web3n.HTTPException;
 
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 
@@ -53,7 +54,6 @@ export class UpSyncer {
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
-		private readonly whenConnected: () => Promise<void>,
 		private readonly logError: LogError
 	) {
 		this.execPools = new LabelledExecPools([
@@ -76,7 +76,7 @@ export class UpSyncer {
 			await this.remoteStorage.deleteObj(obj.objId!);
 		} catch (exc) {
 			if ((exc as ConnectException).type === 'connect') {
-				await this.whenConnected();
+				await this.remoteStorage.connectedState.whenStateIsSet();
 				return this.removeCurrentVersionOf(obj);
 			} else {
 				await this.logError(exc, `Uploading of obj removal failed.`);
@@ -87,9 +87,8 @@ export class UpSyncer {
 	}
 
 	async startUploadFromDisk(
-		obj: SyncedObj, localVersion: number, uploadVersion: number,
-		uploadHeader: UploadHeaderChange|undefined, createOnRemote: boolean,
-		eventSink: UploadEventSink|undefined,
+		obj: SyncedObj, localVersion: number, uploadVersion: number, uploadHeader: UploadHeaderChange|undefined,
+		createOnRemote: boolean, eventSink: UploadEventSink|undefined
 	): Promise<{ completion: Promise<void>; uploadTaskId: number; }> {
 		const foundTask = this.tasksByObjIds.get(obj.objId);
 		if (foundTask) {
@@ -116,7 +115,7 @@ export class UpSyncer {
 			}
 			const task = await UploadTask.for(
 				obj, localVersion, uploadVersion, uploadHeader?.uploadHeader, syncedBase,
-				createOnRemote, uploadTaskId, eventSink, this.remoteStorage, this.whenConnected,
+				createOnRemote, uploadTaskId, eventSink, this.remoteStorage,
 				async () => {
 					if (this.tasksByIds.delete(task.taskId)) {
 						this.tasksByObjIds.delete(task.objId);
@@ -162,48 +161,67 @@ class UploadTask implements Task<UploadExecLabel> {
 	private constructor(
 		public readonly taskId: number,
 		private readonly remoteStorage: StorageOwner,
-		private readonly whenConnected: () => Promise<void>,
 		public readonly objId: ObjId,
 		private readonly objStatus: UploadStatusRecorder,
 		private readonly src: ObjSource,
 		private readonly info: NewVersionUpload,
 		private readonly uploadHeader: Uint8Array|undefined,
 		private readonly doAtCompletion: () => Promise<void>,
-		private readonly eventSink: UploadEventSink|undefined
+		private readonly eventSink: UploadEventSink|undefined,
+		isRestart: boolean
 	) {
 		this.execLabel = executorLabelFor(this.info.needUpload!);
 		this.totalBytesToUpload = countBytesIn(this.info);
-		this.emitUploadEvent('upload-started', { totalBytesToUpload: this.totalBytesToUpload });
+		this.emitUploadEvent('upload-started', { totalBytesToUpload: this.totalBytesToUpload, isRestart });
 		Object.seal(this);
 	}
 
 	static async for(
-		obj: SyncedObj, localVersion: number, uploadVersion: number,
-		uploadHeader: Uint8Array|undefined, syncedBase: number|undefined,
-		createObj: boolean, taskId: number, eventSink: UploadEventSink|undefined,
-		remoteStorage: StorageOwner, whenConnected: () =>Promise<void>, doAtCompletion: () => Promise<void>
+		obj: SyncedObj, localVersion: number, uploadVersion: number, uploadHeader: Uint8Array|undefined,
+		syncedBase: number|undefined, createObj: boolean, taskId: number, eventSink: UploadEventSink|undefined,
+		remoteStorage: StorageOwner, doAtCompletion: () => Promise<void>
 	): Promise<UploadTask> {
 		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
-		let needUpload: UploadNeedInfo;
-		if (syncedBase) {
-			const { diff, newSegsPackOrder } = await obj.diffForUploadOf(localVersion);
-			needUpload = await diffVerUpload(src, uploadHeader, diff, newSegsPackOrder);
-		} else {
-			needUpload = await wholeVerUpload(src, uploadHeader, createObj);
-		}
-		const info: NewVersionUpload = {
-			type: 'new-version',
-			localVersion,
-			uploadVersion,
-			baseVersion: syncedBase,
-			needUpload
-		};
 		const objStatus = obj.statusObj();
-		await objStatus.recordUploadStart(info);
-		return new UploadTask(
-			taskId, remoteStorage, whenConnected, obj.objId, objStatus, src, info, uploadHeader,
-			doAtCompletion, eventSink
-		);
+		if (objStatus.upload) {
+			const info = objStatus.upload;
+			if ((info.type === 'new-version')
+			&& (info.localVersion === localVersion) && (info.uploadVersion === uploadVersion)) {
+				return new UploadTask(
+					taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader, doAtCompletion, eventSink, true
+				);
+			} else {
+				let message: string;
+				if (info.type === 'new-version') {
+					message = `Upload type ${info.type} of local version ${info.localVersion} as new remote ${info.uploadVersion} is already scheduled, and is different from uploading local version ${localVersion} as remote ${uploadVersion}.`;
+				} else {
+					message = `Upload type ${info.type} is already scheduled`;
+				}
+				throw makeFSSyncException('sync-task', {
+					alreadyUploading: true,
+					message
+				});
+			}
+		} else {
+			let needUpload: UploadNeedInfo;
+			if (syncedBase) {
+				const { diff, newSegsPackOrder } = await obj.diffForUploadOf(localVersion);
+				needUpload = await diffVerUpload(src, uploadHeader, diff, newSegsPackOrder);
+			} else {
+				needUpload = await wholeVerUpload(src, uploadHeader, createObj);
+			}
+			const info: NewVersionUpload = {
+				type: 'new-version',
+				localVersion,
+				uploadVersion,
+				baseVersion: syncedBase,
+				needUpload
+			};
+			await objStatus.recordUploadStart(info);
+			return new UploadTask(
+				taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader, doAtCompletion, eventSink, false
+			);
+		}
 	}
 
 	neededExecutor(): UploadExecLabel|undefined {
@@ -265,12 +283,16 @@ class UploadTask implements Task<UploadExecLabel> {
 		} catch (exc) {
 			if ((exc as ConnectException).type === 'connect') {
 				this.emitUploadEvent('upload-disconnected', {});
-				await this.whenConnected();
+				await this.remoteStorage.connectedState.whenStateIsSet();
 				return false;
 			} else {
+				if ((exc as HTTPException).unexpectedStatus && this.info.needUpload.transactionId) {
+					await this.remoteStorage.cancelTransaction(this.objId, this.info.needUpload.transactionId)
+					.catch(noop);
+				}
 				this.info.needUpload = undefined;
 				this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
-					message: `Fail to upload local version ${this.info.uploadVersion}`,
+					message: `Fail to upload version ${this.info.uploadVersion} of local version ${this.info.localVersion}`,
 					localVersion: this.info.uploadVersion,
 					cause: exc
 				}));
@@ -293,14 +315,12 @@ class UploadTask implements Task<UploadExecLabel> {
 		const ver = this.info.uploadVersion;
 		if (segsToUpload === upload.segsLeft) {
 			await this.remoteStorage.saveNewObjVersion(
-				this.objId, { ver, last: true }, undefined,
-				{ header, segs }
+				this.objId, { ver, last: true }, undefined, { header, segs }
 			);
 			this.info.needUpload = undefined;
 		} else {
 			upload.transactionId = await this.remoteStorage.saveNewObjVersion(
-				this.objId, { ver }, undefined,
-				{ header, segs }
+				this.objId, { ver }, undefined, { header, segs }
 			);
 			if (!upload.transactionId) {
 	
@@ -318,9 +338,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		return (this.uploadHeader ? this.uploadHeader : await this.src.readHeader());
 	}
 
-	private async startOrderedDiffUpload(
-		upload: DiffVerOrderedUpload
-	): Promise<void> {
+	private async startOrderedDiffUpload(upload: DiffVerOrderedUpload): Promise<void> {
 		const diff = utf8.pack(JSON.stringify(upload.diff));
 		const maxSegs = this.maxUploadChunk() - upload.header! - diff.length;
 		assert(maxSegs > 1);
@@ -328,16 +346,12 @@ class UploadTask implements Task<UploadExecLabel> {
 		const ver = this.info.uploadVersion;
 		if (upload.newSegsLeft.length === 0) {
 			await this.remoteStorage.saveNewObjVersion(
-				this.objId,
-				{ ver, last: true }, undefined,
-				{ header, diff }
+				this.objId, { ver, last: true }, undefined, { header, diff }
 			);
 			this.info.needUpload = undefined;
 		} else {
 			upload.transactionId = await this.remoteStorage.saveNewObjVersion(
-				this.objId,
-				{ ver }, undefined,
-				{ header, diff }
+				this.objId, { ver }, undefined, { header, diff }
 			);
 			if (!upload.transactionId) {
 		
@@ -361,14 +375,10 @@ class UploadTask implements Task<UploadExecLabel> {
 		const ofs = upload.segsOfs;
 		const trans = upload.transactionId!;
 		if (segsToUpload === upload.segsLeft) {
-			await this.remoteStorage.saveNewObjVersion(
-				this.objId, undefined, { ofs, trans, last: true }, { segs }
-			);
+			await this.remoteStorage.saveNewObjVersion(this.objId, undefined, { ofs, trans, last: true }, { segs });
 			this.info.needUpload = undefined;
 		} else {
-			await this.remoteStorage.saveNewObjVersion(
-				this.objId, undefined, { ofs, trans }, { segs }
-			);
+			await this.remoteStorage.saveNewObjVersion(this.objId, undefined, { ofs, trans }, { segs });
 			upload.segsOfs += segsToUpload;
 			upload.segsLeft -= segsToUpload;
 		}
@@ -390,14 +400,10 @@ class UploadTask implements Task<UploadExecLabel> {
 		const ofs = segInfo.thisVerOfs;
 		const trans = upload.transactionId!;
 		if (upload.newSegsLeft.length === 1) {
-			await this.remoteStorage.saveNewObjVersion(
-				this.objId, undefined, { ofs, trans, last: true }, { segs }
-			);
+			await this.remoteStorage.saveNewObjVersion(this.objId, undefined, { ofs, trans, last: true }, { segs });
 			this.info.needUpload = undefined;
 		} else {
-			await this.remoteStorage.saveNewObjVersion(
-				this.objId, undefined, { ofs, trans }, { segs }
-			);
+			await this.remoteStorage.saveNewObjVersion(this.objId, undefined, { ofs, trans }, { segs });
 			upload.newSegsLeft.splice(0, 1);
 		}
 	}
@@ -427,8 +433,7 @@ async function wholeVerUpload(
 }
 
 async function diffVerUpload(
-	src: ObjSource, uploadHeader: Uint8Array|undefined, diff: DiffInfo,
-	newSegsPackOrder: FiniteChunk[]
+	src: ObjSource, uploadHeader: Uint8Array|undefined, diff: DiffInfo, newSegsPackOrder: FiniteChunk[]
 ): Promise<DiffVerOrderedUpload> {
 	const header = await expectedHeaderLen(src, uploadHeader);
 	return {
@@ -439,9 +444,7 @@ async function diffVerUpload(
 	};
 }
 
-async function expectedHeaderLen(
-	src: ObjSource, uploadHeader: Uint8Array|undefined
-): Promise<number> {
+async function expectedHeaderLen(src: ObjSource, uploadHeader: Uint8Array|undefined): Promise<number> {
 	return (uploadHeader ?
 		uploadHeader.length : (await src.readHeader()).length);
 }

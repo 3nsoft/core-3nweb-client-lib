@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -14,6 +14,8 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
+
+import { getStackHere } from "./runtime";
 
 export type FileException = web3n.files.FileException;
 export type FileExceptionFlag = web3n.files.FileExceptionFlag;
@@ -39,14 +41,15 @@ for (const [flag, code] of Object.entries(Code)) {
 }
 
 export function makeFileExceptionFromCode(
-	code: string|undefined, path: string, cause?: any
+	code: string|undefined, path: string, cause?: any, numOfTopLayersToRemove = 0
 ): FileException {
 	const err: FileException = {
 		runtimeException: true,
 		type: 'file',
 		code,
 		path,
-		cause
+		cause,
+		stack: getStackHere(1 + numOfTopLayersToRemove)
 	};
 	if (code) {
 		const flag = codeToFlag[code];
@@ -57,24 +60,21 @@ export function makeFileExceptionFromCode(
 	return err;
 }
 
-export function makeFileException(
-	flag: keyof FileExceptionFlag, path: string, cause?: any
-): FileException {
+export function makeFileException(flag: keyof FileExceptionFlag, path: string, cause?: any): FileException {
 	const code = Code[flag];
 	const err: FileException = {
 		runtimeException: true,
 		type: 'file',
 		code,
 		path,
-		cause
+		cause,
+		stack: getStackHere(1)
 	};
 	err[flag] = true;
 	return err;
 }
 
-export function maskPathInExc(
-	pathPrefixMaskLen: number, exc: any
-): FileException {
+export function maskPathInExc(pathPrefixMaskLen: number, exc: any): FileException {
 	if (!exc.runtimeException || !exc.code) { return exc; }
 	if (typeof exc.path === 'string') {
 		exc.path = exc.path.substring(pathPrefixMaskLen);
@@ -82,14 +82,16 @@ export function maskPathInExc(
 	return exc;
 }
 
-export function ensureCorrectFS(
-	fs: web3n.files.FS, type: web3n.files.FSType, writable: boolean
-): void {
-	if (!fs) { throw new Error("No file system given."); }
-	if (fs.type !== type) { throw new Error(
-		`Expected ${type} file system, instead got ${fs.type} type.`); }
-	if (fs.writable !== writable) { throw new Error(
-		`Given file system is ${fs.writable ? '' : 'not'} writable, while it is expected to be ${writable ? '' : 'not'} writable`); }
+export function ensureCorrectFS(fs: web3n.files.FS, type: web3n.files.FSType, writable: boolean): void {
+	if (!fs) {
+		throw new Error("No file system given.");
+	}
+	if (fs.type !== type) {
+		throw new Error(`Expected ${type} file system, instead got ${fs.type} type.`);
+	}
+	if (fs.writable !== writable) {
+		throw new Error(`Given file system is ${fs.writable ? '' : 'not'} writable, while it is expected to be ${writable ? '' : 'not'} writable`);
+	}
 }
 
 export function makeNoAttrsExc(path: string): FileException {
@@ -98,7 +100,8 @@ export function makeNoAttrsExc(path: string): FileException {
 		type: 'file',
 		code: undefined,
 		path,
-		attrsNotEnabledInFS: true
+		attrsNotEnabledInFS: true,
+		stack: getStackHere(1)
 	};
 }
 
@@ -109,7 +112,8 @@ export function makeVersionMismatchExc(path: string, message?: string): FileExce
 		code: undefined,
 		path,
 		versionMismatch: true,
-		message
+		message,
+		stack: getStackHere(1)
 	}
 }
 

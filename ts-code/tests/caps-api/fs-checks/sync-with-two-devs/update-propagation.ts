@@ -249,9 +249,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 				msgId:"F-vo1A4zInEBGq994-e3KvrE9a8QXLcr",
 				msgType:"mail",
 				deliveryTS:1664923830399,
-				key:"0Uz7wGW4P7hdik7fuStC+avi7iXk7AZ5B1KxJCxIOQk=",keyStatus:"published_intro",
+				key:"0Uz7wGW4P7hdik7fuStC+avi7iXk7AZ5B1KxJCxIOQk=",
+				keyStatus:"published_intro",
 				mainObjHeaderOfs:72,
-				"removeAfter":0
+				removeAfter:0
 			}
 		},
 		{

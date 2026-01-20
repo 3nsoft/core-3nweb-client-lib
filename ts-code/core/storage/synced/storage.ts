@@ -58,15 +58,13 @@ export class SyncedStore implements ISyncedStorage {
 		this.remoteEvents = new RemoteEvents(
 			this.remoteStorage, this.files, this.broadcastNodeEvent.bind(this), this.logError
 		);
-		this.uploader = new UpSyncer(this.remoteStorage, this.whenConnected.bind(this), this.logError);
+		this.uploader = new UpSyncer(this.remoteStorage, this.logError);
 		Object.seal(this);
 	}
 
 	static async makeAndStart(
-		path: string, user: string, getSigner: IGetMailerIdSigner,
-		getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
-		remoteServiceUrl: () => Promise<string>,
-		net: NetClient, logError: LogError
+		path: string, user: string, getSigner: IGetMailerIdSigner, getStorages: StorageGetter,
+		cryptor: AsyncSBoxCryptor, remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
 	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
 		const remote = RemoteStorage.make(user, getSigner, remoteServiceUrl, net);
 		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
@@ -81,10 +79,8 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	static async makeAndStartWithoutRemote(
-		path: string, user: string,
-		getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
-		remoteServiceUrl: () => Promise<string>,
-		net: NetClient, logError: LogError
+		path: string, user: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
+		remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
 	): Promise<{
 		syncedStore: ISyncedStorage;
 		setupRemoteAndStartObjProcs: (getSigner: IGetMailerIdSigner) => void;
@@ -304,7 +300,7 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	whenConnected(): Promise<void> {
-		return this.remoteEvents.whenConnected();
+		return this.remoteStorage.connectedState.whenStateIsSet();
 	}
 
 }

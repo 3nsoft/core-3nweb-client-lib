@@ -20,8 +20,7 @@ export type ConnectException = web3n.HTTPConnectException;
 export type HTTPException = web3n.HTTPException;
 
 export function makeConnectionException(
-	url: string|undefined, method: string|undefined,
-	message?: string, cause?: any
+	url: string|undefined, method: string|undefined, message?: string, cause?: any
 ): ConnectException {
 	return makeRuntimeException<ConnectException>(
 		'connect', { connectType: 'http', url, method, cause, message }, {}

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2019, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,8 +29,7 @@ export class MsgDownloader {
 	private readonly runner = new DownloadsRunner();
 
 	constructor(
-		private readonly msgReceiver: MailRecipient,
-		private readonly whenConnected: () =>Promise<void>
+		private readonly msgReceiver: MailRecipient
 	) {
 		Object.freeze(this);
 	}
@@ -45,7 +44,7 @@ export class MsgDownloader {
 			getSegs: (objId, v, start, end) => this.getSegs(msgId, objId, start, end),
 			splitSegsDownloads: (start, end) => splitSegsDownloads(start, end, MAX_GETTING_CHUNK),
 			schedule: this.runner.schedule.bind(this.runner),
-			whenConnected: this.whenConnected
+			whenConnected: () => this.msgReceiver.connectedState.whenStateIsSet()
 		};
 	}
 

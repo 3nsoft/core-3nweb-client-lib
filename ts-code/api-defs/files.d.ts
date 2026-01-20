@@ -1211,6 +1211,7 @@ declare namespace web3n.files {
 
 	interface UploadStartEvent extends UploadEventBase {
 		type: 'upload-started';
+		isRestart: boolean;
 		totalBytesToUpload: number;
 	}
 

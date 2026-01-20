@@ -23,7 +23,6 @@ import { filter, mergeMap, share, tap } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
 import { addToStatus, ConnectionStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 import { ConnectException } from '../../../lib-common/exceptions/http';
-import { AwaitableState } from '../../../lib-common/awaitable-state';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxEventType = web3n.asmail.InboxEventType;
@@ -65,7 +64,6 @@ export class InboxEvents {
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
 	private readonly wsProc: WebSocketListening;
 	private disconnectedAt: number|undefined = undefined;
-	private connection = new AwaitableState();
 
 	constructor(
 		private readonly msgReceiver: MailRecipient,
@@ -89,9 +87,9 @@ export class InboxEvents {
 				next: ev => {
 					this.connectionEvents.next(toInboxConnectionStatus(ev));
 					if (ev.type === 'heartbeat') {
-						this.connection.setState();
+						this.msgReceiver.connectedState.setState();
 					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
-						this.connection.clearState();
+						this.msgReceiver.connectedState.clearState();
 					}
 				}
 			});
@@ -116,7 +114,7 @@ export class InboxEvents {
 	}
 
 	async whenConnected(): Promise<void> {
-		return this.connection.whenStateIsSet();
+		return this.msgReceiver.connectedState.whenStateIsSet();
 	}
 
 	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {

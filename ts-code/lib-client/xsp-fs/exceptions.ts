@@ -15,6 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { getStackHere } from "../../lib-common/exceptions/runtime";
 import { ObjId } from "./common";
 
 type FSSyncException = web3n.files.FSSyncException;
@@ -48,13 +49,12 @@ export interface StorageExceptionFlags {
 export function makeStorageException(fields: Partial<StorageException>): StorageException {
 	const exc: StorageException = {
 		runtimeException: true,
-		type: 'storage'
+		type: 'storage',
+		stack: getStackHere(1)
 	};
 	for (const [ key, value ] of Object.entries(fields)) {
 		exc[key] = value;
 	}
-	const err = new Error(`runtime exception stack`);
-	exc['stack'] = err.stack;
 	return exc;
 }
 
@@ -102,7 +102,8 @@ export function makeFSSyncException(path: string, fields: Partial<FSSyncExceptio
 	const exc: FSSyncException = {
 		runtimeException: true,
 		type: 'fs-sync',
-		path
+		path,
+		stack: getStackHere(1)
 	};
 	for (const [ key, value ] of Object.entries(fields)) {
 		exc[key] = value;

@@ -12,7 +12,8 @@
  See the GNU General Public License for more details.
 
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as fs from '../../lib-common/async-fs-node';
 import { maskPathInExc } from '../../lib-common/exceptions/file';
@@ -46,9 +47,9 @@ export class DevFileByteSource implements ByteSource {
 	
 	async readNext(len: number): Promise<Uint8Array|undefined> {
 		if (this.offset >= this.size) { return; }
-		let fd: number|undefined = undefined;
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
-			fd = await fs.open(this.path, 'r');
+			fh = await fs.open(this.path, 'r');
 			let buf: Buffer;
 			if (typeof len === 'number') {
 				len = Math.min(this.size - this.offset, len);
@@ -56,13 +57,13 @@ export class DevFileByteSource implements ByteSource {
 			} else {
 				buf = Buffer.allocUnsafe(this.size - this.offset);
 			}
-			await fs.readToBuf(fd, this.offset, buf);
+			await fs.readToBuf(fh, this.offset, buf);
 			this.offset += buf.length;
 			return buf;
 		} catch (e) {
 			throw maskPathInExc(this.pathPrefixMaskLen, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 	

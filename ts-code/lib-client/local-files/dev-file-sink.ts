@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,6 +23,12 @@ import { toBuffer } from '../../lib-common/buffer-utils';
 type FileByteSink = web3n.files.FileByteSink;
 type Layout = web3n.files.FileLayout;
 
+function throwRangeErrorParamsIf(conditionToThrow: boolean): void {
+	if (conditionToThrow) {
+		throw RangeError(`Invalid parameters given`);
+	}
+}
+
 export class DevFileByteSink implements FileByteSink {
 
 	private constructor(
@@ -33,9 +39,7 @@ export class DevFileByteSink implements FileByteSink {
 		Object.seal(this);
 	}
 
-	static make(
-		path: string, pathPrefixMaskLen: number, stat: fs.Stats
-	): FileByteSink {
+	static make(path: string, pathPrefixMaskLen: number, stat: fs.Stats): FileByteSink {
 		assert(Number.isInteger(stat.size) && (stat.size >= 0));
 		const sink = new DevFileByteSink(path, pathPrefixMaskLen, stat.size!);
 		return wrapAndSyncFileSink(sink);
@@ -55,14 +59,13 @@ export class DevFileByteSink implements FileByteSink {
 	}
 
 	async truncate(size: number): Promise<void> {
-		assert(Number.isInteger(size) && (size >= 0), `Invalid parameters given`);
+		throwRangeErrorParamsIf(!Number.isInteger(size) || (size < 0));
 		await fs.truncate(this.path, size);
 		this.size = size;
 	}
 
 	async splice(pos: number, del: number, bytes?: Uint8Array): Promise<void> {
-		assert(Number.isInteger(pos) && (pos >= 0)
-			&& Number.isInteger(del) && (del >= 0), `Invalid parameters given`);
+		throwRangeErrorParamsIf(!Number.isInteger(pos) || (pos < 0) || !Number.isInteger(del) || (del < 0));
 		const ins = (bytes ? bytes.length : 0);
 		if ((del === 0) && (ins === 0)) { return; }
 		if (this.size <= (pos+del)) {
@@ -78,24 +81,23 @@ export class DevFileByteSink implements FileByteSink {
 			}
 		}
 		if (!bytes) { return; }
-		let fd: number|undefined = undefined;
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
-			fd = await fs.open(this.path, 'r+');
-			await fs.writeFromBuf(fd, pos, toBuffer(bytes));
+			fh = await fs.open(this.path, 'r+');
+			await fs.writeFromBuf(fh, pos, toBuffer(bytes));
 		} catch (e) {
 			throw maskPathInExc(this.pathPrefixMaskLen, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 
-	private async shiftBytes(
-		pos: number, delta: number, initFileLen: number
-	): Promise<void> {
+	private async shiftBytes(pos: number, delta: number, initFileLen: number): Promise<void> {
 		if (delta === 0) { return; }
-		assert(Number.isInteger(pos) && (pos >= 0)
-			&& Number.isInteger(delta) && Number.isInteger(initFileLen)
-			&& (pos <= initFileLen), `Invalid parameters given`);
+		throwRangeErrorParamsIf(
+			!Number.isInteger(pos) || (pos < 0) || !Number.isInteger(delta) ||
+			!Number.isInteger(initFileLen) || (pos > initFileLen)
+		);
 		if (delta > 0) {
 			await this.insFileBytesAt(pos, delta, initFileLen);
 		} else {
@@ -104,61 +106,54 @@ export class DevFileByteSink implements FileByteSink {
 
 	}
 
-	private async insFileBytesAt(
-		pos: number, ins: number, initFileLen: number
-	): Promise<void> {
+	private async insFileBytesAt(pos: number, ins: number, initFileLen: number): Promise<void> {
 		const bytesToMove = Math.max(0, initFileLen - pos);
-		const buf = Buffer.allocUnsafe(
-			Math.min(MAX_SHIFT_BUFFER_SIZE, bytesToMove));
-		let fd: number|undefined = undefined;
+		const buf = Buffer.allocUnsafe(Math.min(MAX_SHIFT_BUFFER_SIZE, bytesToMove));
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
-			fd = await fs.open(this.path, 'r+');
-			await fs.ftruncate(fd, initFileLen + ins);
+			fh = await fs.open(this.path, 'r+');
+			await fh.truncate(initFileLen + ins);
 			let bytesLeft = bytesToMove;
 			let readPos = initFileLen;
 			let writePos = initFileLen + ins;
 			while (bytesLeft > 0) {
-				const chunk = ((buf.length <= bytesLeft) ?
-					buf : buf.slice(0, bytesLeft));
+				const chunk = ((buf.length <= bytesLeft) ? buf : buf.slice(0, bytesLeft));
 				readPos -= chunk.length;
 				writePos -= chunk.length;
-				await fs.readToBuf(fd, readPos, chunk);
-				await fs.writeFromBuf(fd, writePos, chunk);
+				await fs.readToBuf(fh, readPos, chunk);
+				await fs.writeFromBuf(fh, writePos, chunk);
 				bytesLeft -= chunk.length;
 			}
 		} catch (e) {
 			throw maskPathInExc(this.pathPrefixMaskLen, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 
-	private async rmFileBytesAt(
-		pos: number, del: number, initFileLen: number
-	): Promise<void> {
+	private async rmFileBytesAt(pos: number, del: number, initFileLen: number): Promise<void> {
 		const bytesToMove = Math.max(0, initFileLen - pos - del);
-		const buf = Buffer.allocUnsafe(
-			Math.min(MAX_SHIFT_BUFFER_SIZE, bytesToMove));
-		let fd: number|undefined = undefined;
+		const buf = Buffer.allocUnsafe(Math.min(MAX_SHIFT_BUFFER_SIZE, bytesToMove));
+		let fh: fs.FileHandle|undefined = undefined;
 		try {
-			fd = await fs.open(this.path, 'r+');
+			fh = await fs.open(this.path, 'r+');
 			let bytesLeft = bytesToMove;
 			let readPos = pos + del;
 			let writePos = pos;
 			while (bytesLeft > 0) {
 				const chunk = ((buf.length <= bytesLeft) ?
 					buf : buf.slice(0, bytesLeft));
-				await fs.readToBuf(fd, readPos, chunk);
-				await fs.writeFromBuf(fd, writePos, chunk);
+				await fs.readToBuf(fh, readPos, chunk);
+				await fs.writeFromBuf(fh, writePos, chunk);
 				bytesLeft -= chunk.length;
 				readPos += chunk.length;
 				writePos += chunk.length;
 			}
-			await fs.ftruncate(fd, pos + bytesToMove);
+			await fh.truncate(pos + bytesToMove);
 		} catch (e) {
 			throw maskPathInExc(this.pathPrefixMaskLen, e);
 		} finally {
-			if (fd !== undefined) { await fs.close(fd); }
+			if (fh !== undefined) { await fh.close(); }
 		}
 	}
 

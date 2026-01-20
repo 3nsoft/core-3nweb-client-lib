@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020, 2022 3NSoft Inc.
+ Copyright (C) 2020, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,6 +19,7 @@ import { assert } from "../../lib-common/assert";
 import { toBuffer } from "../../lib-common/buffer-utils";
 import { uintFrom6Bytes, uintFrom2Bytes, uintFrom4Bytes, packUintTo6Bytes, packUintTo2Bytes, packUintTo4Bytes, uintFrom3Bytes, packUintTo3Bytes } from "../../lib-common/big-endian";
 import { Attrs } from "./node-persistence";
+import { getStackHere } from "../../lib-common/exceptions/runtime";
 
 export class CommonAttrs {
 
@@ -365,7 +366,8 @@ function parsingException(msg: string, cause?: any): AttrsParsingException {
 	return {
 		runtimeException: true,
 		type: 'attrs-parsing',
-		cause, msg
+		cause, msg,
+		stack: getStackHere(1)
 	};
 }
 

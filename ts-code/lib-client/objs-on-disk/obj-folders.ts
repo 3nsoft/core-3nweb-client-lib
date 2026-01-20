@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,6 +24,7 @@ import { assert } from '../../lib-common/assert';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { join } from 'path';
 import { ObjId } from '../xsp-fs/common';
+import { getStackHere } from '../../lib-common/exceptions/runtime';
 
 export interface Exception extends web3n.RuntimeException {
 	type: 'cache';
@@ -37,7 +38,8 @@ export function makeNotFoundExc(msg: string): Exception {
 		runtimeException: true,
 		type: 'cache',
 		cause: msg,
-		notFound: true
+		notFound: true,
+		stack: getStackHere(1)
 	};
 }
 
@@ -46,7 +48,8 @@ export function makeAlreadyExistExc(msg: string): Exception {
 		runtimeException: true,
 		type: 'cache',
 		cause: msg,
-		alreadyExist: true
+		alreadyExist: true,
+		stack: getStackHere(1)
 	};
 }
 

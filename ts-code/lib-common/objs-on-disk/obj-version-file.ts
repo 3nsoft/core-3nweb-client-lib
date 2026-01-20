@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2019 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2019 - 2020, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -29,6 +29,7 @@ import { FileException } from '../exceptions/file';
 import { uintFrom8Bytes, packUintTo8Bytes } from '../big-endian';
 import { assert } from '../assert';
 import { DiffInfo } from '../service-api/3nstorage/owner';
+import { getStackHere } from '../exceptions/runtime';
 
 
 export class ObjVersionFile {
@@ -65,11 +66,11 @@ export class ObjVersionFile {
 			if (newHeader) {
 				assert(newHeader.length === this.layout.headerLocation()?.len);
 				const headerOfs = this.layout.headerLocation()!.fileOfs;
-				const fd = await fs.open(this.path, 'r+');
+				const fh = await fs.open(this.path, 'r+');
 				try {
-					await fs.write(fd, headerOfs, toBuffer(newHeader));
+					await fs.write(fh, headerOfs, toBuffer(newHeader));
 				} finally {
-					await fs.close(fd).catch(noop);
+					await fh.close().catch(noop);
 				}
 			}
 		});
@@ -84,30 +85,30 @@ export class ObjVersionFile {
 	}
 
 	/**
-	 * @param fd already openned file descriptor
+	 * @param fh already opened file handle
 	 * @param ofs is an optional offset at which layout is written, when we need
 	 * value different from current one in layout.
 	 */
-	private async recordLayout(fd: number, ofs?: number): Promise<void> {
+	private async recordLayout(fh: fs.FileHandle, ofs?: number): Promise<void> {
 		const layoutBytes = this.layout.toBytes();
 		if (!ofs) {
 			ofs = this.layout.getLayoutOfs();
 		}
-		await fs.writeFromBuf(fd, ofs, layoutBytes);
-		await recordLayoutOffsetInV1(fd, ofs);
-		await fs.ftruncate(fd, ofs + layoutBytes.length);
+		await fs.writeFromBuf(fh, ofs, layoutBytes);
+		await recordLayoutOffsetInV1(fh, ofs);
+		await fh.truncate(ofs + layoutBytes.length);
 	}
 
-	private withRWFile<T>(action: (fd: number) => Promise<T>): Promise<T> {
+	private withRWFile<T>(action: (fd: fs.FileHandle) => Promise<T>): Promise<T> {
 		return this.writeProc.startOrChain(async () => {
-			const fd = await fs.open(this.path, 'r+')
+			const fh = await fs.open(this.path, 'r+')
 			.catch(exc => {
 				throw errWithCause(exc, `Can't open for writing obj-version file ${this.path}`);
 			});
 			try {
-				return await action(fd);
+				return await action(fh);
 			} finally {
-				await fs.close(fd).catch(noop);
+				await fh.close().catch(noop);
 			}
 		});
 	}
@@ -152,17 +153,17 @@ export class ObjVersionFile {
 		return this.layout.getBaseVersion();
 	}
 
-	private async withROFile<T>(action: (fd: number) => Promise<T>): Promise<T> {
+	private async withROFile<T>(action: (fh: fs.FileHandle) => Promise<T>): Promise<T> {
 		const path = this.path;
-		let fd: number;
+		let fh: fs.FileHandle;
 		try {
-			fd = await fs.open(path, 'r');
+			fh = await fs.open(path, 'r');
 		} catch(exc) {
 			// in some use cases version file can be moved, and for this reason
 			// we make second attempt if path is newer
 			if ((exc as FileException).notFound && (path !== this.path)) {
 				try {
-					fd = await fs.open(this.path, 'r');
+					fh = await fs.open(this.path, 'r');
 				} catch (exc) {
 					throw errWithCause(exc, `Can't open for reading obj version file ${this.path}`);
 				}
@@ -171,9 +172,9 @@ export class ObjVersionFile {
 			}
 		}
 		try {
-			return await action(fd);
+			return await action(fh);
 		} finally {
-			await fs.close(fd).catch(err => {});
+			await fh.close().catch(noop);
 		}
 	}
 
@@ -268,16 +269,14 @@ export class ObjVersionFile {
 		return this.layout.isFileComplete();
 	}
 
-	async absorbImmediateBaseVersion(
-		baseVer: number, path: string
-	): Promise<void> {
-		assert(baseVer === this.layout.getBaseVersion());
+	async absorbImmediateBaseVersion(baseVer: number, path: string): Promise<void> {
+		assert(Number.isInteger(baseVer) && (baseVer === this.layout.getBaseVersion()));
 		const baseLayout = await readLayoutFrom(path);
 		const absorptionParams = this.layout.calcBaseAbsorptionParams(baseLayout);
 		const src = await fs.open(path, 'r');
-		await this.withRWFile(async fd => {
+		await this.withRWFile(async fh => {
 			if (absorptionParams.copyOps.length > 0) {
-				await this.recordLayout(fd, absorptionParams.newBytesEnd);
+				await this.recordLayout(fh, absorptionParams.newBytesEnd);
 				let buf = Buffer.allocUnsafe(absorptionParams.copyOps[0].len);
 				for (const op of absorptionParams.copyOps) {
 					if (buf.length < op.len) {
@@ -286,16 +285,16 @@ export class ObjVersionFile {
 					const chunk = ((op.len < buf.length) ?
 						buf.slice(0, op.len) : buf);
 					await fs.readToBuf(src, op.ofsInSrcFile, chunk);
-					await fs.writeFromBuf(fd, op.ofsInDstFile, chunk);
+					await fs.writeFromBuf(fh, op.ofsInDstFile, chunk);
 				}
 			}
 			this.layout.applyAbsorptionParams(absorptionParams);
-			await this.recordLayout(fd);
+			await this.recordLayout(fh);
 		})
 		.then(
-			() => fs.close(src).catch(noop),
+			() => src.close().catch(noop),
 			async (exc: FileException) => {
-				await fs.close(src).catch(noop);
+				await src.close().catch(noop);
 				throw exc;
 			}
 		);
@@ -339,35 +338,38 @@ function parsingException(msg: string, cause?: any): ObjFileParsingException {
 		runtimeException: true,
 		type: 'obj-file-parsing',
 		cause, msg,
-		path: ''
+		path: '',
+		stack: getStackHere(1)
 	};
 }
 
 /**
  * This parses obj version file's informational parts.
- * @param fd is an open file descriptor, of a file to parse
+ * @param fh is an open file handle, of a file to parse
  */
-async function parseObjVersionBytesLayout(
-	fd: number
-): Promise<ObjVersionBytesLayout> {
+async function parseObjVersionBytesLayout(fh: fs.FileHandle): Promise<ObjVersionBytesLayout> {
 	const fstBytes = Buffer.allocUnsafe(12);
-	await fs.readToBuf(fd, 0, fstBytes).catch((exc: fs.FileException) => {
-		if (exc.endOfFile) { throw parsingException(
-			'File is too short to contain object'); }
+	await fs.readToBuf(fh, 0, fstBytes).catch((exc: fs.FileException) => {
+		if (exc.endOfFile) {
+			throw parsingException('File is too short to contain object');
+		}
 		throw exc;
 	});
 	const fileStart = fstBytes.slice(0, 4);
 	if (bytesEqual(fileStart, V1_FILE_START)) {
 		const layoutOfs = uintFrom8Bytes(fstBytes, 4);
-		if (layoutOfs === 0) { throw parsingException(
-			`Obj version file is in incomplete state`); }
-		if (layoutOfs > Number.MAX_SAFE_INTEGER) { throw parsingException(
-			`This implementation can't handle files with length over 2^53`); }
-		const fileSize = (await fs.fstat(fd)).size;
-		if (layoutOfs >= fileSize) { throw parsingException(
-			`Layout offset is greater than file size`); }
+		if (layoutOfs === 0) {
+			throw parsingException(`Obj version file is in incomplete state`);
+		}
+		if (layoutOfs > Number.MAX_SAFE_INTEGER) {
+			throw parsingException(`This implementation can't handle files with length over 2^53`);
+		}
+		const fileSize = (await fh.stat()).size;
+		if (layoutOfs >= fileSize) {
+			throw parsingException(`Layout offset is greater than file size`);
+		}
 		const layoutBytes = Buffer.allocUnsafe(fileSize - layoutOfs);
-		await fs.readToBuf(fd, layoutOfs, layoutBytes);
+		await fs.readToBuf(fh, layoutOfs, layoutBytes);
 		return ObjVersionBytesLayout.fromV1Bytes(layoutOfs, layoutBytes);
 	} else {
 		throw parsingException(`Obj version file does not have recognizable byte signature at its start`);
@@ -381,7 +383,7 @@ async function createNewV1File(path: string): Promise<void> {
 	await fs.writeFile(path, initContent, { flag: 'wx' });
 }
 
-async function recordLayoutOffsetInV1(fd: number, ofs: number): Promise<void> {
+async function recordLayoutOffsetInV1(fd: fs.FileHandle, ofs: number): Promise<void> {
 	const ofsInBytes = Buffer.allocUnsafe(8);
 	packUintTo8Bytes(ofs, ofsInBytes, 0);
 	await fs.writeFromBuf(fd, V1_FILE_START.length, ofsInBytes)
@@ -391,9 +393,9 @@ async function recordLayoutOffsetInV1(fd: number, ofs: number): Promise<void> {
 }
 
 async function readLayoutFrom(path: string): Promise<ObjVersionBytesLayout> {
-	const fd = await fs.open(path, 'r');
+	const fh = await fs.open(path, 'r');
 	try {
-		const layout = await parseObjVersionBytesLayout(fd)
+		const layout = await parseObjVersionBytesLayout(fh)
 		.catch((err: ObjFileParsingException) => {
 			if (err.type === 'obj-file-parsing') {
 				err.path = path;
@@ -402,7 +404,7 @@ async function readLayoutFrom(path: string): Promise<ObjVersionBytesLayout> {
 		});
 		return layout;
 	} finally {
-		await fs.close(fd).catch(noop);
+		await fh.close().catch(noop);
 	}
 }
 

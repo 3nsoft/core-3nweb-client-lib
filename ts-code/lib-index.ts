@@ -23,7 +23,7 @@ export { SignIn, GenerateKey, CompleteInitWithoutCache } from './core/startup/si
 export { ASMail } from './core/asmail';
 
 export { makeServiceLocator, ServiceLocatorMaker } from "./lib-client/service-locator";
-export { makeNetClient } from "./lib-client/request-utils";
+export { makeNetClient, NetClient } from "./lib-client/request-utils";
 
 export { appDirs } from './core/app-files';
 export { sysFolders } from "./core/storage/system-folders";

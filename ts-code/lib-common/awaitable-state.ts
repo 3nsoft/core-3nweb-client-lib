@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 3NSoft Inc.
+ Copyright (C) 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -44,6 +44,8 @@ export class AwaitableState {
 	}
 
 }
+Object.freeze(AwaitableState.prototype);
+Object.freeze(AwaitableState);
 
 
 Object.freeze(exports);

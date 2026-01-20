@@ -157,7 +157,7 @@ export class InboxOnServer {
 			const msgReceiver = new MailRecipient(
 				r.address, r.getSigner, () => r.asmailResolver(r.address), r.makeNet()
 			);
-			const downloader = new MsgDownloader(msgReceiver, () => inbox.inboxEvents.whenConnected());
+			const downloader = new MsgDownloader(msgReceiver);
 			const cache = await CachedMessages.makeFor(cachePath, downloader, r.logError);
 			const indexSyncedFS = await getOrMakeAndUploadFolderIn(syncedFS, MSG_INDEX_FOLDER);
 			const index = await MsgIndex.make(indexSyncedFS);

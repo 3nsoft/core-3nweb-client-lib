@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2018, 2020, 2025 3NSoft Inc.
+ Copyright (C) 2016 - 2018, 2020, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -31,6 +31,7 @@ declare namespace web3n {
 		type?: string;
 		cause?: any;
 		message?: string;
+		stack?: string;
 	}
 
 	interface ConnectException extends RuntimeException {

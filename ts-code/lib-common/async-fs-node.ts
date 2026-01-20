@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2019, 2021 - 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2019, 2021 - 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -25,222 +25,52 @@ import { BytesFIFOBuffer } from './byte-streaming/bytes-fifo-buffer';
 import { toBuffer } from './buffer-utils';
 import { join } from 'path';
 
-export { Stats } from 'fs';
-export { FileException } from './exceptions/file';
+export type { Stats } from 'fs';
+export type { FileException } from './exceptions/file';
+export type FileHandle = fs.promises.FileHandle;
 
-function makeFileExceptionFromNodes(
-	nodeExc: NodeJS.ErrnoException
-): FileException {
-	return makeFileExceptionFromCode(nodeExc.code, nodeExc.path!);
+function makeFileExceptionFromNodesAndThrow(nodeExc: NodeJS.ErrnoException): never {
+	throw makeFileExceptionFromCode(nodeExc.code, nodeExc.path!, undefined, 1);
 }
 
-export function readFile(
-	filename: string, options: { encoding: BufferEncoding; flag?: string; }
-): Promise<string>;
-export function readFile(
-	filename: string, options?: { flag?: string; }
-): Promise<Buffer>;
-export function readFile(
-	path: string, options?: { flag?: string; encoding?: BufferEncoding; }
-): Promise<Buffer|string> {
-	return new Promise<Buffer>((resolve, reject) => {
-		const cb = (err, data) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(data); }
-		};
-		if (options) {
-			fs.readFile(path, options, cb);
-		} else {
-			fs.readFile(path, cb);
-		}
-	});
+function wrapNodeFn<T extends Function>(nodePromisingFn: T): T {
+	return function wrapOfNodePromisingFn(...args: any[]) {
+		return nodePromisingFn.call(undefined, ...args).catch(makeFileExceptionFromNodesAndThrow);
+	} as unknown as T;
 }
 
-export function writeFile(
-	path: string, data: any,
-	options: { encoding?: BufferEncoding; mode?: string; flag?: string; } = {}
-): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.writeFile(path, data, options, err => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+function noop () {}
 
-export function appendFile(
-	path: string, data: any,
-	options: { encoding?: BufferEncoding; mode?: string; flag?: string; } = {}
-): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.appendFile(path, data, options, err => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const readFile = wrapNodeFn(fs.promises.readFile);
 
-export function mkdir(
-	path: string, options?: number | string | fs.MakeDirectoryOptions | null
-): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.mkdir(path, options, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const writeFile = wrapNodeFn(fs.promises.writeFile);
 
-export function open(path: string, flags: string): Promise<number> {
-	return new Promise<number>((resolve, reject) => {
-		fs.open(path, flags, (err, df) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(df); }
-		});
-	});
-}
+export const appendFile = wrapNodeFn(fs.promises.appendFile);
 
-function writeOrig(
-	fd: number, buffer: Buffer, offset: number, length: number,
-	position?: number
-): Promise<number> {
-	return new Promise<number>((resolve, reject) => {
-		const cb = (err, written) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(written); }
-		};
-		if (typeof position === 'number') {
-			fs.write(fd, buffer, offset, length, position, cb);
-		} else {
-			fs.write(fd, buffer, offset, length, cb);
-		}
-	});
-}
+export const mkdir = wrapNodeFn(fs.promises.mkdir);
 
-function readOrig(
-	fd: number, buffer: Buffer, offset: number, length: number, position: number
-): Promise<number> {
-	return new Promise<number>((resolve, reject) => {
-		fs.read(fd, buffer, offset, length, position, (err, bytesRead) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(bytesRead); }
-		});
-	});
-}
+export const open = wrapNodeFn(fs.promises.open);
 
-export function close(fd: number): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.close(fd, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const symlink = wrapNodeFn(fs.promises.symlink);
 
-export function symlink(
-	target: string, path: string, type?: 'dir'|'file'|'junction'
-): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.symlink(target, path, type, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const readlink = wrapNodeFn(fs.promises.readlink);
 
-export function readlink(path: string): Promise<string> {
-	return new Promise<string>((resolve, reject) => {
-		fs.readlink(path, (err, targetPath) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(targetPath); }
-		});
-	});
-}
+export const lstat = wrapNodeFn(fs.promises.lstat);
 
-export function lstat(path: string): Promise<fs.Stats> {
-	return new Promise<fs.Stats>((resolve, reject) => {
-		fs.lstat(path, (err, stat) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(stat); }
-		});
-	});
-}
+export const stat = wrapNodeFn(fs.promises.stat);
 
-export function stat(path: string): Promise<fs.Stats> {
-	return new Promise<fs.Stats>((resolve, reject) => {
-		fs.stat(path, (err, stat) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(stat); }
-		});
-	});
-}
+export const readdir = wrapNodeFn(fs.promises.readdir);
 
-export function fstat(fd: number): Promise<fs.Stats> {
-	return new Promise<fs.Stats>((resolve, reject) => {
-		// from some moment, typing of fs.fstat is broken
-		(fs.fstat as any)(fd, (err, stat) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(stat); }
-		});
-	});
-}
+export const rmdir = wrapNodeFn(fs.promises.rmdir);
 
-export function readdir(path: string): Promise<string[]> {
-	return new Promise<string[]>((resolve, reject) => {
-		fs.readdir(path, (err, list) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(list); }
-		});
-	});
-}
+export const unlink = wrapNodeFn(fs.promises.unlink);
 
-export function rmdir(path: string): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.rmdir(path, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const rename = wrapNodeFn(fs.promises.rename);
 
-export function unlink(path: string): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.unlink(path, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
-
-export function rename(oldPath: string, newPath: string): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.rename(oldPath, newPath, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
-
-export function truncate(path: string, size: number): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.truncate(path, size, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
-
-export function ftruncate(fd: number, size: number): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		fs.ftruncate(fd, size, (err) => {
-			if (err) { reject(makeFileExceptionFromNodes(err)); }
-			else { resolve(); }
-		});
-	});
-}
+export const truncate = wrapNodeFn(fs.promises.truncate);
 
 /**
- * @param fd is an open file descriptor
+ * @param fh is an open file handle
  * @param pos is a position in the file, from which reading should start
  * @param buf is a buffer, into which bytes should be read from start to
  * the end, i.e. number of bytes that must be read is equal to the buffer's
@@ -250,15 +80,13 @@ export function ftruncate(fd: number, size: number): Promise<void> {
  * The promise fails, if an end of file is encountered before entire buffer is
  * filled up with bytes.
  */
-export async function readToBuf(
-	fd: number, pos: number, buf: Buffer
-): Promise<void> {
+export async function readToBuf(fh: FileHandle, pos: number, buf: Buffer): Promise<void> {
 	if ((typeof pos !== 'number') || (pos < 0)) {
-		throw new Error('Illegal file position given: '+pos);
+		throw new RangeError('Illegal file position given: '+pos);
 	}
 	let bytesRead = 0
 	while (bytesRead < buf.length) {
-		const bNum = await readOrig(fd, buf, bytesRead, buf.length-bytesRead, pos);
+		const { bytesRead: bNum } = await fh.read(buf, bytesRead, buf.length-bytesRead, pos);
 		if (bNum === 0) {
 			throw makeFileException('endOfFile', '<file descriptor>');
 		}
@@ -268,20 +96,20 @@ export async function readToBuf(
 }
 
 /**
- * @param fd is an open file descriptor
+ * @param fh is an open file handle
  * @param pos is a position in the file, from which writing should start
  * @param buf is a buffer, from which all bytes should be written into the file.
  * @returns a promise, resolvable when all bytes were written to the file.
  */
 export async function writeFromBuf(
-	fd: number, pos: number, buf: Buffer
+	fh: FileHandle, pos: number, buf: Buffer
 ): Promise<void> {
-	if ((typeof pos !== 'number') || (pos < 0)) { throw new Error(
-		'Illegal file position given: '+pos); }
+	if ((typeof pos !== 'number') || (pos < 0)) {
+		throw new Error('Illegal file position given: '+pos);
+	}
 	let bytesWritten = 0;
 	while (bytesWritten < buf.length) {
-		const bNum = await writeOrig(fd, buf,
-			bytesWritten, buf.length-bytesWritten, pos);
+		const { bytesWritten: bNum } = await fh.write(buf, bytesWritten, buf.length-bytesWritten, pos);
 		bytesWritten += bNum;
 		pos += bNum;
 	}
@@ -297,25 +125,27 @@ SINGLE_BYTE_BUF[0] = 0;
  * @param fileSize
  * @param keepFileOpen
  * @returns a promise, resolvable, when a new empty file has been created.
- * When keep open flag was passed, live numeric file descriptor is returned,
+ * When keep open flag was passed, live file handle is returned,
  * else return value is undefined and should be ignored.
  */
 export async function createEmptyFile(
 	filePath: string, fileSize: number, keepFileOpen?: boolean
-): Promise<number|undefined> {
-	if ((typeof fileSize !== 'number') || (fileSize < 0)) { throw new Error(
-		'Illegal file size given: '+fileSize); }
-	let fileDescr: number|undefined;
+): Promise<FileHandle|undefined> {
+	if ((typeof fileSize !== 'number') || (fileSize < 0)) {
+		throw new RangeError('Illegal file size given: '+fileSize);
+	}
+	let fileDescr: FileHandle|undefined;
 	try {
 		fileDescr = await open(filePath, 'wx');
+		fileDescr.close()
 		if (fileSize > 0) {
-			await writeOrig(fileDescr, SINGLE_BYTE_BUF, 0, 1, fileSize-1);
+			await fileDescr.write(SINGLE_BYTE_BUF, 0, 1, fileSize-1);
 		}
 		if (keepFileOpen) { return fileDescr; }
-		await close(fileDescr);
+		await fileDescr.close();
 	} catch (exc) {
 		if (fileDescr) {
-			close(fileDescr).catch(() => {});
+			fileDescr.close().catch(noop);
 		}
 		throw exc;
 	}
@@ -394,9 +224,7 @@ export async function getFileSize(filePath: string): Promise<number> {
  * Sizes of linked objects are not included.
  * @param folderPath
  */
-export async function getFolderContentSize(
-	folderPath: string
-): Promise<number> {
+export async function getFolderContentSize(folderPath: string): Promise<number> {
 	const list = await readdir(folderPath);
 	let size = 0;
 	for (const childName of list) {
@@ -412,37 +240,33 @@ export async function getFolderContentSize(
 }
 
 /**
- * @param fd is an open file descriptor
+ * @param fh is an open file handle
  * @param pos is a position in the file, from which writing should start
  * @param buf is a buffer, from which all bytes should be written into the file.
  * @returns a promise, resolvable when all bytes were written to it.
  */
-export async function write(
-	fd: number, pos: number, buf: Buffer
-): Promise<void> {
-	if ((typeof pos !== 'number') || (pos < 0)) { throw new Error(
-		'Illegal file position given: '+pos); }
+export async function write(fh: FileHandle, pos: number, buf: Buffer): Promise<void> {
+	if ((typeof pos !== 'number') || (pos < 0)) {
+		throw new RangeError('Illegal file position given: '+pos);
+	}
 	let bytesWritten = 0;
 	while (bytesWritten < buf.length) {
-		const bNum = await writeOrig(fd, buf,
-			bytesWritten, buf.length-bytesWritten, pos);
+		const { bytesWritten: bNum } = await fh.write(buf, bytesWritten, buf.length-bytesWritten, pos);
 		bytesWritten += bNum;
 		pos += bNum;
 	}
+	await fh.sync();
 }
 
 /**
- * @param fd is an open file descriptor in append mode.
+ * @param fh is an open file handle in append mode.
  * @param buf is a buffer, from which all bytes should be written into the file.
  * @returns a promise, resolvable when all bytes were written to it.
  */
-export async function append(
-	fd: number, buf: Buffer
-): Promise<void> {
+export async function append(fh: FileHandle, buf: Buffer): Promise<void> {
 	let bytesWritten = 0;
 	while (bytesWritten < buf.length) {
-		const bNum = await writeOrig(fd, buf,
-			bytesWritten, buf.length-bytesWritten);
+		const { bytesWritten: bNum } = await fh.write(buf, bytesWritten, buf.length-bytesWritten);
 		bytesWritten += bNum;
 	}
 }
@@ -453,14 +277,12 @@ export async function append(
  * @param buf is a buffer, from which all bytes should be written into the file.
  * @returns a promise, resolvable when all bytes were written to it.
  */
-async function writeToExistingFile(
-	filePath: string, pos: number, buf: Buffer
-): Promise<void> {
-	const fd = await open(filePath, 'r+');
+async function writeToExistingFile(filePath: string, pos: number, buf: Buffer): Promise<void> {
+	const fh = await open(filePath, 'r+');
 	try {
-		await write(fd, pos, buf);
+		await write(fh, pos, buf);
 	} finally {
-		await close(fd);
+		await fh.close();
 	}
 }
 
@@ -477,12 +299,15 @@ async function writeToExistingFile(
 export async function streamToExistingFile(
 	filePath: string, pos: number, len: number, src: Readable, bufSize: number
 ): Promise<void> {
-	if ((typeof pos !== 'number') || (pos < 0)) { throw new Error(
-		'Illegal file position given: '+pos); }
-	if ((typeof len !== 'number') || (len < 1)) { throw new Error(
-		'Illegal length given: '+len); }
-	if ((typeof bufSize !== 'number') || (bufSize < 1024)) { throw new Error(
-		'Illegal buffer size given: '+bufSize); }
+	if ((typeof pos !== 'number') || (pos < 0)) {
+		throw new RangeError('Illegal file position given: '+pos);
+	}
+	if ((typeof len !== 'number') || (len < 1)) {
+		throw new RangeError('Illegal length given: '+len);
+	}
+	if ((typeof bufSize !== 'number') || (bufSize < 1024)) {
+		throw new Error('Illegal buffer size given: '+bufSize);
+	}
 		
 	const writeProc = new SingleProc();
 	let bytesWritten = 0;
@@ -543,7 +368,7 @@ export async function streamToExistingFile(
 }
 
 /**
- * @param fd is an open file descriptor
+ * @param fh is an open file handle
  * @param pos is a position in the file, from which reading should start
  * @param buf is a buffer, into which bytes should be read from start to
  * the end, i.e. number of bytes that must be read is equal to the buffer's
@@ -553,14 +378,13 @@ export async function streamToExistingFile(
  * The promise fails, if an end of file is encountered before entire buffer is
  * filled up with bytes.
  */
-export async function read(
-	fd: number, pos: number, buf: Buffer
-): Promise<void> {
-	if ((typeof pos !== 'number') || (pos < 0)) { throw new Error(
-		'Illegal file position given: '+pos); }
+export async function read(fh: FileHandle, pos: number, buf: Buffer): Promise<void> {
+	if ((typeof pos !== 'number') || (pos < 0)) {
+		throw new RangeError('Illegal file position given: '+pos);
+	}
 	let bytesRead = 0
 	while (bytesRead < buf.length) {
-		const bNum = await readOrig(fd, buf, bytesRead, buf.length-bytesRead, pos);
+		const { bytesRead: bNum } = await fh.read(buf, bytesRead, buf.length-bytesRead, pos);
 		if (bNum === 0) {
 			throw makeFileException('endOfFile', '<file descriptor>');
 		}
@@ -583,11 +407,11 @@ export async function read(
 async function readFromFile(
 	filePath: string, pos: number, buf: Buffer
 ): Promise<void> {
-	const fd = await open(filePath, 'r');
+	const fh = await open(filePath, 'r');
 	try {
-		return read(fd, pos, buf);
+		return read(fh, pos, buf);
 	} finally {
-		return close(fd);
+		return fh.close();
 	}
 }
 

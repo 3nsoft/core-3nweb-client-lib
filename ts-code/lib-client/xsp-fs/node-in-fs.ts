@@ -293,17 +293,14 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		}
 		if (!awaitPrevChange && this.writeProc.isProcessing()) {
 			throw makeRuntimeException<FileException>(
-				'file', { path: this.name, fsEtityType: this.type },
-				{ concurrentUpdate: true }
+				'file', { path: this.name, fsEtityType: this.type }, { concurrentUpdate: true }, true
 			);
 		}
 		const res = await this.writeProc.startOrChain(async () => {
 			if (this.isMarkedRemoved) {
 				throw makeRuntimeException<FileException>(
-					'file', {
-						path: this.name, fsEtityType: this.type,
-						message: `NodeInFS is marked removed`
-					},
+					'file',
+					{ path: this.name, fsEtityType: this.type, message: `NodeInFS is marked removed` },
 					{ notFound: true }
 				);
 			}

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,10 +21,9 @@ import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-wi
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
 import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from '../xsp-fs/exceptions';
-import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
+import { makeSubscriber } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
-import { LogError } from '../logging/log-to-file';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
@@ -42,27 +41,21 @@ export class StorageOwner extends ServiceUser {
 	maxChunkSize: number|undefined = undefined;
 	
 	private constructor(
-		user: string, getSigner: IGetMailerIdSigner|undefined,
-		mainUrlGetter: () => Promise<string>, net: NetClient
+		user: string, getSigner: IGetMailerIdSigner|undefined, mainUrlGetter: () => Promise<string>, net: NetClient
 	) {
-		super(
-			user, storageAccessParams, getSigner,
-			serviceUriGetter(net, mainUrlGetter), net
-		);
+		super(user, storageAccessParams, getSigner, serviceUriGetter(net, mainUrlGetter), net);
 		Object.seal(this);
 	}
 
 	static make(
-		user: string, getSigner: IGetMailerIdSigner,
-		mainUrlGetter: () => Promise<string>, net: NetClient
+		user: string, getSigner: IGetMailerIdSigner, mainUrlGetter: () => Promise<string>, net: NetClient
 	): StorageOwner {
 		const remote = new StorageOwner(user, getSigner, mainUrlGetter, net);
 		return remote;
 	}
 
 	static makeBeforeMidSetup(
-		user: string,
-		mainUrlGetter: () => Promise<string>, net: NetClient
+		user: string, mainUrlGetter: () => Promise<string>, net: NetClient
 	): {
 		remote: StorageOwner; setMid: (getSigner: IGetMailerIdSigner) => void;
 	} {
@@ -122,12 +115,11 @@ export class StorageOwner extends ServiceUser {
 	 * @param transactionId
 	 * @return a promise, resolvable to transaction id.
 	 */
-	async cancelTransaction(
-		objId: ObjId, transactionId?: string
-	): Promise<void> {
+	async cancelTransaction(objId: ObjId, transactionId?: string): Promise<void> {
 		const appPath = ((objId === null) ?
-				api.cancelRootTransaction.getReqUrlEnd(transactionId) :
-				api.cancelTransaction.getReqUrlEnd(objId, transactionId));
+			api.cancelRootTransaction.getReqUrlEnd(transactionId) :
+			api.cancelTransaction.getReqUrlEnd(objId, transactionId)
+		);
 		const rep = await this.doBodylessSessionRequest<void>(
 			{ appPath, method: 'POST' });
 		if (rep.status === api.cancelTransaction.SC.ok) {
@@ -197,9 +189,7 @@ export class StorageOwner extends ServiceUser {
 	 * @param start is a start read position in segments
 	 * @param end is an end, excluded, read position in segments
 	 */
-	async getCurrentObjSegs(
-		objId: ObjId, version: number, start: number, end: number
-	): Promise<Uint8Array> {
+	async getCurrentObjSegs(objId: ObjId, version: number, start: number, end: number): Promise<Uint8Array> {
 		if (end <= start) {
 			throw new Error(`Given out of bounds parameters: start is ${start}, end is ${end}, -- for downloading obj ${objId}, version ${version}`);
 		}
@@ -385,9 +375,7 @@ Object.freeze(StorageOwner.prototype);
 Object.freeze(StorageOwner);
 
 
-function serviceUriGetter(
-	net: NetClient, mainUrlGetter: () => Promise<string>
-): () => Promise<string> {
+function serviceUriGetter(net: NetClient, mainUrlGetter: () => Promise<string>): () => Promise<string> {
 	return async () => {
 		const serviceUrl = await mainUrlGetter();
 		const info = await storageInfoAt(net, serviceUrl);

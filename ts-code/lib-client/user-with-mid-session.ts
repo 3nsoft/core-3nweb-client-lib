@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020, 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,11 +24,11 @@ import { Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
 import * as api from '../lib-common/service-api/mailer-id/login';
 import * as WebSocket from 'ws';
 import { openSocket } from './ws-utils';
-import { parse as parseUrl } from 'url';
 import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
 import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
 import { makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
+import { AwaitableState } from '../lib-common/awaitable-state';
 
 export type IGetMailerIdSigner = () => Promise<MailerIdSigner>;
 
@@ -38,14 +38,16 @@ export interface ServiceAccessParams {
 	canBeRedirected?: boolean;
 }
 
+type ConnectException = web3n.ConnectException;
+
 export abstract class ServiceUser {
-	
+
 	private uri: string = (undefined as any);
 	private get serviceURI(): string {
 		return this.uri;
 	}
 	private set serviceURI(uriString: string) {
-		const u = parseUrl(uriString);
+		const u = new URL(uriString);
 		if (u.protocol !== 'https:') {
 			throw new Error("Url protocol must be https.");
 		}
@@ -57,13 +59,15 @@ export abstract class ServiceUser {
 			this.uri += '/';
 		}
 	}
-	
+
 	private loginUrlPart: string;
 	private logoutUrlEnd: string;
 
 	private get loginUrl(): string {
 		return `${this.serviceURI}${this.loginUrlPart}`;
 	}
+
+	public readonly connectedState = new AwaitableState();
 
 	private redirectedFrom: string|undefined = undefined;
 	private canBeRedirected: boolean;
@@ -79,25 +83,27 @@ export abstract class ServiceUser {
 		protected readonly net: NetClient
 	) {
 		this.loginUrlPart = accessParams.login;
-		if ((this.loginUrlPart.length > 0)
-		&& (this.loginUrlPart[this.loginUrlPart.length-1] !== '/')) {
+		if ((this.loginUrlPart.length > 0) && !this.loginUrlPart.endsWith('/')) {
 			this.loginUrlPart += '/';
 		}
 		this.logoutUrlEnd = accessParams.logout;
 		this.canBeRedirected = !!accessParams.canBeRedirected;
 	}
-	
+
 	private get isUriSet(): boolean {
 		return (typeof this.serviceURI === 'string');
 	}
 
 	private throwOnBadServiceURI(): void {
-		if (!this.isUriSet) { throw new Error(
-			`Service uri is not a string: ${this.serviceURI}`); }
+		if (!this.isUriSet) {
+			throw new Error(`Service uri is not a string: ${this.serviceURI}`);
+		}
 	}
 
 	protected setGetterOfSigner(getSigner: IGetMailerIdSigner): void {
-		if (this.getSigner) { throw new Error(`getSigner is already set`); }
+		if (this.getSigner) {
+			throw new Error(`getSigner is already set`);
+		}
 		this.getSigner = getSigner;
 	}
 
@@ -106,11 +112,13 @@ export abstract class ServiceUser {
 	 * Else, this function does nothing.
 	 */
 	private async initServiceURI(): Promise<void> {
-		if (this.isUriSet) { return; }
+		if (this.isUriSet) {
+			return;
+		}
 		this.serviceURI = await this.getInitServiceURI();
 		this.getInitServiceURI = undefined as any;
 	}
-	
+
 	private async startSession(): Promise<string> {
 		this.throwOnBadServiceURI();
 		// make first call
@@ -135,10 +143,8 @@ export abstract class ServiceUser {
 			throw new Error(`Redirected too many times. First redirect was from ${this.redirectedFrom} to ${this.serviceURI}. Second and forbidden redirect is to ${sndReply.redirect}`);
 		}
 	}
-	
-	private async authenticateSession(
-		sessionId: string, midSigner: MailerIdSigner
-	): Promise<void> {
+
+	private async authenticateSession(sessionId: string, midSigner: MailerIdSigner): Promise<void> {
 		this.throwOnBadServiceURI();
 		await authenticateMidSession(
 			sessionId, midSigner, this.net, this.loginUrl
@@ -188,24 +194,33 @@ export abstract class ServiceUser {
 		}
 	}
 
-	private async callEnsuringLogin<T>(
-		func: () => Promise<Reply<T>>
-	): Promise<Reply<T>> {
-		if (this.loginProc || !this.sessionId) {
-			await this.login();
-			return func();
-		} else {
-			// first attepmt
-			const initSessionId = this.sessionId;
-			const rep = await func();
-			if (rep.status !== api.ERR_SC.needAuth) { return rep; }
+	private async callEnsuringLogin<T>(func: () => Promise<Reply<T>>): Promise<Reply<T>> {
+		try {
+			let reply: Reply<T>;
+			if (this.loginProc || !this.sessionId) {
+				await this.login();
+				reply = await func();
+			} else {
+				// first attepmt
+				const initSessionId = this.sessionId;
+				const rep = await func();
+				if (rep.status !== api.ERR_SC.needAuth) { return rep; }
 
-			// if auth is needed, do login and a second attempt
-			if (this.sessionId === initSessionId) {
-				this.sessionId = (undefined as any);
+				// if auth is needed, do login and a second attempt
+				if (this.sessionId === initSessionId) {
+					this.sessionId = (undefined as any);
+				}
+				await this.login();
+				reply = await func();
 			}
-			await this.login();
-			return func();
+			this.connectedState.setState();
+			return reply;
+		} catch (exc) {
+			if ((exc as ConnectException).type === 'connect') {
+				this.net.reset();
+				this.connectedState.clearState();
+			}
+			throw exc;
 		}
 	}
 
@@ -213,11 +228,10 @@ export abstract class ServiceUser {
 		opts.sessionId = this.sessionId;
 		if (opts.appPath) {
 			opts.url = (isWS ?
-				`wss${this.serviceURI.substring(5)}${opts.appPath}` :
-				`${this.serviceURI}${opts.appPath}`);
+				`wss${this.serviceURI.substring(5)}${opts.appPath}` : `${this.serviceURI}${opts.appPath}`
+			);
 		} else if (!opts.url) { 
-			throw new Error(
-				`Missing both appPath and ready url in request options.`);
+			throw new Error(`Missing both appPath and ready url in request options.`);
 		}
 	}
 
@@ -228,18 +242,14 @@ export abstract class ServiceUser {
 		});
 	}
 
-	protected doJsonSessionRequest<T>(
-		opts: RequestOpts, json: any
-	): Promise<Reply<T>> {
+	protected doJsonSessionRequest<T>(opts: RequestOpts, json: any): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
 			this.prepCallOpts(opts);
 			return this.net.doJsonRequest(opts, json);
 		});
 	}
 
-	protected doBinarySessionRequest<T>(
-		opts: RequestOpts, bytes: Uint8Array|Uint8Array[]
-	): Promise<Reply<T>> {
+	protected doBinarySessionRequest<T>(opts: RequestOpts, bytes: Uint8Array|Uint8Array[]): Promise<Reply<T>> {
 		return this.callEnsuringLogin<T>(() => {
 			this.prepCallOpts(opts);
 			return this.net.doBinaryRequest(opts, bytes);

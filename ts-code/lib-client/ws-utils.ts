@@ -32,9 +32,7 @@ export function openSocket(
 	const ws = new WebSocket(url, { headers, agent });
 	let opening: Deferred<Reply<WebSocket>>|undefined = defer<Reply<WebSocket>>();
 	const initOnError = (err: any) => {
-		opening?.reject(makeConnectionException(
-			url, undefined, `WebSocket connection error: ${err.message}`
-		));
+		opening?.reject(makeConnectionException(url, undefined, `WebSocket connection error: ${err.message}`));
 		opening = undefined;
 	};
 	const onNonOkReply = (req, res: IncomingMessage) => {
