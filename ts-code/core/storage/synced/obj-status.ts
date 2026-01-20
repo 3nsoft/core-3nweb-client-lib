@@ -19,7 +19,7 @@ import { ObjId, SyncedObjStatus } from '../../../lib-client/xsp-fs/common';
 import { join } from 'path';
 import { makeFSSyncException, makeStorageException } from '../../../lib-client/xsp-fs/exceptions';
 import { JSONSavingProc } from '../common/json-saving';
-import { addArchived, addWithBasesTo, isEmptyVersions, isVersionIn, NonGarbageVersions, nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionFrom, rmCurrentVersionIn, rmNonArchVersionsIn, rmVersionIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
+import { addArchived, addBaseToDiffLinkInVersInfo, addWithBasesTo, isEmptyVersions, isVersionIn, NonGarbageVersions, nonGarbageVersionsIn, readJSONInfoFileIn, rmArchVersionFrom, rmCurrentVersionIn, rmNonArchVersionsIn, setCurrentVersionIn, VersionsInfo } from '../common/obj-info-file';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { assert } from '../../../lib-common/assert';
 import { DiffInfo, ObjStatus as RemoteObjStatus } from '../../../lib-common/service-api/3nstorage/owner';
@@ -310,7 +310,8 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	getCurrentLocalOrSynced(): number {
 		const state = this.stateIndicator;
 		const current = (((state === 'unsynced') || (state === 'conflicting')) ?
-			this.status.local?.current : this.status.synced?.version);
+			this.status.local?.current : this.status.synced?.version
+		);
 		if (current) {
 			return current;
 		} else {
@@ -615,14 +616,11 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		const local = this.status.local!;
 		assert(local.diffToBase[version] === localBase);
 		const lowerBase = local.diffToBase[localBase];
-		if (localBase) {
-			local.diffToBase[version] = lowerBase;
-			local.baseToDiff[lowerBase] = version;
-		} else {
-			delete local.diffToBase[version];
+		if (lowerBase) {
+			// flip version's base to be new value before removing
+			addBaseToDiffLinkInVersInfo(local, version, lowerBase);
 		}
-		delete local.diffToBase[localBase];
-		delete local.baseToDiff[localBase];
+		rmNonArchVersionsIn(local, localBase);
 		return this.triggerSaveProc();
 	}
 

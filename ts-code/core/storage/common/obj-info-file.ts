@@ -144,16 +144,6 @@ export function rmCurrentVersionIn(versions: VersionsInfo): number|undefined {
 	return current;
 }
 
-export function rmVersionIn(version: number, vers: VersionsInfo): void {
-	if (vers.current === version) {
-		vers.current = undefined;
-		rmNonArchVersionsIn(vers, version);
-	}
-	if (isVersionIn(version, vers)) {
-		rmArchVersionFrom(vers, version);
-	}
-}
-
 export function nonGarbageVersionsIn(versions: VersionsInfo): Set<number> {
 	const nonGarbage = new Set<number>();
 	addWithBasesTo(nonGarbage, versions.current, versions);
