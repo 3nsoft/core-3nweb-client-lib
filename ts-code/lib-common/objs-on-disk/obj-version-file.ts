@@ -269,11 +269,11 @@ export class ObjVersionFile {
 		return this.layout.isFileComplete();
 	}
 
-	async absorbImmediateBaseVersion(baseVer: number, path: string): Promise<void> {
+	async absorbImmediateBaseVersion(baseVer: number, basePath: string): Promise<void> {
 		assert(Number.isInteger(baseVer) && (baseVer === this.layout.getBaseVersion()));
-		const baseLayout = await readLayoutFrom(path);
+		const baseLayout = await readLayoutFrom(basePath);
 		const absorptionParams = this.layout.calcBaseAbsorptionParams(baseLayout);
-		const src = await fs.open(path, 'r');
+		const src = await fs.open(basePath, 'r');
 		await this.withRWFile(async fh => {
 			if (absorptionParams.copyOps.length > 0) {
 				await this.recordLayout(fh, absorptionParams.newBytesEnd);
@@ -282,8 +282,7 @@ export class ObjVersionFile {
 					if (buf.length < op.len) {
 						buf = Buffer.allocUnsafe(op.len);
 					}
-					const chunk = ((op.len < buf.length) ?
-						buf.slice(0, op.len) : buf);
+					const chunk = ((op.len < buf.length) ? buf.subarray(0, op.len) : buf);
 					await fs.readToBuf(src, op.ofsInSrcFile, chunk);
 					await fs.writeFromBuf(fh, op.ofsInDstFile, chunk);
 				}

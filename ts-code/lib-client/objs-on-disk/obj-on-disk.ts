@@ -246,8 +246,8 @@ export class ObjOnDisk {
 		return this.objFile.getBaseVersion();
 	}
 
-	absorbImmediateBaseVersion(baseVer: number, path: string): Promise<void> {
-		return this.objFile.absorbImmediateBaseVersion(baseVer, path);
+	absorbImmediateBaseVersion(baseVer: number, basePath: string): Promise<void> {
+		return this.objFile.absorbImmediateBaseVersion(baseVer, basePath);
 	}
 
 	diffFromBase(): { diff: DiffInfo; newSegsPackOrder: FiniteChunk[]; } {

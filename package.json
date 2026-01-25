@@ -1,6 +1,6 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.44.9",
+  "version": "0.44.10",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
@@ -41,7 +41,7 @@
     "@types/ws": "^8.18.1",
     "jasmine": "^5.13.0",
     "protobufjs-cli": "^1.0.2",
-    "spec-3nweb-server": "^1.8.0",
+    "spec-3nweb-server": "^1.8.5",
     "tsuml2": "^0.17.1",
     "typescript": "^5.5.3"
   }

@@ -410,10 +410,8 @@ export class SyncedObj {
 		if (localBases) {
 			const objVer = await this.instanceOfLocalObjVer(version);
 			for (const localBase of localBases) {
-				await objVer.absorbImmediateBaseVersion(
-					localBase, this.localVerPath(localBase)
-				);
-				this.status.absorbLocalVersionBase(version, localBase);
+				await objVer.absorbImmediateBaseVersion(localBase, this.localVerPath(localBase));
+				await this.status.absorbLocalVersionBase(version, localBase);
 			}
 		}
 		return syncedBase;
