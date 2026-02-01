@@ -215,30 +215,29 @@ namespace extAttrs {
 		ofs += t.nameLen;
 		const contentLen = readLenNum(bytes, ofs, t.contentLen);
 		ofs += t.contentLen;
-		const xaName = bytes.slice(ofs, ofs+nameLen).toString('utf8');
+		const xaName = bytes.subarray(ofs, ofs+nameLen).toString('utf8');
 		ofs += nameLen;
 
 		const bytesRead = ofs - i + contentLen;
-		if ((contentLen === 0) || (bytes.length < (i + bytesRead))) {
-			throw parsingException(`Unexpected end of byte array`);
+		if (bytes.length < (i + bytesRead)) {
+			throw parsingException(`Bytes array is shorter than expected content that should be read from it`);
 		}
 
 		try {
 			if (t.type === NAMED_UTF8_STR) {
 				return {
 					bytesRead, xaName,
-					strVal: bytes.slice(ofs, ofs+contentLen).toString('utf8'),
+					strVal: bytes.subarray(ofs, ofs+contentLen).toString('utf8'),
 				};
 			} else if (t.type === NAMED_JSON) {
 				return {
 					bytesRead, xaName,
-					jsonVal: JSON.parse(
-						toBuffer(bytes).slice(ofs, ofs+contentLen).toString('utf8')),
+					jsonVal: JSON.parse(toBuffer(bytes).subarray(ofs, ofs+contentLen).toString('utf8')),
 				};
 			} else if (t.type === NAMED_BINARY) {
 				return {
 					bytesRead, xaName,
-					binVal: bytes.slice(ofs, ofs+contentLen),
+					binVal: bytes.subarray(ofs, ofs+contentLen),
 				};
 			} else {
 				throw new Error(`Unknown type ${t.type} of named attribute`);

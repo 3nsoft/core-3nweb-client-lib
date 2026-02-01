@@ -117,7 +117,7 @@ export class DevFileByteSink implements FileByteSink {
 			let readPos = initFileLen;
 			let writePos = initFileLen + ins;
 			while (bytesLeft > 0) {
-				const chunk = ((buf.length <= bytesLeft) ? buf : buf.slice(0, bytesLeft));
+				const chunk = ((buf.length <= bytesLeft) ? buf : buf.subarray(0, bytesLeft));
 				readPos -= chunk.length;
 				writePos -= chunk.length;
 				await fs.readToBuf(fh, readPos, chunk);
@@ -141,8 +141,7 @@ export class DevFileByteSink implements FileByteSink {
 			let readPos = pos + del;
 			let writePos = pos;
 			while (bytesLeft > 0) {
-				const chunk = ((buf.length <= bytesLeft) ?
-					buf : buf.slice(0, bytesLeft));
+				const chunk = ((buf.length <= bytesLeft) ? buf : buf.subarray(0, bytesLeft));
 				await fs.readToBuf(fh, readPos, chunk);
 				await fs.writeFromBuf(fh, writePos, chunk);
 				bytesLeft -= chunk.length;

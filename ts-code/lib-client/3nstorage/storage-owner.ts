@@ -235,10 +235,7 @@ export class StorageOwner extends ServiceUser {
 		objId: ObjId,
 		fstReq: { ver: number; last?: true; }|undefined,
 		followReq: { trans: string; ofs: number; last?: boolean; }|undefined,
-		{ header, diff, segs }: {
-			header?: Uint8Array; diff?: Uint8Array;
-			segs?: Uint8Array|Uint8Array[];
-		}
+		{ header, diff, segs }: { header?: Uint8Array; diff?: Uint8Array; segs?: Uint8Array|Uint8Array[]; }
 	): Promise<string|undefined> {
 		let appPath: string;
 		if (fstReq) {
@@ -251,16 +248,16 @@ export class StorageOwner extends ServiceUser {
 			};
 			appPath = (objId ?
 				api.currentObj.firstPutReqUrlEnd(objId, reqOpts):
-				api.currentRootObj.firstPutReqUrlEnd(reqOpts));
+				api.currentRootObj.firstPutReqUrlEnd(reqOpts)
+			);
 		} else if (followReq) {
 			const { ofs, trans, last } = followReq;
 			// XXX segs argument will introduce difference between these two
-			const reqOpts: FollowingSaveReqOpts = {
-				ofs, trans, last
-			};
+			const reqOpts: FollowingSaveReqOpts = { ofs, trans, last };
 			appPath = (objId ?
 				api.currentObj.secondPutReqUrlEnd(objId, reqOpts):
-				api.currentRootObj.secondPutReqUrlEnd(reqOpts));
+				api.currentRootObj.secondPutReqUrlEnd(reqOpts)
+			);
 		} else {
 			throw new Error(`Missing request options`);
 		}
@@ -295,8 +292,10 @@ export class StorageOwner extends ServiceUser {
 			throw makeUnknownTransactionExc(objId!);
 		} else if (rep.status === api.currentObj.SC.mismatchedObjVer) {
 			const curVer = (rep as any as api.currentObj.MismatchedObjVerReply).current_version;
-			if (!Number.isInteger(curVer)) { throw new Error(
-				`Got non-integer current object version value from a version mismatch reply ${curVer}`); }
+			// XXX is undefined expected, or, was that an error from server? Is it is a header?
+			if (!Number.isInteger(curVer)) {
+				throw new Error(`Got non-integer current object version value from a version mismatch reply ${curVer}`);
+			}
 			throw makeVersionMismatchExc(objId!, curVer);
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
@@ -380,9 +379,7 @@ function serviceUriGetter(net: NetClient, mainUrlGetter: () => Promise<string>):
 		const serviceUrl = await mainUrlGetter();
 		const info = await storageInfoAt(net, serviceUrl);
 		if (!info.owner) {
-			throw new Error(
-				`Missing owner service url in 3NStorage information at ${serviceUrl}`
-			);
+			throw new Error(`Missing owner service url in 3NStorage information at ${serviceUrl}`);
 		}
 		return info.owner;
 	};

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 - 2021, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -26,7 +26,6 @@ import { base64, makeUint8ArrayCopy } from '../lib-common/buffer-utils';
 import { secret_box as sbox, box, nonce as nMod, arrays, compareVectors } from 'ecma-nacl';
 import { SessionEncryptor, makeSessionEncryptor } from '../lib-common/session-encryptor';
 import * as loginApi from '../lib-common/service-api/pub-key-login';
-import { parse as parseUrl } from 'url';
 import { assert } from '../lib-common/assert';
 
 export interface ICalcDHSharedKey {
@@ -54,7 +53,7 @@ export abstract class ServiceUser {
 		return this.uri;
 	}
 	set serviceURI(uriString: string) {
-		const u = parseUrl(uriString);
+		const u = new URL(uriString);
 		if (u.protocol !== 'https:') {
 			throw new Error("Url protocol must be https.");
 		}

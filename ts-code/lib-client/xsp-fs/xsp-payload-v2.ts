@@ -118,8 +118,7 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 				const xattrsBytes = await this.syncProc.startOrChain(async () => {
 					const chunks: Uint8Array[] = [];
 					for (const { ofsInSrc, len } of this.xattrsSections) {
-						const bytes = await sureReadOfBytesFrom(
-							this.src, ofsInSrc, len);
+						const bytes = await sureReadOfBytesFrom(this.src, ofsInSrc, len);
 						chunks.push(bytes);
 					}		
 					return chunks;
@@ -332,8 +331,7 @@ class WritablePayloadV2 implements WritablePayload {
 			this.writePos = 0;
 		} else {
 			// sanity check during reconstruction of sections' layout in source
-			this.sectionsInSink = combineIntoSectionsInSrc(
-				this.contentSections, this.xattrsSections, sectionsEnd);
+			this.sectionsInSink = combineIntoSectionsInSrc(this.contentSections, this.xattrsSections, sectionsEnd);
 			this.cutonlyAreaEnd = sectionsEnd;
 			this.writePos = sectionsEnd;
 		}
@@ -355,8 +353,7 @@ class WritablePayloadV2 implements WritablePayload {
 		const {
 			attrs, contentSections, xattrsSections, sectionsEnd
 		} = await payloadV2.readFrom(baseSrc);
-		const payload = new WritablePayloadV2(
-			sink, base, attrs, contentSections, xattrsSections, sectionsEnd);
+		const payload = new WritablePayloadV2(sink, base, attrs, contentSections, xattrsSections, sectionsEnd);
 		await payload.removeLayoutBytes();
 		await payload.deletePadsInCutArea();
 		return payload;
@@ -378,8 +375,7 @@ class WritablePayloadV2 implements WritablePayload {
 			this.attrs.updateMTime();
 		}
 		try {
-			const { bytes, packLen } = payloadV2.pack(
-				this.attrs, this.xattrsSections, this.contentSections);
+			const { bytes, packLen } = payloadV2.pack(this.attrs, this.xattrsSections, this.contentSections);
 			await this.sink.spliceLayout(this.writePos, 0, packLen);
 			for (const buf of bytes) {
 				await this.sink.write(this.writePos, buf);
@@ -905,32 +901,22 @@ namespace payloadV2 {
 
 		const { size: srcLen, isEndless } = await src.getSize();
 		if (isEndless) {
-			throw payloadLayoutException(
-				`Payload v2 can't be present in endless byte source.`
-			);
+			throw payloadLayoutException(`Payload v2 can't be present in endless byte source.`);
 		}
 		if (srcLen < MIN_PAYLOAD_V2_LEN) {
-			throw payloadLayoutException(
-				`Byte source is too short for smallest payload v2`
-			);
+			throw payloadLayoutException(`Byte source is too short for smallest payload v2`);
 		}
 
 		// - read layout length from last 4 bytes
-		const layoutLen = uintFrom4Bytes(
-			await sureReadOfBytesFrom(src, srcLen - 4, 4)
-		);
+		const layoutLen = uintFrom4Bytes(await sureReadOfBytesFrom(src, srcLen - 4, 4));
 
 		const sectionsEnd = srcLen - (layoutLen + 4);
 		if (sectionsEnd < 0) {
-			throw payloadLayoutException(
-				`Layout length value in payload v2 is out of bound`
-			);
+			throw payloadLayoutException(`Layout length value in payload v2 is out of bound`);
 		}
 
 		// - read layout bytes
-		const layoutBytes = await sureReadOfBytesFrom(
-			src, sectionsEnd, layoutLen
-		);
+		const layoutBytes = await sureReadOfBytesFrom(src, sectionsEnd, layoutLen);
 		let ofs = 0;
 
 		// - parse common attrs
@@ -938,9 +924,7 @@ namespace payloadV2 {
 		ofs += CommonAttrs.PACK_LEN;
 
 		// - parse sections
-		const {
-			contentSections, xattrsSections
-		} = parseSections(layoutBytes, ofs);
+		const { contentSections, xattrsSections } = parseSections(layoutBytes, ofs);
 
 		return { attrs, sectionsEnd, contentSections, xattrsSections };
 	}
@@ -1024,16 +1008,14 @@ namespace payloadV2 {
 
 	function checkLen(bytes: Uint8Array, ofs: number, minLen: number): void {
 		if ((ofs + minLen) > bytes.length) {
-			throw payloadLayoutException(
-				`Unexpected short byte section in payload version 2`);
+			throw payloadLayoutException(`Unexpected short byte section in payload version 2`);
 		}
 	}
 
 	function nonZeroLengthFrom4Bytes(bytes: Uint8Array, i: number): number {
 		const len = uintFrom4Bytes(bytes, i);
 		if (len === 0) {
-			throw payloadLayoutException(
-				`Section with zero length in payload version 2`);
+			throw payloadLayoutException(`Section with zero length in payload version 2`);
 		}
 		return len;
 	}
@@ -1041,8 +1023,7 @@ namespace payloadV2 {
 	function nonZeroLengthFrom8Bytes(bytes: Uint8Array, i: number): number {
 		const len = uintFrom8Bytes(bytes, i);
 		if (len === 0) {
-			throw payloadLayoutException(
-				`Section with zero length in payload version 2`);
+			throw payloadLayoutException(`Section with zero length in payload version 2`);
 		}
 		return len;
 	}

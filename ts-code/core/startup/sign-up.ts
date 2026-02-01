@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2020, 2022 - 2023, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2020, 2022 - 2023, 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,7 +17,6 @@
 
 import { checkAvailableAddressesForName, addUser, checkAvailableDomains } from '../../lib-client/3nweb-signup';
 import { NetClient } from '../../lib-client/request-utils';
-import { parse as parseUrl } from 'url';
 import { use as keyUse, keyToJson } from '../../lib-common/jwkeys';
 import { base64 } from '../../lib-common/buffer-utils';
 import { areAddressesEqual } from '../../lib-common/canonical-address';
@@ -112,7 +111,7 @@ export class SignUp {
 	}
 
 	private async setServiceURL(serviceURL: string): Promise<void> {
-		const url = parseUrl(serviceURL);
+		const url = new URL(serviceURL);
 		if (url.protocol !== 'https:') {
 			throw new Error("Url protocol must be https.");
 		}

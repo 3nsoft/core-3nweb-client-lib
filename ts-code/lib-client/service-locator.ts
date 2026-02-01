@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2020 - 2021, 2024 - 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2020 - 2021, 2024 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,7 +16,6 @@
 */
 
 import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
-import { parse as parseUrl } from 'url';
 import { Reply, NetClient } from './request-utils';
 import { promises as dnsPromises } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
@@ -30,7 +29,7 @@ type SignedLoad = web3n.keys.SignedLoad;
 async function readJSONLocatedAt<T>(
 	client: NetClient, url: string
 ): Promise<Reply<T>> {
-	if (parseUrl(url).protocol !== 'https:') {
+	if ((new URL(url)).protocol !== 'https:') {
 		throw new Error("Url protocol must be https.");
 	}
 	const rep = await client.doBodylessRequest<T>({
@@ -51,16 +50,12 @@ async function readJSONLocatedAt<T>(
 function transformPathToCompleteUri(
 	url: string, path: string, rep: Reply<any>
 ): string {
-	const uInit = parseUrl(url);
+	const uInit = new URL(url);
 	const protoAndHost = `${uInit.protocol}//${uInit.host}`;
-	const uPath = parseUrl(path);
-	if (!uPath.path || !uPath.href || !uPath.href.startsWith(uPath.path)) {
-		throw makeMalformedReplyHTTPException(rep, { message: `Malformed path parameter ${path}` });
-	}
-	if (uPath.href.startsWith('/')) {
-		return `${protoAndHost}${uPath.href}`;
+	if (path.startsWith('/')) {
+		return `${protoAndHost}${path}`;
 	} else {
-		return `${protoAndHost}/${uPath.href}`;
+		return `${protoAndHost}/${path}`;
 	}
 }
 
@@ -324,7 +319,7 @@ export async function getMailerIdInfoFor(
 	resolver: ServiceLocator, client: NetClient, address: string
 ): Promise<{ info: MailerIdServiceInfo; domain: string; }> {
 	const serviceURL = await resolver(address);
-	const rootAddr = parseUrl(serviceURL).hostname!;
+	const rootAddr = (new URL(serviceURL)).hostname;
 	const info = await mailerIdInfoAt(client, serviceURL);
 	return {
 		info: info,

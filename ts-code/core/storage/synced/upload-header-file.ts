@@ -69,8 +69,8 @@ function unpackUploadHeaderChange(bytes: Buffer): UploadHeaderChange {
 	const uploadVersion = uintFrom8Bytes(bytes, 8);
 	const headerLen = (bytes.length - 16)/2;
 	assert(Number.isInteger(headerLen));
-	const localHeader = bytes.slice(16, 16 + headerLen);
-	const uploadHeader = bytes.slice(16 + headerLen);
+	const localHeader = bytes.subarray(16, 16 + headerLen);
+	const uploadHeader = bytes.subarray(16 + headerLen);
 	return { localHeader, localVersion, uploadHeader, uploadVersion };
 }
 

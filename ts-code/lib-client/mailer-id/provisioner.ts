@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2017, 2021, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2017, 2021, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,7 +23,6 @@ import { deepEqual } from '../../lib-common/json-utils';
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import * as random from '../../lib-common/random-node';
 import * as api from  '../../lib-common/service-api/mailer-id/provisioning';
-import { parse as parseUrl } from 'url';
 import { assert } from '../../lib-common/assert';
 import { generateSigningKeyPair, MailerIdSigner, makeMailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { verifyChainAndGetUserKey } from '../../lib-common/mailerid-sigs/relying-party';
@@ -74,7 +73,7 @@ export class MailerIdProvisioner extends ServiceUser {
 
 	private async setUrlAndDomain(): Promise<void> {
 		const { currentCert, provisioning } = await mailerIdInfoAt(this.net, this.entryURI);
-		this.midDomain = parseUrl(this.serviceURI).hostname!;
+		this.midDomain = (new URL(this.serviceURI)).hostname;
 		this.serviceURI = provisioning;
 		this.rootCert = currentCert;
 	}

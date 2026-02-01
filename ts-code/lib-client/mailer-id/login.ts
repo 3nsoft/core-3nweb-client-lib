@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020, 2025 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,7 +18,6 @@
 import * as api from '../../lib-common/service-api/mailer-id/login';
 import { NetClient } from '../request-utils';
 import { HTTPException, makeHTTPException, makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
-import { parse as parseUrl } from 'url';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 
 export interface LoginException extends HTTPException {
@@ -63,7 +62,7 @@ export async function startMidSession(
 export async function authenticateMidSession(
 	sessionId: string, midSigner: MailerIdSigner, net: NetClient, loginUrl: string
 ): Promise<void> {
-	const domain = parseUrl(loginUrl).hostname!;
+	const domain = (new URL(loginUrl)).hostname;
 	const reqData: api.authSession.Request = {
 		assertion: midSigner.generateAssertionFor(domain, sessionId),
 		userCert: midSigner.userCert,

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015, 2017, 2020, 2025 3NSoft Inc.
+ Copyright (C) 2015, 2017, 2020, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -21,7 +21,6 @@
 import { NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/delivery';
 import { asmailInfoAt, ServiceLocator } from '../service-locator';
-import { parse as parseUrl } from 'url';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 
@@ -61,7 +60,7 @@ export class MailSender {
 		return this.uri;
 	}
 	private get serviceDomain(): string {
-		return parseUrl(this.uri).hostname!;
+		return (new URL(this.uri)).hostname;
 	}
 
 	private constructor(
@@ -195,7 +194,7 @@ export class MailSender {
 	private prepareRedirectOrThrowUp(rep: api.sessionStart.RedirectReply): void {
 		if (("string" !== typeof rep.redirect) ||
 				(rep.redirect.length === 0) ||
-				(parseUrl(rep.redirect).protocol !== 'https:')) {
+				((new URL(rep.redirect)).protocol !== 'https:')) {
 			throw this.badRedirectExc();
 		}
 		// refuse second redirect

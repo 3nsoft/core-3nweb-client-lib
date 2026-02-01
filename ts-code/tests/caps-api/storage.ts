@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -273,7 +273,7 @@ describe('3NStorage', () => {
 
 describe(`3NStorage`, () => {
 
-	describe('sync with two devices', () => {
+	describe('with two devices', () => {
 
 		const baseSetup = setupWithUsers();
 
@@ -295,6 +295,11 @@ describe(`3NStorage`, () => {
 		loadSpecs(
 			fsSetup,
 			resolve(__dirname, 'fs-checks/sync-with-two-devs')
+		);
+
+		loadSpecs(
+			fsSetup,
+			resolve(__dirname, 'fs-checks/with-core-restarts')
 		);
 
 	});

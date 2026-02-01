@@ -481,7 +481,7 @@ export async function streamFromFile(
 	while (byteCount < len) {
 		const bytesLeft = len - byteCount;
 		if (buf.length > bytesLeft) {
-			buf = buf.slice(0, bytesLeft);
+			buf = buf.subarray(0, bytesLeft);
 		}
 		await readFromFile(filePath, pos+byteCount, buf);
 		await sinkBytes(sink, buf);

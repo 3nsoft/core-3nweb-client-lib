@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022 3NSoft Inc.
+ Copyright (C) 2020 - 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,7 +20,6 @@ import { beforeAllWithTimeoutLog, afterAllCond } from "./jasmine-utils";
 import { callWithTimeout } from "../../lib-common/processes/timeout";
 import { ServicesRunner } from "./services-runner";
 import { assert } from "../../lib-common/assert";
-import { parse as parseUrl } from 'url';
 import { makeNetClient } from "../../lib-client/request-utils";
 import { listMsgs as listMsgsAPI } from '../../lib-common/service-api/asmail/retrieval';
 import { sleep } from "../../lib-common/processes/sleep";
@@ -329,7 +328,7 @@ export function serviceWithMailerIdLogin(): {
 	serviceUrl: string,
 	isSessionValid: (sessionId: string) => Promise<boolean>
 } {
-	const testSrv = parseUrl(SIGNUP_URL).host;
+	const testSrv = (new URL(SIGNUP_URL)).host;
 	const serviceUrl = `https://${testSrv}/asmail/retrieval/login/mailerid`;
 	const net = makeNetClient();
 	async function isSessionValid(sessionId: string) {

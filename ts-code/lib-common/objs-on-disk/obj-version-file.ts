@@ -354,7 +354,7 @@ async function parseObjVersionBytesLayout(fh: fs.FileHandle): Promise<ObjVersion
 		}
 		throw exc;
 	});
-	const fileStart = fstBytes.slice(0, 4);
+	const fileStart = fstBytes.subarray(0, 4);
 	if (bytesEqual(fileStart, V1_FILE_START)) {
 		const layoutOfs = uintFrom8Bytes(fstBytes, 4);
 		if (layoutOfs === 0) {
