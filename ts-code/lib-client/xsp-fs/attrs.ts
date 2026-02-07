@@ -25,29 +25,30 @@ export class CommonAttrs {
 
 	constructor(
 		public ctime: number,
-		public mtime: number
+		public mtime: number,
+		public size: number
 	) {
 		Object.seal(this);
 	}
 
 	static makeForTimeNow(): CommonAttrs {
 		const now = Date.now();
-		return new CommonAttrs(now, now);
+		return new CommonAttrs(now, now, 0);
 	}
 
 	static fromAttrs(attrs: Attrs): CommonAttrs {
-		return new CommonAttrs(attrs.ctime, attrs.mtime);
+		return new CommonAttrs(attrs.ctime, attrs.mtime, attrs.size);
 	}
 
 	static readonly PACK_LEN = 6 + 6;
 
-	static parse(bytes: Uint8Array): CommonAttrs {
+	static parse(bytes: Uint8Array, entitySize): CommonAttrs {
 		if (bytes.length < CommonAttrs.PACK_LEN) {
 			throw parsingException(`byte array is too short`);
 		}
 		const ctime = uintFrom6Bytes(bytes, 0);
 		const mtime = uintFrom6Bytes(bytes, 6);
-		return new CommonAttrs(ctime, mtime);
+		return new CommonAttrs(ctime, mtime, entitySize);
 	}
 
 	pack(): Buffer {
@@ -58,7 +59,7 @@ export class CommonAttrs {
 	}
 
 	copy(): CommonAttrs {
-		return new CommonAttrs(this.ctime, this.mtime);
+		return new CommonAttrs(this.ctime, this.mtime, this.size);
 	}
 
 	updateMTime(): void {

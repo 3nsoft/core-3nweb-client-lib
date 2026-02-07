@@ -920,7 +920,7 @@ namespace payloadV2 {
 		let ofs = 0;
 
 		// - parse common attrs
-		const attrs = CommonAttrs.parse(layoutBytes);
+		const attrs = CommonAttrs.parse(layoutBytes, srcLen);
 		ofs += CommonAttrs.PACK_LEN;
 
 		// - parse sections

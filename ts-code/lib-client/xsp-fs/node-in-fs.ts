@@ -191,6 +191,7 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 			ctime: new Date(attrs.ctime),
 			mtime: new Date(attrs.mtime),
 			version,
+			size: attrs.size,
 			writable: false,
 		};
 		switch (this.type) {

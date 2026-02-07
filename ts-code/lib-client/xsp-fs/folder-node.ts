@@ -103,7 +103,7 @@ function jsonToInfoAndAttrs(
 		node.key = base64.open(node.key as any);
 	}
 	checkFolderInfo(folderInfo);
-	const attrs = new CommonAttrs(json.ctime, json.ctime);
+	const attrs = new CommonAttrs(json.ctime, json.ctime, 4096);
 	return { attrs, folderInfo };
 }
 
