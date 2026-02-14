@@ -17,7 +17,7 @@
 import { keyToJson } from '../lib-common/jwkeys';
 import { utf8, base64 } from '../lib-common/buffer-utils';
 import { box, secret_box as sbox } from 'ecma-nacl';
-import { Cryptor } from './cryptor/cryptor';
+import type { Cryptor } from 'ecma-nacl-cryptors';
 
 type JsonKey = web3n.keys.JsonKey;
 

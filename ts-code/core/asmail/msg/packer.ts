@@ -30,7 +30,7 @@ import { MsgEnvelope, SuggestedNextKeyPair, MetaForNewKey,
 import { isContainerEmpty, iterFilesIn, iterFoldersIn }
 	from './attachments-container';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FS = web3n.files.FS;

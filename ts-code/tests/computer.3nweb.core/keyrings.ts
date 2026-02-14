@@ -16,7 +16,6 @@
 */
 
 import { Keyrings } from "../../core/keyring";
-import { makeInProcessCryptor } from "../../cryptors";
 import { afterEachCond, beforeAllWithTimeoutLog, itCond } from "../libs-for-tests/jasmine-utils";
 import { setupWithUsers } from "../libs-for-tests/setups";
 import { makeSetupWithTwoDevsFSs } from "./test-utils";
@@ -30,8 +29,6 @@ const introPKeyFromServer: JsonKey = {
   kid: 'EKnB33DQsmpq2RiL',
   k: 'hDeWvNYajaAFUijY23SlXFKhIFOuMJLWtIBJYtiToEQ='
 };
-
-const cryptor = makeInProcessCryptor().cryptor.sbox;
 
 
 describe('ASMail keyring', () => {

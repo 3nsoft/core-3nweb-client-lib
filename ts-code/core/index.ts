@@ -22,7 +22,6 @@ import { SignIn, GenerateKey, CompleteInitWithoutCache } from './startup/sign-in
 import { ASMail } from './asmail';
 import { errWithCause, stringifyErr } from '../lib-common/exceptions/error';
 import { copy as jsonCopy } from '../lib-common/json-utils';
-import { makeCryptor } from '../lib-client/cryptor/cryptor';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
@@ -31,6 +30,9 @@ import { Keyrings } from './keyring';
 import { ASMAIL_APP_NAME, KEYRINGS_APP_NAME, MAILERID_APP_NAME } from './storage/common/constants';
 import { ConfigOfASMailServer } from './asmail/config';
 import { defer, Deferred } from '../lib-common/processes/deferred';
+
+import type { makeCryptor } from 'ecma-nacl-cryptors';
+export type { makeCryptor } from 'ecma-nacl-cryptors';
 
 
 type RequestedCAPs = web3n.caps.common.RequestedCAPs;

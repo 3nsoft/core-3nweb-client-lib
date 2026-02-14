@@ -17,9 +17,9 @@
 
 import { ScryptGenParams, deriveMidKeyPair, deriveStorageSKey } from '../../lib-client/key-derivation';
 import type { GetUsersOnDisk } from '../app-files';
-import { Cryptor } from '../../lib-client/cryptor/cryptor';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
+import type { Cryptor } from 'ecma-nacl-cryptors';
 
 export type GenerateKey  = (derivParams: ScryptGenParams) => Promise<Uint8Array>;
 export type StartInitWithoutCache = (address: string) => Promise<CompleteInitWithoutCache|undefined>;

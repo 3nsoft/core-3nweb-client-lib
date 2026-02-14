@@ -24,7 +24,7 @@ import { AsyncSBoxCryptor, SegmentsWriter, makeSegmentsWriter, makeSegmentsReade
 import { base64 } from '../../lib-common/buffer-utils';
 import { defer } from '../../lib-common/processes/deferred';
 import * as random from '../../lib-common/random-node';
-import { cryptoWorkLabels } from '../cryptor/cryptor-work-labels';
+import { cryptoWorkLabels } from '../cryptor-work-labels';
 import { CommonAttrs, XAttrs } from './attrs';
 import * as pv1 from './xsp-payload-v1';
 import * as pv2 from './xsp-payload-v2';

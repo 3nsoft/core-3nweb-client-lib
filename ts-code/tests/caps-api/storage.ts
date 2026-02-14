@@ -18,7 +18,7 @@
 import { itCond, afterEachCond, beforeAllWithTimeoutLog } from '../libs-for-tests/jasmine-utils';
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { loadSpecs } from '../libs-for-tests/spec-module';
-import { resolve } from 'path';
+import { join } from 'path';
 import { platform } from 'os';
 import { reverseDomain } from '../../core/storage';
 import { testApp } from '../libs-for-tests/core-runner';
@@ -162,12 +162,12 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/not-versioned'),
+			join(__dirname, 'fs-checks', 'not-versioned'),
 			((platform() === 'win32') ? [ 'win-local-fs' ] : undefined));
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'file-sink-checks'));
+			join(__dirname, 'file-sink-checks'));
 
 	});
 
@@ -188,7 +188,7 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/versioned'));
+			join(__dirname, 'fs-checks', 'versioned'));
 
 	});
 
@@ -217,11 +217,11 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/not-versioned'));
+			join(__dirname, 'fs-checks', 'not-versioned'));
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'file-sink-checks'));
+			join(__dirname, 'file-sink-checks'));
 
 	});
 
@@ -231,7 +231,7 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/versioned'));
+			join(__dirname, 'fs-checks', 'versioned'));
 
 	});
 
@@ -241,7 +241,7 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/sync-on-one-dev'));
+			join(__dirname, 'fs-checks', 'sync-on-one-dev'));
 
 	});
 
@@ -265,7 +265,7 @@ describe('3NStorage', () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/local-to-synced-linking'));
+			join(__dirname, 'fs-checks', 'local-to-synced-linking'));
 
 	});
 
@@ -294,12 +294,12 @@ describe(`3NStorage`, () => {
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/sync-with-two-devs')
+			join(__dirname, 'fs-checks', 'sync-with-two-devs')
 		);
 
 		loadSpecs(
 			fsSetup,
-			resolve(__dirname, 'fs-checks/with-core-restarts')
+			join(__dirname, 'fs-checks', 'with-core-restarts')
 		);
 
 	});

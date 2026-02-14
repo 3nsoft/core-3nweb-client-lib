@@ -18,7 +18,7 @@
 import { itCond } from '../libs-for-tests/jasmine-utils';
 import { setupWithUsers } from '../libs-for-tests/setups';
 import { loadSpecs } from '../libs-for-tests/spec-module';
-import { resolve } from 'path';
+import { join } from 'path';
 import { assert } from '../../lib-common/assert';
 
 
@@ -105,7 +105,7 @@ describe('ASMail', () => {
 
 	loadSpecs(
 		s,
-		resolve(__dirname, './asmail/specs')
+		join(__dirname, 'asmail', 'specs')
 	);
 
 });

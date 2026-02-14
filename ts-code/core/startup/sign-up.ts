@@ -23,12 +23,12 @@ import { areAddressesEqual } from '../../lib-common/canonical-address';
 import * as keyDeriv from '../../lib-client/key-derivation';
 import type { GetUsersOnDisk } from '../app-files';
 import * as random from '../../lib-common/random-node';
-import { Cryptor } from '../../lib-client/cryptor/cryptor';
 import { box } from 'ecma-nacl';
 import { makeKeyGenProgressCB } from './sign-in';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { UserMidParams, UserStorageParams } from '../../lib-common/user-admin-api/signup';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
+import type { Cryptor } from 'ecma-nacl-cryptors';
 
 type JsonKey = web3n.keys.JsonKey;
 type ProgressCB = web3n.startup.ProgressCB;

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2020 - 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,8 +16,7 @@
 */
 
 import { Core, makeNetClient } from "../../lib-index";
-import { makeInWorkerWasmCryptor } from "../../cryptors";
-import { join, resolve } from "path";
+import { join } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
 import { stringOfB64Chars } from "../../lib-common/random-node";
 import { UTIL_DIR } from "../../core/app-files";
@@ -27,6 +26,7 @@ import { assert } from "../../lib-common/assert";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
 import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
+import { makeNativeCryptor } from "napi-nacl";
 
 export const testApp = {
 	appDomain: 'test.3nweb.app',
@@ -64,7 +64,7 @@ export interface User {
 	pass: string;
 }
 
-const DATA_FOLDER = resolve(__dirname, `../../../test-data`);
+const DATA_FOLDER = join(__dirname, '..', '..', '..', 'test-data');
 
 type CommonW3N = web3n.caps.common.W3N;
 type StartupW3N = web3n.startup.W3N;
@@ -112,7 +112,8 @@ export class CoreRunner {
 						else { resolve(texts as any); }
 					}))
 			}),
-			makeInWorkerWasmCryptor);
+			makeNativeCryptor
+		);
 	}
 
 	async close(): Promise<void> {

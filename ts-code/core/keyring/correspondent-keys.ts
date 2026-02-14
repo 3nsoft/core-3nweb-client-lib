@@ -28,7 +28,7 @@ import { base64 } from '../../lib-common/buffer-utils';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { Decryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../lib-client/cryptor-work-labels';
 
 type JsonKey = web3n.keys.JsonKey;
 type JsonKeyShort = web3n.keys.JsonKeyShort;

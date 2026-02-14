@@ -1,7 +1,6 @@
 #!/bin/bash
 
 protos_dir="protos"
-wasm_protos_dir="wasm-parts/cryptor/protos"
 dst_dir="ts-code/protos"
 build_dir="build/protos"
 
@@ -28,7 +27,6 @@ protos_from() {
 }
 
 protos_from $protos_dir
-protos_from $wasm_protos_dir
 
 echo "Protobuf node modules generation done."
 

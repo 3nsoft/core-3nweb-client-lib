@@ -21,7 +21,7 @@ import { MsgEnvelope, MainBody, SuggestedNextKeyPair, SendingParams } from './co
 import { makeSegmentsReader, AsyncSBoxCryptor, idToHeaderNonce, makeDecryptedByteSource, ObjSource } from 'xsp-files';
 import { FolderInJSON } from '../../../lib-client/xsp-fs/common';
 import { MsgKeyRole } from '../../keyring';
-import { cryptoWorkLabels } from '../../../lib-client/cryptor/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 
 export { SuggestedNextKeyPair } from './common';
 

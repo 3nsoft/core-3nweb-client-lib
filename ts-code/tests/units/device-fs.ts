@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 - 2021 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2021, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -18,18 +18,18 @@
 import { itCond, beforeAllWithTimeoutLog, afterAllCond, afterEachCond } from '../libs-for-tests/jasmine-utils';
 import { DeviceFS } from '../../lib-client/local-files/device-fs';
 import { rmDirWithContent, mkdir, rmdir } from '../../lib-common/async-fs-node';
-import { resolve } from 'path';
+import { join } from 'path';
 import { loadSpecs } from '../libs-for-tests/spec-module';
 import { SetupWithTestFS, clearFS } from '../caps-api/fs-checks/test-utils';
 import { platform } from 'os';
 
 type FileException = web3n.files.FileException;
 
-const TEST_DATA = resolve(__dirname, '../../../test-data');
+const TEST_DATA = join(__dirname, '..', '..', '..', 'test-data');
 
 describe('DeviceFS', () => {
 
-	const rootPath = resolve(TEST_DATA, 'root');
+	const rootPath = join(TEST_DATA, 'root');
 
 	beforeAllWithTimeoutLog(async () => {
 		await rmDirWithContent(TEST_DATA).catch((e: FileException) => {
@@ -47,13 +47,13 @@ describe('DeviceFS', () => {
 
 		// creating on non-existing folder should fail
 		try {
-			await DeviceFS.makeWritable(resolve(TEST_DATA, 'not-existing-folder'));
+			await DeviceFS.makeWritable(join(TEST_DATA, 'not-existing-folder'));
 			fail('device fs should not be created in non-existing folder');
 		} catch (e) {
 			expect((e as FileException).notFound).toBeTruthy();
 		}
 
-		let rootPath = resolve(TEST_DATA, 'root-for-creation');
+		let rootPath = join(TEST_DATA, 'root-for-creation');
 		await mkdir(rootPath);
 
 		let devFS = await DeviceFS.makeWritable(rootPath);
@@ -78,14 +78,14 @@ describe('DeviceFS', () => {
 
 		loadSpecs(
 			s,
-			resolve(__dirname, '../caps-api/fs-checks/not-versioned'),
+			join(__dirname, '..', 'caps-api', 'fs-checks', 'not-versioned'),
 			((platform() === 'win32') ?
 				[ 'win-local-fs', 'device-fs' ] :
 				[ 'device-fs' ]));
 
 		loadSpecs(
 			s,
-			resolve(__dirname, '../caps-api/file-sink-checks'),
+			join(__dirname, '..', 'caps-api', 'file-sink-checks'),
 			[ 'device-fs' ]);
 
 	});

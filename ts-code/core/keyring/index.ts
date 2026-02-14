@@ -28,7 +28,7 @@ import { ResourcesForSending, addToNumberLineSegments } from '../asmail/delivery
 import { ResourcesForReceiving } from '../asmail/inbox';
 import { makeKeyringStorage, KeyringStorage } from './keyring-storage';
 import * as delivApi from '../../lib-common/service-api/asmail/delivery';
-import { cryptoWorkLabels } from '../../lib-client/cryptor/cryptor-work-labels';
+import { cryptoWorkLabels } from '../../lib-client/cryptor-work-labels';
 import { PublishedIntroKey } from './published-intro-key';
 import { GetSigner } from '../id-manager';
 import { ParamOnServer } from '../../lib-client/asmail/service-config';

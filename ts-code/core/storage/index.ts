@@ -37,7 +37,7 @@ import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from 
 import { AppDataFolders } from './system-folders/apps-data';
 import { SYSTEM_PREFIX } from './common/constants';
 import { assert } from '../../lib-common/assert';
-import { Cryptor } from '../../cryptors';
+import type { Cryptor } from 'ecma-nacl-cryptors';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;

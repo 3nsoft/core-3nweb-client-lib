@@ -15,12 +15,12 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { resolve } from "path";
+import { join } from "path";
 import { rmDirWithContent, FileException } from "../../lib-common/async-fs-node";
 import * as serverMod from 'spec-3nweb-server';
 
 
-const DATA_FOLDER = resolve(__dirname, `../../../test-server-data`);
+const DATA_FOLDER = join(__dirname, '../../../test-server-data');
 
 let numOfRunningServers = 0;
 

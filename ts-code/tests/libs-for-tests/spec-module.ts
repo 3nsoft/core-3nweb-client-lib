@@ -16,7 +16,7 @@
 */
 
 import { itCond, xitCond } from './jasmine-utils';
-import { resolve } from 'path';
+import { join } from 'path';
 import { readdirSync } from 'fs';
 
 export interface SpecIt<S> {
@@ -40,7 +40,7 @@ function readSpecs(folderWithModules: string): SpecDescribe[] {
 	const modulesWithSpecs = readdirSync(folderWithModules)
 	.filter(fName => fName.endsWith('.js'));
 	for (const fName of modulesWithSpecs) {
-		const s: SpecDescribe = require(resolve(folderWithModules, fName)).specs;
+		const s: SpecDescribe = require(join(folderWithModules, fName)).specs;
 		if (s) {
 			specs.push(s);
 		} else {

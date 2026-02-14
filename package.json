@@ -1,12 +1,19 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.44.12",
+  "version": "0.45.0",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
+  "files": [
+    "build",
+    "protos",
+    "postinstall.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build-only-ts": "tsc -p ts-code && bash -c 'cp -rf ts-code/lib-sqlite-on-3nstorage/sqljs.* build/lib-sqlite-on-3nstorage/' ",
-    "build": "bash packing/protos-to-node-module.sh && npm run build-only-ts && bash packing/copy-api.sh && bash packing/build-wasm-cryptor.sh",
+    "build": "bash packing/protos-to-node-module.sh && npm run build-only-ts && bash packing/copy-api.sh",
     "test": "node build/tests/jasmine.js",
     "postinstall": "node -e \"try{require('./postinstall')}catch(e){}\""
   },
@@ -28,7 +35,7 @@
   },
   "license": "GPL-3.0-or-later",
   "dependencies": {
-    "ecma-nacl": "^2.5.1",
+    "ecma-nacl-cryptors": "^1.0.1",
     "protobufjs": "^7.0.1",
     "punycode": "^2.1.1",
     "rxjs": "^7.5.7",
@@ -40,6 +47,7 @@
     "@types/node": "^22.13.14",
     "@types/punycode": "^2.1.1",
     "@types/ws": "^8.18.1",
+    "napi-nacl": "^1.2.0",
     "jasmine": "^5.13.0",
     "protobufjs-cli": "^1.0.2",
     "spec-3nweb-server": "^1.8.5",
