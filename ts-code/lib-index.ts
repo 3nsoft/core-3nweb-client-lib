@@ -36,4 +36,6 @@ export const SYSTEM_DOMAIN = '3nweb.computer';
 
 export { checkServicesStartingFromSignup } from './lib-client/service-checks';
 
+export { dohAt } from './lib-client/doh';
+
 Object.freeze(exports);
