@@ -22,6 +22,7 @@ import { join } from 'path';
 import { loadSpecs } from '../libs-for-tests/spec-module';
 import { SetupWithTestFS, clearFS } from '../caps-api/fs-checks/test-utils';
 import { platform } from 'os';
+import { dohAt } from '../../lib-client/doh';
 
 type FileException = web3n.files.FileException;
 

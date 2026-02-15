@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2025 3NSoft Inc.
+ Copyright (C) 2025 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,9 +16,10 @@
 */
 
 import { checkAvailableDomains } from "./3nweb-signup";
+import { dohAt } from "./doh";
 import { NetClient } from "./request-utils";
 import { asmailInfoAt, mailerIdInfoAt, makeServiceLocator, ServiceTypeDNSLabel, storageInfoAt } from "./service-locator";
-import { resolveTxt as resolveDnsTxt } from 'dns';
+import { promises as dns } from 'dns';
 
 export interface Check {
 	service: 'signup'|'asmail'|'3nstorage'|'mailerid';
@@ -149,13 +150,11 @@ async function checkSignup(
 	}
 }
 
-const srvLocator = makeServiceLocator({
-	resolveTxt: domain => new Promise(
-		(resolve, reject) => resolveDnsTxt(domain, (err, texts) => {
-			if (err) { reject(err); }
-			else { resolve(texts as any); }
-		}))
-});
+const srvLocator = makeServiceLocator(
+	{ resolveTxt: dns.resolveTxt },
+	dohAt(`https://cloudflare-dns.com/dns-query`),
+	dohAt(`https://dns.google/resolve`)
+);
 
 async function checkUserDomainDNS(service: ServiceTypeDNSLabel, domain: string): Promise<CheckResult> {
 	try {

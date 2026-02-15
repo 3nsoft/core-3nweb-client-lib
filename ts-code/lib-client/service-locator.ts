@@ -24,6 +24,7 @@ import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route
 import { ASMailRootRoute } from '../lib-common/service-api/asmail/root-route';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 
+type RuntimeException = web3n.RuntimeException;
 type SignedLoad = web3n.keys.SignedLoad;
 
 async function readJSONLocatedAt<T>(
@@ -263,7 +264,7 @@ interface DnsError extends Error {
 	hostname: string;
 }
 
-const DNS_ERR_CODE = {
+export const DNS_ERR_CODE = {
 	NODATA: 'ENODATA',
 	NOTFOUND: 'ENOTFOUND',
 	ESERVFAIL: 'ESERVFAIL',
@@ -280,33 +281,45 @@ export type ServiceLocatorMaker = (
 
 export type ServiceLocator = (address: string) => Promise<string>;
 
-export function makeServiceLocator(
-	resolver: {
-		resolveTxt: (typeof dnsPromises)['resolveTxt'];
+export interface DnsResolver {
+	resolveTxt: (typeof dnsPromises)['resolveTxt'];
+}
+
+export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorMaker {
+	if (resolvers.length === 0) {
+		throw Error(`no DNS resolvers given`);
 	}
-): ServiceLocatorMaker {
 	return serviceLabel => async address => {
-		try {
-			const domain = domainOfAddress(address);
-			const txtRecords = await resolver.resolveTxt(domain);
-			const recValue = extractPair(txtRecords, serviceLabel);
-			if (!recValue) { throw noServiceRecordExc(address); }
-			const url = checkAndPrepareURL(recValue);
-			return url;
-		} catch (err) {
-			const { code, hostname, message } = (err as DnsError);
-			if (code === DNS_ERR_CODE.NODATA) {
-				throw noServiceRecordExc(address);
-			} else if ((code === DNS_ERR_CODE.ESERVFAIL)
-			|| (code === DNS_ERR_CODE.ECONNREFUSED)
-			|| (code === DNS_ERR_CODE.ETIMEOUT)) {
-				throw noConnectionExc({ code, hostname, message });
-			} else if (hostname) {
-				throw domainNotFoundExc(address, { code, hostname, message });
-			} else {
-				throw err;
+		const domain = domainOfAddress(address);
+		let prevConnectionExc: DNSConnectException|undefined = undefined;
+		for (const resolver of resolvers) {
+			try {
+				const txtRecords = await resolver.resolveTxt(domain);
+				const recValue = extractPair(txtRecords, serviceLabel);
+				if (!recValue) { throw noServiceRecordExc(address); }
+				const url = checkAndPrepareURL(recValue);
+				return url;
+			} catch (err) {
+				const { code, hostname, message } = (err as DnsError);
+				if (code === DNS_ERR_CODE.NODATA) {
+					throw noServiceRecordExc(address);
+				} else if ((code === DNS_ERR_CODE.ESERVFAIL)
+				|| (code === DNS_ERR_CODE.ECONNREFUSED)
+				|| (code === DNS_ERR_CODE.ETIMEOUT)) {
+					if (!prevConnectionExc) {
+						prevConnectionExc = noConnectionExc({ code, hostname, message });
+					}
+				} else if ((code === DNS_ERR_CODE.NOTFOUND) || hostname) {
+					throw domainNotFoundExc(address, { code, hostname, message });
+				} else {
+					if (!prevConnectionExc) {
+						prevConnectionExc = err;
+					}
+					throw err;
+				}
 			}
 		}
+		throw prevConnectionExc;
 	};
 }
 

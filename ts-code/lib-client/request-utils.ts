@@ -150,7 +150,7 @@ async function attachRequestReaders(
 		return reply;
 	} catch (exc) {
 		if ((exc as HTTPException).cause === TIMEOUT_FLAG) {
-			clReq.abort();
+			clReq.destroy();
 		}
 		throw exc;
 	}
