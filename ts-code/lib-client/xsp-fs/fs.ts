@@ -136,8 +136,8 @@ export class XspFS implements WritableFS {
 		const pathParts = splitPathIntoParts(path);
 		const root = this.v.getRootIfNotClosed(path);
 		const folder = await root.getFolderInThisSubTree(
-			pathParts, flags.create, flags.exclusive).catch(setExcPath(path)
-		);
+			pathParts, flags.create, flags.exclusive
+		).catch(setExcPath(path));
 		const folderName = ((pathParts.length === 0) ? this.name : pathParts[pathParts.length-1]);
 		const fs = new XspFS(this.storage(), true, folder, folderName);
 		return wrapWritableFS(fs);
@@ -210,14 +210,22 @@ export class XspFS implements WritableFS {
 		if (typeof folderName !== 'string') {
 			throw new Error('Cannot remove root folder');
 		}
-		const folder = (await parentFolder.getFolder(folderName)
-		.catch(setExcPath(path)))!;
-		if (!removeContent && !folder.isEmpty()) {
-			throw makeFileException('notEmpty', path);
+		try {
+			const folder = (await parentFolder.getFolder(folderName)
+			.catch(setExcPath(path)))!;
+			if (!removeContent && !folder.isEmpty()) {
+				throw makeFileException('notEmpty', path);
+			}
+			// note that internal folder.delete() removes all children as a matter
+			// of not leaving inaccessible nodes, i.e. content is removed implicitly
+			await parentFolder.removeChild(folder);
+		} catch (exc) {
+			if (exc.type === 'secondary') {
+				await parentFolder.removeChildEntryUnconditionally(folderName);
+			} else {
+				throw exc;
+			}
 		}
-		// note that internal folder.delete() removes all children as a matter
-		// of not leaving inaccessible nodes, i.e. content is removed implicitly
-		await parentFolder.removeChild(folder);
 	}
 
 	async deleteFile(path: string): Promise<void> {
@@ -225,9 +233,17 @@ export class XspFS implements WritableFS {
 		const root = this.v.getRootIfNotClosed(path);
 		const parentFolder = await root.getFolderInThisSubTree(folderPath)
 		.catch(setExcPath(path));
-		const file = await parentFolder.getFile(fileName)
-		.catch(setExcPath(path));
-		await parentFolder.removeChild(file!);
+		try {
+			const file = await parentFolder.getFile(fileName)
+			.catch(setExcPath(path));
+			await parentFolder.removeChild(file!);
+		} catch (exc) {
+			if (exc.type === 'secondary') {
+				await parentFolder.removeChildEntryUnconditionally(fileName);
+			} else {
+				throw exc;
+			}
+		}
 	}
 
 	async deleteLink(path: string): Promise<void> {
@@ -235,9 +251,17 @@ export class XspFS implements WritableFS {
 		const root = this.v.getRootIfNotClosed(path);
 		const parentFolder = await root.getFolderInThisSubTree(folderPath)
 		.catch(setExcPath(path));
-		const link = await parentFolder.getLink(fileName)
-		.catch(setExcPath(path));
-		await parentFolder.removeChild(link!);
+		try {
+			const link = await parentFolder.getLink(fileName)
+			.catch(setExcPath(path));
+			await parentFolder.removeChild(link!);
+		} catch (exc) {
+			if (exc.type === 'secondary') {
+				await parentFolder.removeChildEntryUnconditionally(fileName);
+			} else {
+				throw exc;
+			}
+		}
 	}
 	
 	async move(initPath: string, newPath: string): Promise<void> {

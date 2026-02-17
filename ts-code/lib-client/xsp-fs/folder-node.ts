@@ -737,7 +737,18 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		// we just get traceable garbage, yet, the rest of a live/non-deleted tree
 		// stays consistent
 		this.callRemoveObjOn('local', f);
-}
+	}
+
+	async removeChildEntryUnconditionally(name: string): Promise<void> {
+		await this.doTransition(async (state, version) => {
+			const child = state.nodes[name];
+			if (!child) {
+				return [];
+			}
+			delete state.nodes[name];
+			return this.makeEntryRemovalEvent(version, 'local', child);
+		});
+	}
 
 	private changeChildName(oldName: string, newName: string): Promise<void> {
 		return this.doTransition(async (state, version) => {
