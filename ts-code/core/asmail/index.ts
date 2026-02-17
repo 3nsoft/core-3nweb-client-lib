@@ -107,8 +107,8 @@ export class ASMail {
 			address: this.address,
 			cryptor: this.cryptor,
 			getSigner,
-			asmailResolver: makeResolver('asmail'),
-			midResolver: makeResolver('mailerid'),
+			asmailResolver: makeResolver('asmail', this.logger.logError),
+			midResolver: makeResolver('mailerid', this.logger.logError),
 			correspondents: {
 				needIntroKeyFor: this.keyring.needIntroKeyFor,
 				generateKeysToSend: this.keyring.generateKeysToSend,
@@ -138,12 +138,12 @@ export class ASMail {
 				cryptor: this.cryptor,
 				getSigner,
 				getStorages,
-				asmailResolver: makeResolver('asmail'),
+				asmailResolver: makeResolver('asmail', this.logger.logError),
 				correspondents: {
 					msgDecryptor: this.keyring.decrypt,
 					markOwnSendingParamsAsUsed: this.sendingParams.thisSide.setAsUsed,
 					saveParamsForSendingTo: this.sendingParams.otherSides.set,
-					midResolver: makeResolver('mailerid')
+					midResolver: makeResolver('mailerid', this.logger.logError)
 				},
 				makeNet: this.makeNet,
 				logError: this.logger.logError

@@ -158,7 +158,7 @@ const srvLocator = makeServiceLocator(
 
 async function checkUserDomainDNS(service: ServiceTypeDNSLabel, domain: string): Promise<CheckResult> {
 	try {
-		const serviceUrl = await (srvLocator(service))(`u@${domain}`);
+		const serviceUrl = await (srvLocator(service, noop))(`u@${domain}`);
 		return {
 			service,
 			isOk: true,
@@ -191,6 +191,8 @@ async function checkUserDomainDNS(service: ServiceTypeDNSLabel, domain: string):
 		};
 	}
 }
+
+async function noop() {}
 
 
 Object.freeze(exports);

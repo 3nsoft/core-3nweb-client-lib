@@ -164,7 +164,7 @@ export class Core {
 
 			// 1) init of id manager without setting fs
 			const stepTwo = await IdManager.initWithoutStore(
-				u.address, this.makeResolver('mailerid'), this.makeNet,
+				u.address, this.makeResolver('mailerid', this.logger.logError), this.makeNet,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!stepTwo) {
@@ -188,7 +188,7 @@ export class Core {
 			emitBootEvent({ message: `Setting up main storage for new user` });
 			const storesUp = await this.storages.initFreshForNewUser(
 				u.address, idManager.getSigner, u.storeParams, u.storeSKey,
-				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+				this.makeNet, this.makeResolver('3nstorage', this.logger.logError), this.logger.logError
 			);
 			if (!storesUp) {
 				const message = `Main store failed to initialize for new user`;
@@ -226,7 +226,7 @@ export class Core {
 
 			// 1) init of id manager without setting fs
 			const stepTwo = await IdManager.initWithoutStore(
-				address, this.makeResolver('mailerid'), this.makeNet,
+				address, this.makeResolver('mailerid', this.logger.logError), this.makeNet,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!stepTwo) {
@@ -254,7 +254,7 @@ export class Core {
 					emitBootEvent({ message: `Setting up main storage without local cache` });
 					const storeDone = await this.storages.initFromRemote(
 						address, idManager.getSigner, storageKey,
-						this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+						this.makeNet, this.makeResolver('3nstorage', this.logger.logError), this.logger.logError
 					);
 					if (!storeDone) {
 						emitBootEvent({ message: `Main store failed to initialize`, isError: true });
@@ -302,7 +302,7 @@ export class Core {
 			emitBootEvent({ message: `Unlocking data from local cache with provided password/key` });
 			const completeStorageInit = await this.storages.startInitFromCache(
 				address, storageKey,
-				this.makeNet, this.makeResolver('3nstorage'), this.logger.logError
+				this.makeNet, this.makeResolver('3nstorage', this.logger.logError), this.logger.logError
 			);
 			if (!completeStorageInit) {
 				emitBootEvent({
@@ -315,7 +315,7 @@ export class Core {
 			const idManager = await IdManager.initFromCachedStore(
 				address,
 				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
-				this.makeResolver('mailerid'), this.makeNet,
+				this.makeResolver('mailerid', this.logger.logError), this.makeNet,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!idManager) { return false; }
@@ -454,7 +454,7 @@ export class Core {
 			const getSigner = this.idManager!.getSigner;
 
 			const asmailServerConfig = new ConfigOfASMailServer(
-				address, getSigner, this.makeResolver('asmail'), this.makeNet()
+				address, getSigner, this.makeResolver('asmail', this.logger.logError), this.makeNet()
 			);
 
 			emitBootEvent({ coreApp: KEYRINGS_APP_NAME, message: `starting initialization` });

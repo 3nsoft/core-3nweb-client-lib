@@ -17,12 +17,13 @@
 
 import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { Reply, NetClient } from './request-utils';
-import { promises as dnsPromises } from 'dns';
+import { CONNREFUSED, promises as dnsPromises, NODATA, NOTFOUND, SERVFAIL, TIMEOUT } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 import { MailerIdRootRoute } from '../lib-common/service-api/mailer-id/root-route';
 import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route';
 import { ASMailRootRoute } from '../lib-common/service-api/asmail/root-route';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
+import { LogError } from './logging/log-to-file';
 
 type RuntimeException = web3n.RuntimeException;
 type SignedLoad = web3n.keys.SignedLoad;
@@ -264,19 +265,11 @@ interface DnsError extends Error {
 	hostname: string;
 }
 
-export const DNS_ERR_CODE = {
-	NODATA: 'ENODATA',
-	NOTFOUND: 'ENOTFOUND',
-	ESERVFAIL: 'ESERVFAIL',
-	ECONNREFUSED: 'ECONNREFUSED',
-	ETIMEOUT: 'ETIMEOUT'
-};
-Object.freeze(DNS_ERR_CODE);
-
 export type ServiceTypeDNSLabel = 'mailerid' | 'asmail' | '3nstorage';
 
 export type ServiceLocatorMaker = (
-	serviceLabel: ServiceTypeDNSLabel
+	serviceLabel: ServiceTypeDNSLabel,
+	logError: LogError
 ) => ServiceLocator;
 
 export type ServiceLocator = (address: string) => Promise<string>;
@@ -289,10 +282,11 @@ export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorM
 	if (resolvers.length === 0) {
 		throw Error(`no DNS resolvers given`);
 	}
-	return serviceLabel => async address => {
+	return (serviceLabel, logError) => async address => {
 		const domain = domainOfAddress(address);
 		let prevConnectionExc: DNSConnectException|undefined = undefined;
-		for (const resolver of resolvers) {
+		for (let i=0; i<resolvers.length; i+=1) {
+			const resolver = resolvers[i]
 			try {
 				const txtRecords = await resolver.resolveTxt(domain);
 				const recValue = extractPair(txtRecords, serviceLabel);
@@ -300,22 +294,22 @@ export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorM
 				const url = checkAndPrepareURL(recValue);
 				return url;
 			} catch (err) {
+				await logError(err, `Resolver ${i+1} fails to get TXT records of ${domain}`);
 				const { code, hostname, message } = (err as DnsError);
-				if (code === DNS_ERR_CODE.NODATA) {
+				if (code === NODATA) {
 					throw noServiceRecordExc(address);
-				} else if ((code === DNS_ERR_CODE.ESERVFAIL)
-				|| (code === DNS_ERR_CODE.ECONNREFUSED)
-				|| (code === DNS_ERR_CODE.ETIMEOUT)) {
+				} else if ((code === SERVFAIL)
+				|| (code === CONNREFUSED)
+				|| (code === TIMEOUT)) {
 					if (!prevConnectionExc) {
 						prevConnectionExc = noConnectionExc({ code, hostname, message });
 					}
-				} else if ((code === DNS_ERR_CODE.NOTFOUND) || hostname) {
+				} else if ((code === NOTFOUND) || hostname) {
 					throw domainNotFoundExc(address, { code, hostname, message });
 				} else {
 					if (!prevConnectionExc) {
 						prevConnectionExc = err;
 					}
-					throw err;
 				}
 			}
 		}

@@ -58,6 +58,7 @@ Log level: error.${msg ? `
 ${msg}` : ''}
 ${stringifyErr(err)}`;
 			await appendLog(entry, now);
+			console.error(`[duplicating log message into console] ${entry}`);
 		} catch (err2) {
 			console.error(err);
 			console.error(err2);

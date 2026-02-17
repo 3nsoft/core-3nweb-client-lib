@@ -17,9 +17,10 @@
 
 import * as https from 'https';
 import { formHttpsReqOpts, processRequest, RequestOpts } from "./request-utils";
-import { DNS_ERR_CODE, DnsResolver } from "./service-locator";
+import { DnsResolver } from "./service-locator";
 import { OutgoingHttpHeaders } from 'http';
 import { ConnectException } from '../lib-common/exceptions/http';
+import { CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from 'dns';
 
 export function dohAt(dohServerUrl: string): DnsResolver {
 
@@ -76,25 +77,25 @@ async function sendDohQuestion(serverUrl: string, domain: string, type: 'TXT'): 
   const reply = await processRequest<DohReplyJSON>(opts => https.request(opts), httpsOpts, opts, undefined)
   .catch((exc: ConnectException) => {
     if (exc.type === 'connect') {
-      throw { code: DNS_ERR_CODE.ECONNREFUSED, hostname: domain, cause: exc };
+      throw { code: CONNREFUSED, hostname: domain, cause: exc };
     } else {
-      throw { code: DNS_ERR_CODE.ESERVFAIL, hostname: domain, cause: exc };
+      throw { code: SERVFAIL, hostname: domain, cause: exc };
     }
   });
   const { status, data } = reply;
   if (status !== 200) {
     throw {
-      code: DNS_ERR_CODE.ESERVFAIL, hostname: domain,
+      code: SERVFAIL, hostname: domain,
       message: `status ${reply.status} from DoH server`
     };
   }
   if (data.Status !== 0) {
-    throw { code: DNS_ERR_CODE.NOTFOUND, hostname: domain };
+    throw { code: NOTFOUND, hostname: domain };
   }
   if (data.Answer) {
     return data.Answer;
   } else {
-    throw { code: DNS_ERR_CODE.NODATA, hostname: domain };
+    throw { code: NODATA, hostname: domain };
   }
 }
 
