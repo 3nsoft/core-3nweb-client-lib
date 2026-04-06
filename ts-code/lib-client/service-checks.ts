@@ -16,10 +16,8 @@
 */
 
 import { checkAvailableDomains } from "./3nweb-signup";
-import { dohAt } from "./doh";
 import { NetClient } from "./request-utils";
-import { asmailInfoAt, mailerIdInfoAt, makeServiceLocator, ServiceTypeDNSLabel, storageInfoAt } from "./service-locator";
-import { promises as dns } from 'dns';
+import { asmailInfoAt, mailerIdInfoAt, ServiceLocatorMaker, ServiceTypeDNSLabel, storageInfoAt } from "./service-locator";
 
 export interface Check {
 	service: 'signup'|'asmail'|'3nstorage'|'mailerid';
@@ -41,7 +39,7 @@ export interface CheckResult extends Check {
 }
 
 export async function checkServicesStartingFromSignup(
-	client: NetClient, signupUrl: string, signupToken: string|undefined,
+	srvLocator: ServiceLocatorMaker, client: NetClient, signupUrl: string, signupToken: string|undefined,
 	progress?: (result: CheckResult|CheckStart) => void
 ): Promise<CheckResult[]> {
 	const results: CheckResult[] = [];
@@ -59,7 +57,7 @@ export async function checkServicesStartingFromSignup(
 
 	async function checkService(service: ServiceTypeDNSLabel, userDomain: string): Promise<void> {
 		progress?.({ start: true, service, userDomain });
-		const check = await checkUserDomainDNS(service, userDomain);
+		const check = await checkUserDomainDNS(srvLocator, service, userDomain);
 		recordResult(check);
 		if (check.isOk) {
 			await checkFstServiceEndpoint(service, check.serviceUrl!);
@@ -150,13 +148,15 @@ async function checkSignup(
 	}
 }
 
-const srvLocator = makeServiceLocator(
-	{ resolveTxt: dns.resolveTxt },
-	dohAt(`https://cloudflare-dns.com/dns-query`),
-	dohAt(`https://dns.google/resolve`)
-);
+// const srvLocator = makeServiceLocator(
+// 	{ resolveTxt: dns.resolveTxt },
+// 	dohAt(`https://cloudflare-dns.com/dns-query`),
+// 	dohAt(`https://dns.google/resolve`)
+// );
 
-async function checkUserDomainDNS(service: ServiceTypeDNSLabel, domain: string): Promise<CheckResult> {
+async function checkUserDomainDNS(
+	srvLocator: ServiceLocatorMaker, service: ServiceTypeDNSLabel, domain: string
+): Promise<CheckResult> {
 	try {
 		const serviceUrl = await (srvLocator(service, noop))(`u@${domain}`);
 		return {

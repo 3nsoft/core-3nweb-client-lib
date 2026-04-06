@@ -17,7 +17,9 @@
 
 import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { Reply, NetClient } from './request-utils';
-import { CONNREFUSED, promises as dnsPromises, NODATA, NOTFOUND, SERVFAIL, TIMEOUT } from 'dns';
+// XXX rm dns
+import type { promises as dnsPromises } from 'dns';
+// import { CONNREFUSED, NODATA, NOTFOUND, SERVFAIL, TIMEOUT } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 import { MailerIdRootRoute } from '../lib-common/service-api/mailer-id/root-route';
 import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route';
@@ -277,6 +279,30 @@ export type ServiceLocator = (address: string) => Promise<string>;
 export interface DnsResolver {
 	resolveTxt: (typeof dnsPromises)['resolveTxt'];
 }
+export const NODATA = "ENODATA";
+// export const FORMERR = "EFORMERR";
+export const SERVFAIL = "ESERVFAIL";
+export const NOTFOUND = "ENOTFOUND";
+// export const NOTIMP = "ENOTIMP";
+// export const REFUSED = "EREFUSED";
+// export const BADQUERY = "EBADQUERY";
+// export const BADNAME = "EBADNAME";
+// export const BADFAMILY = "EBADFAMILY";
+// export const BADRESP = "EBADRESP";
+export const CONNREFUSED = "ECONNREFUSED";
+export const TIMEOUT = "ETIMEOUT";
+// export const EOF = "EOF";
+// export const FILE = "EFILE";
+// export const NOMEM = "ENOMEM";
+// export const DESTRUCTION = "EDESTRUCTION";
+// export const BADSTR = "EBADSTR";
+// export const BADFLAGS = "EBADFLAGS";
+// export const NONAME = "ENONAME";
+// export const BADHINTS = "EBADHINTS";
+// export const NOTINITIALIZED = "ENOTINITIALIZED";
+// export const LOADIPHLPAPI = "ELOADIPHLPAPI";
+// export const ADDRGETNETWORKPARAMS = "EADDRGETNETWORKPARAMS";
+// export const CANCELLED = "ECANCELLED";
 
 export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorMaker {
 	if (resolvers.length === 0) {

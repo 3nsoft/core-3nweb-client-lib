@@ -18,7 +18,7 @@
 import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
 import { stringOfB64UrlSafeCharsSync, bytes as randomBytes } from '../../lib-common/random-node';
 import { join, basename } from 'path';
-import { mkdir, rmDirWithContent, existsFolderSync, readFile, readdir, writeFile } from '../../lib-common/async-fs-node';
+import { mkdir, rmDirWithContent, existsFolder, readFile, readdir, writeFile } from '../../lib-common/async-fs-node';
 import { ObjFolders, Cfg } from '../../lib-client/objs-on-disk/obj-folders';
 
 const TEST_DATA = join(__dirname,
@@ -73,7 +73,7 @@ describe('ObjFolders without timed generations', () => {
 	});
 
 	itCond(`static folder content`, async () => {
-		expect(existsFolderSync(join(TEST_DATA, ACCESS_DIR))).toBeTrue();
+		expect(await existsFolder(join(TEST_DATA, ACCESS_DIR))).toBeTrue();
 		const cfg = await readJSONFile<Cfg>(join(TEST_DATA, CONFIG_FILE));
 		expect(cfg.charsInSplit).withContext('default config value').toBe(charsInSplit);
 		expect(cfg.numOfSplits).withContext('default config value').toBe(numOfSplits);
@@ -83,14 +83,14 @@ describe('ObjFolders without timed generations', () => {
 		const rootObjPath = join(objsDir, ROOT_OBJ_DIR);
 
 		// behaviour with missing obj folder and no creation
-		expect(existsFolderSync(rootObjPath)).not.toBeTrue();
+		expect(await existsFolder(rootObjPath)).not.toBeTrue();
 		let folderPath = await folders.getFolderAccessFor(null);
 		expect(folderPath).withContext(`obj folder not present, and is not created`).toBeUndefined();
-		expect(existsFolderSync(rootObjPath)).not.toBeTrue();
+		expect(await existsFolder(rootObjPath)).not.toBeTrue();
 
 		folderPath = await folders.getFolderAccessFor(null, true);
 		expect(folderPath).toBe(rootObjPath);
-		expect(existsFolderSync(folderPath!)).toBeTrue();
+		expect(await existsFolder(folderPath!)).toBeTrue();
 		await writeFilesTo(folderPath!, 4);
 
 		// behaviour with exiting obj folder
@@ -114,12 +114,12 @@ describe('ObjFolders without timed generations', () => {
 		const fstDepthCount = await numOfItemsIn(objsDir);
 
 		// behaviour with missing obj folder and no creation
-		expect(existsFolderSync(join(objsDir, sameFstIdPart))).not.toBeTrue();
+		expect(await existsFolder(join(objsDir, sameFstIdPart))).not.toBeTrue();
 		let folderA = await folders.getFolderAccessFor(idA);
 		expect(folderA).withContext(`obj folder not present, and is not created`).toBeUndefined();
 
 		folderA = await folders.getFolderAccessFor(idA, true);
-		expect(existsFolderSync(folderA!)).toBeTrue();
+		expect(await existsFolder(folderA!)).toBeTrue();
 		expect(basename(folderA!)).toBe(idA.slice(numOfSplits * charsInSplit));
 		const threeLevelsDown = join(objsDir, sameFstIdPart, sameSndIdPart, sameThirdIdPart);
 		expect(await numOfItemsIn(threeLevelsDown)).toBe(1);
@@ -132,12 +132,12 @@ describe('ObjFolders without timed generations', () => {
 		expect(existingPath).toBe(folderA);
 
 		expect(await numOfItemsIn(objsDir)).toBe(fstDepthCount+1);
-		expect(existsFolderSync(join(objsDir, sameFstIdPart))).toBeTrue();
+		expect(await existsFolder(join(objsDir, sameFstIdPart))).toBeTrue();
 		const twoLevelsDown = join(objsDir, sameFstIdPart, sameSndIdPart);
 		const thirdDepthCount = await numOfItemsIn(twoLevelsDown);
 
 		const folderB = await folders.getFolderAccessFor(idB, true);
-		expect(existsFolderSync(folderB!)).toBeTrue();
+		expect(await existsFolder(folderB!)).toBeTrue();
 		expect(basename(folderB!)).toBe(idB.slice(numOfSplits * charsInSplit));
 		expect(await numOfItemsIn(objsDir)).toBe(fstDepthCount+1);
 		expect(await numOfItemsIn(twoLevelsDown)).toBe(thirdDepthCount);
@@ -145,7 +145,7 @@ describe('ObjFolders without timed generations', () => {
 		await writeFilesTo(folderB!, 4);
 
 		const folderC = await folders.getFolderAccessFor(idC, true);
-		expect(existsFolderSync(folderC!)).toBeTrue();
+		expect(await existsFolder(folderC!)).toBeTrue();
 		expect(basename(folderC!)).toBe(idC.slice(numOfSplits * charsInSplit));
 		expect(await numOfItemsIn(objsDir)).toBe(fstDepthCount+1);
 		expect(await numOfItemsIn(twoLevelsDown)).toBe(thirdDepthCount+1);

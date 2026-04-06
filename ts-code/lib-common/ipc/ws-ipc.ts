@@ -18,7 +18,7 @@
 import { Observable, share, Subject, Subscription } from 'rxjs';
 import { makeRuntimeException } from '../exceptions/runtime';
 import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiObserverWrap } from './generic-ipc';
-import * as WebSocket from 'ws';
+import type * as WebSocket from 'ws';
 import type { ConnectException, HTTPException } from '../exceptions/http';
 import { sleep } from '../processes/sleep';
 

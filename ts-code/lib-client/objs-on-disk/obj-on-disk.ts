@@ -27,7 +27,6 @@ import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-version-file';
 import { NotOnDiskFiniteChunk, BaseSegsChunk, FiniteChunk } from '../../lib-common/objs-on-disk/file-layout';
 import { flatTap, allowOnlySingleStart } from '../../lib-common/utils-for-observables';
 import { DiffInfo } from '../../lib-common/service-api/3nstorage/owner';
-import { isPromise } from 'util/types';
 import { defer, Deferred } from '../../lib-common/processes/deferred';
 
 type DownloadEvent = web3n.files.DownloadEvent;
@@ -679,6 +678,10 @@ export class DownloadsRunner {
 }
 Object.freeze(DownloadsRunner.prototype);
 Object.freeze(DownloadsRunner);
+
+function isPromise(object: unknown): object is Promise<unknown> {
+	return !!(object as Promise<any>).then;
+}
 
 interface ExecPool {
 	queue: Download[];

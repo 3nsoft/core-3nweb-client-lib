@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2016, 2020 - 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -16,6 +16,12 @@
 */
 
 import jasmine = require('jasmine');
+import { makePlatformDeviceFS } from '../lib-common-on-node/fs-on-node';
+
+// injecting global's expected to be on node
+globalThis.platform = {
+	device_fs: makePlatformDeviceFS()
+};
 
 const jas = new jasmine({});
 

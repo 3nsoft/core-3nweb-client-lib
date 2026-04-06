@@ -15,17 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import * as https from 'https';
-import { formHttpsReqOpts, processRequest, RequestOpts } from "./request-utils";
-import { DnsResolver } from "./service-locator";
-import { OutgoingHttpHeaders } from 'http';
+import { RequestFn, RequestOpts } from "./request-utils";
+import { DnsResolver, CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from "./service-locator";
 import { ConnectException } from '../lib-common/exceptions/http';
-import { CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from 'dns';
 
-export function dohAt(dohServerUrl: string): DnsResolver {
+export function dohAt(request: RequestFn<unknown>, dohServerUrl: string): DnsResolver {
 
   async function resolveTxt(domain: string): Promise<string[][]> {
-    const answer = await sendDohQuestion(dohServerUrl, domain, 'TXT');
+    const answer = await sendDohQuestion(request as RequestFn<DohReplyJSON>, dohServerUrl, domain, 'TXT');
     let txt: string[][] = [];
     for (const { data: line } of answer) {
       txt.push([line]);
@@ -66,15 +63,18 @@ interface AnswerEntry {
   data: string;
 }
 
-async function sendDohQuestion(serverUrl: string, domain: string, type: 'TXT'): Promise<AnswerEntry[]> {
+async function sendDohQuestion(
+  request: RequestFn<DohReplyJSON>, serverUrl: string, domain: string, type: 'TXT'
+): Promise<AnswerEntry[]> {
   const opts: RequestOpts = {
     method: 'GET',
     url: `${serverUrl}?name=${domain}&type=${type}`,
+    requestHeaders: {
+      accept: 'application/dns-json'
+    },
     responseType: 'json'
   };
-  const httpsOpts = formHttpsReqOpts(opts);
-  (httpsOpts.headers as OutgoingHttpHeaders).accept = 'application/dns-json';
-  const reply = await processRequest<DohReplyJSON>(opts => https.request(opts), httpsOpts, opts, undefined)
+  const reply = await request(opts)
   .catch((exc: ConnectException) => {
     if (exc.type === 'connect') {
       throw { code: CONNREFUSED, hostname: domain, cause: exc };

@@ -12,16 +12,17 @@
  See the GNU General Public License for more details.
  
  You should have received a copy of the GNU General Public License along with
- this program. If not, see <http://www.gnu.org/licenses/>. */
+ this program. If not, see <http://www.gnu.org/licenses/>.
+*/
 
 import * as WebSocket from 'ws';
-import { IncomingMessage, OutgoingHttpHeaders } from 'http';
-import { SESSION_ID_HEADER, Reply } from './request-utils';
+import type { IncomingMessage, OutgoingHttpHeaders } from 'http';
+import { SESSION_ID_HEADER, Reply } from '../lib-client/request-utils';
 import { defer, Deferred } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
 import { globalAgent as agent } from 'https';
 
-export function openSocket(
+export function openSocketFromNode(
 	url: string, sessionId: string
 ): Promise<Reply<WebSocket>> {
 	if (!url.startsWith('wss://')) {

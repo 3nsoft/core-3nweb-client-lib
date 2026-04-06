@@ -23,6 +23,8 @@ import { assert } from "../../lib-common/assert";
 import { makeNetClient } from "../../lib-client/request-utils";
 import { listMsgs as listMsgsAPI } from '../../lib-common/service-api/asmail/retrieval';
 import { sleep } from "../../lib-common/processes/sleep";
+import { makeRequestFromNode } from "../../lib-common-on-node/request-from-node";
+import { openSocketFromNode } from "../../lib-common-on-node/websocket-from-node";
 
 
 export interface Setup {
@@ -330,7 +332,7 @@ export function serviceWithMailerIdLogin(): {
 } {
 	const testSrv = (new URL(SIGNUP_URL)).host;
 	const serviceUrl = `https://${testSrv}/asmail/retrieval/login/mailerid`;
-	const net = makeNetClient();
+	const net = makeNetClient(makeRequestFromNode(), openSocketFromNode);
 	async function isSessionValid(sessionId: string) {
 		const rep = await net.doBodylessRequest<listMsgsAPI.Reply>({
 			url: `https://${testSrv}/asmail/retrieval/${listMsgsAPI.genUrlEnd()}`,

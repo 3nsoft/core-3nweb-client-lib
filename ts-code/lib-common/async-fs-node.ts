@@ -15,59 +15,31 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import * as fs from 'fs';
-import { createReadStream, createWriteStream, statSync } from 'fs';
 import { Readable, Writable } from 'stream';
-import { FileException, Code as excCode, makeFileExceptionFromCode, makeFileException } from './exceptions/file';
+import { FileException, Code as excCode, makeFileException } from './exceptions/file';
 import { SingleProc } from './processes/synced';
 import { defer, Deferred } from './processes/deferred';
 import { BytesFIFOBuffer } from './byte-streaming/bytes-fifo-buffer';
 import { toBuffer } from './buffer-utils';
-import { join } from 'path';
+import type { PlatformDeviceFS, FileHandle } from '../injected-globals/platform-devfs';
 
-export type { Stats } from 'fs';
-export type { FileException } from './exceptions/file';
-export type FileHandle = fs.promises.FileHandle;
-
-function makeFileExceptionFromNodesAndThrow(nodeExc: NodeJS.ErrnoException): never {
-	throw makeFileExceptionFromCode(nodeExc.code, nodeExc.path!, undefined, 1);
-}
-
-function wrapNodeFn<T extends Function>(nodePromisingFn: T): T {
-	return function wrapOfNodePromisingFn(...args: any[]) {
-		return nodePromisingFn.call(undefined, ...args).catch(makeFileExceptionFromNodesAndThrow);
-	} as unknown as T;
-}
+export type { FileHandle, FileException, Stats } from '../injected-globals/platform-devfs';
 
 function noop () {}
 
-export const readFile = wrapNodeFn(fs.promises.readFile);
+if (!globalThis.platform?.device_fs) {
+	throw new Error(`Expected globally injected object globalThis.platform?.device_fs is missing`);
+}
 
-export const writeFile = wrapNodeFn(fs.promises.writeFile);
-
-export const appendFile = wrapNodeFn(fs.promises.appendFile);
-
-export const mkdir = wrapNodeFn(fs.promises.mkdir);
-
-export const open = wrapNodeFn(fs.promises.open);
-
-export const symlink = wrapNodeFn(fs.promises.symlink);
-
-export const readlink = wrapNodeFn(fs.promises.readlink);
-
-export const lstat = wrapNodeFn(fs.promises.lstat);
-
-export const stat = wrapNodeFn(fs.promises.stat);
-
-export const readdir = wrapNodeFn(fs.promises.readdir);
-
-export const rmdir = wrapNodeFn(fs.promises.rmdir);
-
-export const unlink = wrapNodeFn(fs.promises.unlink);
-
-export const rename = wrapNodeFn(fs.promises.rename);
-
-export const truncate = wrapNodeFn(fs.promises.truncate);
+/**
+ * fs functions follow node's type, and are injected via global object to allow injection in
+ * non-node environments, like Android or browser.
+ */
+export const {
+	appendFile, lstat, mkdir, open, readFile, readdir, readlink, rename, rmdir,
+	stat, symlink, truncate, unlink, writeFile,
+	copyFile
+} = globalThis.platform.device_fs as PlatformDeviceFS;
 
 /**
  * @param fh is an open file handle
@@ -163,44 +135,6 @@ export async function createEmptyFile(
 			return true;
 		} else {
 			throw makeFileException('notDirectory', path);
-		}
-	} catch (e) {
-		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
-			return false;
-		}
-		throw e;
-	}
-}
-
-/**
- * @param path
- * @return true, if given path represents directory, or false, if it does not.
- */
-export function existsFolderSync(path: string): boolean {
-	try {
-		if (statSync(path).isDirectory()) {
-			return true;
-		} else {
-			throw makeFileException('notDirectory', path);
-		}
-	} catch (e) {
-		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
-			return false;
-		}
-		throw e;
-	}
-}
-
-/**
- * @param path
- * @return true, if given path represents file, or false, if it does not.
- */
-export function existsFileSync(path: string): boolean {
-	try {
-		if (statSync(path).isFile()) {
-			return true;
-		} else {
-			throw makeFileException('notFile', path);
 		}
 	} catch (e) {
 		if ((<NodeJS.ErrnoException> e).code === excCode.notFound) {
@@ -487,76 +421,6 @@ export async function streamFromFile(
 		await sinkBytes(sink, buf);
 		byteCount += buf.length;
 	}
-}
-
-/**
- * This pipes source file into destination file.
- * @param src
- * @param dst
- * @param overwrite
- * @return a promise, resolvable when piping completes.
- */
-export function copyFile(
-	src: string, dst: string, overwrite = false, dstMode = '660'
-): Promise<void> {
-	return new Promise<void>((resolve, reject) => {
-		const srcStream = createReadStream(src);
-		const dstStream = createWriteStream(dst, {
-			mode: parseInt(dstMode, 8),
-			flags: (overwrite ? 'w' : 'wx')
-		});
-		srcStream.pipe(dstStream);
-		dstStream.on('finish', () => {
-			resolve();
-		});
-		const isRejected = false;
-		const onErr = (err) => {
-			if (!isRejected) {
-				reject(err);
-				srcStream.unpipe();
-			}
-		};
-		srcStream.on('error', onErr);
-		dstStream.on('error', onErr);
-	});
-}
-
-/**
- * This copies tree of files from source to destination folders.
- * Target folders may exist in a destination tree.
- * Objects that are neither files, nor folders, are ignored.
- * @param src
- * @param dst
- * @param fileOverwrite when set to true, allows to overwrite files in a
- * destination tree. Otherwise, exception is thrown on already existing files.
- * @return a promise resolvable when the whole tree is copied from source to
- * destination.
- */
-export async function copyTree(
-	src: string, dst: string, fileOverwrite = false
-): Promise<void> {
-	// destination folder, non-exclusively
-	await mkdir(dst, { recursive: true })
-	.catch(async (exc: FileException) => {
-		if (!exc.alreadyExists) { throw exc; }
-	});
-	// copy files and folders from src folder
-	const srcFNames = await readdir(src);
-	const cpTasks: Promise<void>[] = [];
-	for (const fName of srcFNames) {
-		const srcPath = join(src, fName);
-		const dstPath = join(dst, fName);
-		const task = stat(srcPath)
-		.then((stats) => {
-			if (stats.isFile()) {
-				return copyFile(srcPath, dstPath, fileOverwrite);
-			} else if (stats.isDirectory()) {
-				return copyTree(srcPath, dstPath, fileOverwrite);
-			}
-		});
-		cpTasks.push(task);
-	}
-	await Promise.all(cpTasks);
 }
 
 /**

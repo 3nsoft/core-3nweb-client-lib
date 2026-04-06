@@ -22,8 +22,7 @@
 
 import { Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
 import * as api from '../lib-common/service-api/mailer-id/login';
-import * as WebSocket from 'ws';
-import { openSocket } from './ws-utils';
+import type * as WebSocket from 'ws';
 import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
 import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
@@ -263,7 +262,7 @@ export abstract class ServiceUser {
 		};
 		return this.callEnsuringLogin<WebSocket>(() => {
 			this.prepCallOpts(opts, true);
-			return openSocket(opts.url!, opts.sessionId!);
+			return this.net.openWebSocket(opts.url!, opts.sessionId!);
 		});
 	}
 

@@ -16,8 +16,9 @@
 
 import { makeHTTPException, makeConnectionException, HTTPException, makeMalformedReplyHTTPException } from '../lib-common/exceptions/http';
 import { BytesFIFOBuffer } from '../lib-common/byte-streaming/bytes-fifo-buffer';
-import * as https from 'https';
-import { IncomingMessage, IncomingHttpHeaders, ClientRequest } from 'http';
+import type * as https from 'https';
+import type * as WebSocket from 'ws';
+import type { IncomingMessage, IncomingHttpHeaders, ClientRequest, OutgoingHttpHeaders } from 'http';
 import { fromEvent, lastValueFrom, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { defer } from '../lib-common/processes/deferred';
@@ -44,6 +45,7 @@ export interface RequestOpts {
 	appPath?: string;
 	responseType?: 'json' | 'arraybuffer' | 'text';
 	sessionId?: string;
+	requestHeaders?: OutgoingHttpHeaders;
 	responseHeaders?: string[];
 	timeout?: number;
 	timeoutRetries?: number;
@@ -98,7 +100,7 @@ export function formHttpsReqOpts(
 		hostname: url.hostname,
 		port: url.port,
 		path: url.pathname + url.search,
-		headers: {}
+		headers: opts.requestHeaders ?? {}
 	};
 	if (reqBody) {
 		netReqOpts.headers!['Content-Length'] = reqBody.length;
@@ -242,6 +244,8 @@ export function extractIntHeader(rep: Reply<any>, headerName: string): number {
 	return intHeader;
 }
 
+export type OpenWebSocket = (url: string, sessionId: string) => Promise<Reply<WebSocket>>
+
 export interface NetClient {
 
 	/**
@@ -269,18 +273,13 @@ export interface NetClient {
 
 	reset(): void;
 
-}
+	openWebSocket: (url: string, sessionId: string) => Promise<Reply<WebSocket>>;
 
-function makeNodeRequest<T>(): RequestFn<T> {
-	const nodeRequest = (opts: https.RequestOptions) => https.request(opts);
-	return (opts, contentType, reqBody) => {
-		const httpsOpts = formHttpsReqOpts(opts, contentType, reqBody);
-		return processRequest<T>(nodeRequest, httpsOpts, opts, reqBody);
-	}
 }
 
 export function makeNetClient(
-	request = makeNodeRequest(),
+	request: RequestFn<unknown>,
+	openWebSocket: NetClient['openWebSocket'],
 	reset = () => {}
 ): NetClient {
 
@@ -309,7 +308,9 @@ export function makeNetClient(
 			return (request as RequestFn<T>)(opts, 'application/json', reqBody);
 		},
 
-		reset
+		reset,
+
+		openWebSocket
 
 	};
 
