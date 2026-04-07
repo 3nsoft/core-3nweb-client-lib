@@ -16,7 +16,7 @@
 */
 
 import { Abortable } from 'events';
-import type { BigIntStats, BufferEncodingOption, Dirent, promises as fsFns, MakeDirectoryOptions, Mode, ObjectEncodingOptions, OpenMode, PathLike, RmDirOptions, StatOptions, Stats } from 'fs';
+import type { BufferEncodingOption, Dirent, promises as fsFns, MakeDirectoryOptions, Mode, ObjectEncodingOptions, OpenMode, RmDirOptions, StatOptions, Stats } from 'fs';
 import { FlagAndOpenMode } from 'fs/promises';
 import type Stream = require('stream');
 
@@ -58,7 +58,7 @@ export interface PlatformDeviceFS {
 // Below are types from node; these may be reduced as library doesn't use all node's options
 
 declare function readFile(
-		path: PathLike | FileHandle,
+		path: string,
 		options?:
 			| ({
 				encoding?: null | undefined;
@@ -67,7 +67,7 @@ declare function readFile(
 			| null,
 ): Promise<Buffer>;
 declare function readFile(
-		path: PathLike | FileHandle,
+		path: string,
 		options:
 			| ({
 				encoding: BufferEncoding;
@@ -76,7 +76,7 @@ declare function readFile(
 			| BufferEncoding,
 ): Promise<string>;
 declare function readFile(
-		path: PathLike | FileHandle,
+		path: string,
 		options?:
 			| (
 				& ObjectEncodingOptions
@@ -90,7 +90,7 @@ declare function readFile(
 ): Promise<string | Buffer>;
 
 declare function writeFile(
-		file: PathLike | FileHandle,
+		file: string,
 		data:
 			| string
 			| NodeJS.ArrayBufferView
@@ -108,19 +108,19 @@ declare function writeFile(
 ): Promise<void>;
 
 declare function appendFile(
-	path: PathLike | FileHandle,
+	path: string,
 	data: string | Uint8Array,
 	options?: (ObjectEncodingOptions & FlagAndOpenMode & { flush?: boolean | undefined }) | BufferEncoding | null,
 ): Promise<void>;
 
 declare function mkdir(
-	path: PathLike,
+	path: string,
 	options: MakeDirectoryOptions & {
 		recursive: true;
 	},
 ): Promise<string | undefined>;
 declare function mkdir(
-	path: PathLike,
+	path: string,
 	options?:
 		| Mode
 		| (MakeDirectoryOptions & {
@@ -128,46 +128,28 @@ declare function mkdir(
 		})
 		| null,
 ): Promise<void>;
-declare function mkdir(path: PathLike, options?: Mode | MakeDirectoryOptions | null): Promise<string | undefined>;
+declare function mkdir(path: string, options?: Mode | MakeDirectoryOptions | null): Promise<string | undefined>;
 
-declare function open(path: PathLike, flags?: string | number, mode?: Mode): Promise<FileHandle>;
+declare function open(path: string, flags?: string | number, mode?: Mode): Promise<FileHandle>;
 
-declare function symlink(target: PathLike, path: PathLike, type?: string | null): Promise<void>;
+declare function symlink(target: string, path: string, type?: string | null): Promise<void>;
 
-declare function readlink(path: PathLike, options?: ObjectEncodingOptions | BufferEncoding | null): Promise<string>;
-declare function readlink(path: PathLike, options: BufferEncodingOption): Promise<Buffer>;
-declare function readlink(path: PathLike, options?: ObjectEncodingOptions | string | null): Promise<string | Buffer>;
+declare function readlink(path: string, options?: ObjectEncodingOptions | BufferEncoding | null): Promise<string>;
+declare function readlink(path: string, options: BufferEncodingOption): Promise<Buffer>;
+declare function readlink(path: string, options?: ObjectEncodingOptions | string | null): Promise<string | Buffer>;
 
 declare function lstat(
-	path: PathLike,
+	path: string,
 	opts?: StatOptions & {
 		bigint?: false | undefined;
 	},
 ): Promise<Stats>;
-declare function lstat(
-	path: PathLike,
-	opts: StatOptions & {
-		bigint: true;
-	},
-): Promise<BigIntStats>;
-declare function lstat(path: PathLike, opts?: StatOptions): Promise<Stats | BigIntStats>;
+declare function lstat(path: string, opts?: StatOptions): Promise<Stats>;
 
-declare function stat(
-	path: PathLike,
-	opts?: StatOptions & {
-		bigint?: false | undefined;
-	},
-): Promise<Stats>;
-declare function stat(
-	path: PathLike,
-	opts: StatOptions & {
-		bigint: true;
-	},
-): Promise<BigIntStats>;
-declare function stat(path: PathLike, opts?: StatOptions): Promise<Stats | BigIntStats>;
+declare function stat(path: string, opts?: StatOptions): Promise<Stats>;
 
 declare function readdir(
-	path: PathLike,
+	path: string,
 	options?:
 		| (ObjectEncodingOptions & {
 			withFileTypes?: false | undefined;
@@ -177,7 +159,7 @@ declare function readdir(
 		| null,
 ): Promise<string[]>;
 declare function readdir(
-	path: PathLike,
+	path: string,
 	options:
 		| {
 			encoding: "buffer";
@@ -187,7 +169,7 @@ declare function readdir(
 		| "buffer",
 ): Promise<Buffer[]>;
 declare function readdir(
-		path: PathLike,
+		path: string,
 		options?:
 				| (ObjectEncodingOptions & {
 						withFileTypes?: false | undefined;
@@ -197,14 +179,14 @@ declare function readdir(
 				| null,
 ): Promise<string[] | Buffer[]>;
 declare function readdir(
-		path: PathLike,
+		path: string,
 		options: ObjectEncodingOptions & {
 				withFileTypes: true;
 				recursive?: boolean | undefined;
 		},
 ): Promise<Dirent[]>;
 declare function readdir(
-		path: PathLike,
+		path: string,
 		options: {
 				encoding: "buffer";
 				withFileTypes: true;
@@ -212,12 +194,12 @@ declare function readdir(
 		},
 ): Promise<Dirent<Buffer>[]>;
 
-declare function rmdir(path: PathLike, options?: RmDirOptions): Promise<void>;
+declare function rmdir(path: string, options?: RmDirOptions): Promise<void>;
 
-declare function unlink(path: PathLike): Promise<void>;
+declare function unlink(path: string): Promise<void>;
 
-declare function rename(oldPath: PathLike, newPath: PathLike): Promise<void>;
+declare function rename(oldPath: string, newPath: string): Promise<void>;
 
-declare function truncate(path: PathLike, len?: number): Promise<void>;
+declare function truncate(path: string, len?: number): Promise<void>;
 
 Object.freeze(exports);
