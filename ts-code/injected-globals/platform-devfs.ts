@@ -113,22 +113,7 @@ declare function appendFile(
 	options?: (ObjectEncodingOptions & FlagAndOpenMode & { flush?: boolean | undefined }) | BufferEncoding | null,
 ): Promise<void>;
 
-declare function mkdir(
-	path: string,
-	options: MakeDirectoryOptions & {
-		recursive: true;
-	},
-): Promise<string | undefined>;
-declare function mkdir(
-	path: string,
-	options?:
-		| Mode
-		| (MakeDirectoryOptions & {
-				recursive?: false | undefined;
-		})
-		| null,
-): Promise<void>;
-declare function mkdir(path: string, options?: Mode | MakeDirectoryOptions | null): Promise<string | undefined>;
+declare function mkdir(path: string, options?: { recursive?: boolean; }): Promise<string|undefined>;
 
 declare function open(path: string, flags?: string | number, mode?: Mode): Promise<FileHandle>;
 
@@ -138,61 +123,11 @@ declare function readlink(path: string, options?: ObjectEncodingOptions | Buffer
 declare function readlink(path: string, options: BufferEncodingOption): Promise<Buffer>;
 declare function readlink(path: string, options?: ObjectEncodingOptions | string | null): Promise<string | Buffer>;
 
-declare function lstat(
-	path: string,
-	opts?: StatOptions & {
-		bigint?: false | undefined;
-	},
-): Promise<Stats>;
 declare function lstat(path: string, opts?: StatOptions): Promise<Stats>;
 
 declare function stat(path: string, opts?: StatOptions): Promise<Stats>;
 
-declare function readdir(
-	path: string,
-	options?:
-		| (ObjectEncodingOptions & {
-			withFileTypes?: false | undefined;
-			recursive?: boolean | undefined;
-		})
-		| BufferEncoding
-		| null,
-): Promise<string[]>;
-declare function readdir(
-	path: string,
-	options:
-		| {
-			encoding: "buffer";
-			withFileTypes?: false | undefined;
-			recursive?: boolean | undefined;
-		}
-		| "buffer",
-): Promise<Buffer[]>;
-declare function readdir(
-		path: string,
-		options?:
-				| (ObjectEncodingOptions & {
-						withFileTypes?: false | undefined;
-						recursive?: boolean | undefined;
-				})
-				| BufferEncoding
-				| null,
-): Promise<string[] | Buffer[]>;
-declare function readdir(
-		path: string,
-		options: ObjectEncodingOptions & {
-				withFileTypes: true;
-				recursive?: boolean | undefined;
-		},
-): Promise<Dirent[]>;
-declare function readdir(
-		path: string,
-		options: {
-				encoding: "buffer";
-				withFileTypes: true;
-				recursive?: boolean | undefined;
-		},
-): Promise<Dirent<Buffer>[]>;
+declare function readdir(path: string, options?: { recursive?: boolean; }): Promise<string[]>;
 
 declare function rmdir(path: string, options?: RmDirOptions): Promise<void>;
 

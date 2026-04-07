@@ -42,24 +42,22 @@ async function makeFolder(
 	root: string, path: string[], exclusive = false
 ): Promise<void> {
 	if (path.length === 0) { throw new Error('Invalid file path'); }
-	let pathStr = root;
-	const lastIndex = path.length-1;
-	for (let i=0; i < path.length; i+=1) {
-		pathStr += '/'+path[i];
-		const stats = await fs.lstat(pathStr).catch((exc: FileException) => {
+	const pathStr = pathMod.join(root, ...path);
+	if (exclusive) {
+		const stats = await fs.lstat(pathStr).catch(async (exc: FileException) => {
 			if (exc.code !== excCode.notFound) {
-				throw maskPathInExc(root.length, exc); }
-			return fs.mkdir(pathStr)
-			.catch((exc: FileException) => {
-				if (!exc.alreadyExists) { throw exc; }
-			});	// resolves to undefined, leading to !stats
+				throw maskPathInExc(root.length, exc);
+			}
 		});
-		if (!stats) { continue; }
-		if (!stats.isDirectory()) {
-			throw makeFileException('notDirectory', path.slice(0, i+1).join('/'));
-		} else if ((i === lastIndex) && exclusive) {
+		if (!stats) {
+			await fs.mkdir(pathStr, { recursive: true });
+		} else if (!stats.isDirectory()) {
+			throw makeFileException('notDirectory', path.join('/'));
+		} else {
 			throw makeFileException('alreadyExists', path.join('/'));
 		}
+	} else {
+		await fs.mkdir(pathStr, { recursive: true });
 	}
 }
 
