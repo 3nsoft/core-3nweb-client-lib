@@ -127,7 +127,7 @@ declare function lstat(path: string, opts?: StatOptions): Promise<Stats>;
 
 declare function stat(path: string, opts?: StatOptions): Promise<Stats>;
 
-declare function readdir(path: string, options?: { recursive?: boolean; }): Promise<string[]>;
+declare function readdir(path: string): Promise<string[]>;
 
 declare function rmdir(path: string, options?: RmDirOptions): Promise<void>;
 
