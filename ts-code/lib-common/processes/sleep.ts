@@ -17,7 +17,7 @@
 
 export function sleep(millis: number): Promise<void> {
 	return new Promise<void>((resolve) => {
-		setTimeout(resolve, millis).unref();
+		setTimeout(resolve, millis).unref?.();
 	});
 }
 

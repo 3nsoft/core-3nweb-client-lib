@@ -59,50 +59,26 @@ export interface PlatformDeviceFS {
 
 declare function readFile(
 		path: string,
-		options?:
-			| ({
-				encoding?: null | undefined;
-				flag?: OpenMode | undefined;
-			} & Abortable)
-			| null,
+		options?: { encoding?: null; } | null,
 ): Promise<Buffer>;
 declare function readFile(
 		path: string,
-		options:
-			| ({
-				encoding: BufferEncoding;
-				flag?: OpenMode | undefined;
-			} & Abortable)
-			| BufferEncoding,
+		options: { encoding: BufferEncoding; } | BufferEncoding,
 ): Promise<string>;
 declare function readFile(
 		path: string,
-		options?:
-			| (
-				& ObjectEncodingOptions
-				& Abortable
-				& {
-						flag?: OpenMode | undefined;
-				}
-			)
-			| BufferEncoding
-			| null,
+		options?: ObjectEncodingOptions | BufferEncoding | null,
 ): Promise<string | Buffer>;
 
 declare function writeFile(
 		file: string,
-		data:
-			| string
-			| NodeJS.ArrayBufferView
-			| Iterable<string | NodeJS.ArrayBufferView>
-			| AsyncIterable<string | NodeJS.ArrayBufferView>
-			| Stream,
+		data: string | Uint8Array,
 		options?:
 			| (ObjectEncodingOptions & {
-				mode?: Mode | undefined;
-				flag?: OpenMode | undefined;
-				flush?: boolean | undefined;
-			} & Abortable)
+				mode?: Mode;
+				flag?: OpenMode;
+				flush?: boolean;
+			})
 			| BufferEncoding
 			| null,
 ): Promise<void>;
@@ -110,10 +86,10 @@ declare function writeFile(
 declare function appendFile(
 	path: string,
 	data: string | Uint8Array,
-	options?: (ObjectEncodingOptions & FlagAndOpenMode & { flush?: boolean | undefined }) | BufferEncoding | null,
+	options?: (ObjectEncodingOptions & { flush?: boolean | undefined }) | BufferEncoding | null,
 ): Promise<void>;
 
-declare function mkdir(path: string, options?: { recursive?: boolean; }): Promise<string|undefined>;
+declare function mkdir(path: string, options?: { recursive?: boolean; }): Promise<unknown>;
 
 declare function open(path: string, flags?: string | number, mode?: Mode): Promise<FileHandle>;
 

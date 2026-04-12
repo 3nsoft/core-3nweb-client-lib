@@ -25,8 +25,8 @@ export class TimeWindowCache<TKey, TVal> implements TimedCache<TKey, TVal> {
 	constructor(
 		periodMillis: number,
 	) {
-		this.interval = setInterval(() => this.dropAndRotate(), periodMillis)
-		.unref();
+		this.interval = setInterval(() => this.dropAndRotate(), periodMillis);
+		this.interval.unref?.();
 		Object.seal(this);
 	}
 

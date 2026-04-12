@@ -156,7 +156,7 @@ Object.freeze(MsgOnDisk);
 async function readJSON<T>(msgFolderPath: string, fname: string, msgId: string): Promise<T> {
 	const path = join(msgFolderPath, fname);
 	try {
-		return JSON.parse(await fs.readFile(path, { flag: 'r', encoding: 'utf8' }));
+		return JSON.parse(await fs.readFile(path, { encoding: 'utf8' }));
 	} catch (err) {
 		throw errWithCause(err, `Can't read file ${fname} of message ${msgId}`);
 	}

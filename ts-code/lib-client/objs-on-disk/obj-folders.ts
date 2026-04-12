@@ -284,7 +284,7 @@ class RotationsProc {
 		setTimeout(async () => {
 			await this.rotate();
 			this.setNextCacheRotation(this.generations[0].period);
-		}, secs*1000).unref();
+		}, secs*1000).unref?.();
 	}
 	
 	private async rotate(): Promise<void> {

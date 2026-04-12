@@ -102,9 +102,8 @@ implements TimedCache<TKey, TVal> {
 	private interval: NodeJS.Timeout;
 
 	constructor(millis: number) {
-		this.interval = setInterval(
-			() => { this.dropAndRotate(); }, millis);
-		this.interval.unref();
+		this.interval = setInterval(() => { this.dropAndRotate(); }, millis);
+		this.interval.unref?.();
 		Object.seal(this);
 	}
 

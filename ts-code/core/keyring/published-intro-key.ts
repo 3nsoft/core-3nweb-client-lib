@@ -89,7 +89,8 @@ export class PublishedIntroKey {
 			this.periodicExpiryCheck = setTimeout(
 				() => this.startExpiryCheckProcess(),
 				UPDATE_BEFORE_EXPIRY*1000/20
-			).unref();
+			);
+			this.periodicExpiryCheck.unref?.();
 		}
 	}
 
