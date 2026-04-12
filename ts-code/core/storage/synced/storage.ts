@@ -21,7 +21,7 @@ import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../..
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
-import { bytes as randomBytes } from '../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { AsyncSBoxCryptor, NONCE_LENGTH, Subscribe, ObjSource } from 'xsp-files';
@@ -31,6 +31,7 @@ import { NetClient } from '../../../lib-client/request-utils';
 import { lastValueFrom, Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
 import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
@@ -53,6 +54,7 @@ export class SyncedStore implements ISyncedStorage {
 		private readonly remoteStorage: RemoteStorage,
 		private readonly getStorages: StorageGetter,
 		public readonly cryptor: AsyncSBoxCryptor,
+		public readonly random: AsyncRNG,
 		public readonly logError: LogError
 	) {
 		this.remoteEvents = new RemoteEvents(
@@ -64,11 +66,12 @@ export class SyncedStore implements ISyncedStorage {
 
 	static async makeAndStart(
 		path: string, user: string, getSigner: IGetMailerIdSigner, getStorages: StorageGetter,
-		cryptor: AsyncSBoxCryptor, remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
+		cryptor: AsyncSBoxCryptor, random: AsyncRNG,
+		remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
 	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
 		const remote = RemoteStorage.make(user, getSigner, remoteServiceUrl, net);
 		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
-		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, logError);
+		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, random, logError);
 		s.uploader.start();
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
@@ -79,7 +82,7 @@ export class SyncedStore implements ISyncedStorage {
 	}
 
 	static async makeAndStartWithoutRemote(
-		path: string, user: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
+		path: string, user: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor, random: AsyncRNG,
 		remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
 	): Promise<{
 		syncedStore: ISyncedStorage;
@@ -89,7 +92,7 @@ export class SyncedStore implements ISyncedStorage {
 			remote, setMid
 		} = RemoteStorage.makeBeforeMidSetup(user, remoteServiceUrl, net);
 		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
-		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, logError);
+		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, random, logError);
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			setupRemoteAndStartObjProcs: getSigner => {

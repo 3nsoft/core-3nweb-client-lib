@@ -32,6 +32,7 @@ import { ConfigOfASMailServer } from './asmail/config';
 import { defer, Deferred } from '../lib-common/processes/deferred';
 
 import type { makeCryptor } from 'ecma-nacl-cryptors';
+import { AsyncRNG } from '../lib-common/rng-def';
 export type { makeCryptor } from 'ecma-nacl-cryptors';
 
 
@@ -67,26 +68,27 @@ export class Core {
 		private readonly makeNet: MakeNet,
 		private readonly makeResolver: ServiceLocatorMaker,
 		makeCryptor: makeCryptor,
+		private readonly random: AsyncRNG,
 		private readonly appDirs: AppDirs,
 		private readonly logger: Logger,
 		private readonly signUpUrl: string
 	) {
 		this.cryptor = makeCryptor(this.logger.logError, this.logger.logWarning);
-		this.storages = new Storages(this.cryptor.cryptor.sbox, this.appDirs.storagePathFor);
-		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox, this.logger);
-		this.asmail = new ASMail(this.cryptor.cryptor.sbox, this.makeNet, this.appDirs.inboxPathFor, this.logger);
+		this.storages = new Storages(this.cryptor.cryptor.sbox, this.random, this.appDirs.storagePathFor);
+		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox, this.random, this.logger);
+		this.asmail = new ASMail(
+			this.cryptor.cryptor.sbox, this.random, this.makeNet, this.appDirs.inboxPathFor, this.logger
+		);
 		Object.seal(this);
 	}
 
 	static make(
 		conf: CoreConf, makeNet: MakeNet,
-		makeResolver: ServiceLocatorMaker, makeCryptor: makeCryptor
+		makeResolver: ServiceLocatorMaker, makeCryptor: makeCryptor, random: AsyncRNG
 	): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
-		const core = new Core(
-			makeNet, makeResolver, makeCryptor, dirs, logger, conf.signUpUrl
-		);
+		const core = new Core(makeNet, makeResolver, makeCryptor, random, dirs, logger, conf.signUpUrl);
 		return core;
 	}
 
@@ -99,7 +101,7 @@ export class Core {
 		const { watchBoot, emitBootEvent } = makeForBootEvents();
 
 		const signUp = new SignUp(
-			this.signUpUrl, this.cryptor.cryptor, this.makeNet,
+			this.signUpUrl, this.cryptor.cryptor, this.random, this.makeNet,
 			this.appDirs.getUsersOnDisk,
 			user => this.initForNewUser(user, midDone, emitBootEvent),
 			watchBoot,
@@ -165,6 +167,7 @@ export class Core {
 			// 1) init of id manager without setting fs
 			const stepTwo = await IdManager.initWithoutStore(
 				u.address, this.makeResolver('mailerid', this.logger.logError), this.makeNet,
+				this.random,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!stepTwo) {
@@ -227,6 +230,7 @@ export class Core {
 			// 1) init of id manager without setting fs
 			const stepTwo = await IdManager.initWithoutStore(
 				address, this.makeResolver('mailerid', this.logger.logError), this.makeNet,
+				this.random,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!stepTwo) {
@@ -316,6 +320,7 @@ export class Core {
 				address,
 				await this.storages.makeSyncedFSForApp(MAILERID_APP_NAME),
 				this.makeResolver('mailerid', this.logger.logError), this.makeNet,
+				this.random,
 				this.logger.logError, this.logger.logWarning
 			);
 			if (!idManager) { return false; }

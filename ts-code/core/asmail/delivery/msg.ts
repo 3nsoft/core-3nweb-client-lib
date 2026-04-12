@@ -204,9 +204,9 @@ export class Msg {
 
 	async msgPacker(pack?: PackJSON): Promise<MsgPacker> {
 		if (pack) {
-			return MsgPacker.fromPack(pack, SEG_SIZE_IN_K_QUATS, this.attachments);
+			return MsgPacker.fromPack(pack, SEG_SIZE_IN_K_QUATS, this.attachments, this.r.random);
 		}
-		const msg = MsgPacker.empty(SEG_SIZE_IN_K_QUATS);
+		const msg = await MsgPacker.empty(SEG_SIZE_IN_K_QUATS, this.r.random);
 		msg.setSection('From', this.sender);
 		if (typeof this.msgToSend.plainTxtBody === 'string') {
 			msg.setPlainTextBody(this.msgToSend.plainTxtBody);

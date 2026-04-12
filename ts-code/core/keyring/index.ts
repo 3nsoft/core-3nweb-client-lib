@@ -21,7 +21,7 @@ import { MsgKeyRole, msgKeyPackSizeFor } from './common';
 import { makeEncryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { NONCE_LENGTH, AsyncSBoxCryptor } from 'xsp-files';
 import { SuggestedNextKeyPair, OpenedMsg } from '../asmail/msg/opener';
-import * as random from '../../lib-common/random-node';
+import * as random from '../../lib-common-on-node/random-node';
 import { base64 } from '../../lib-common/buffer-utils';
 import { areAddressesEqual, toCanonicalAddress } from '../../lib-common/canonical-address';
 import { ResourcesForSending, addToNumberLineSegments } from '../asmail/delivery/common';
@@ -33,6 +33,7 @@ import { PublishedIntroKey } from './published-intro-key';
 import { GetSigner } from '../id-manager';
 import { ParamOnServer } from '../../lib-client/asmail/service-config';
 import { Logger } from '../../lib-client/logging/log-to-file';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 type PKeyCertChain = web3n.keys.PKeyCertChain;
@@ -104,6 +105,7 @@ export class Keyrings {
 
 	constructor(
 		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly random: AsyncRNG,
 		private readonly logger: Logger
 	) {
 		Object.seal(this);
@@ -118,8 +120,8 @@ export class Keyrings {
 		address: string|undefined, serialForm?: string
 	): CorrespondentKeys {
 		const ck = (serialForm ?
-			new CorrespondentKeys(this.asKeyPairsStorage, undefined, serialForm) :
-			new CorrespondentKeys(this.asKeyPairsStorage, address)
+			new CorrespondentKeys(this.asKeyPairsStorage, this.random, undefined, serialForm) :
+			new CorrespondentKeys(this.asKeyPairsStorage, this.random, address)
 		);
 		if (this.corrKeys.has(ck.correspondent)) {
 			throw new Error(`Correspondent with address ${ck.correspondent} is already present.`);
@@ -137,7 +139,7 @@ export class Keyrings {
 	): Promise<void> {
 		this.publishedKeys = await PublishedIntroKey.makeAndInit(
 			await fs.writableFile(FILE_FOR_INTRO_KEY_ON_SERVER),
-			getSigner, pkeyOnServer
+			getSigner, this.random, pkeyOnServer
 		);
 		this.storage = makeKeyringStorage(fs);
 		await this.storage.start();

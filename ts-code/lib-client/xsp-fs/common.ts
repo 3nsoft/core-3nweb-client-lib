@@ -20,6 +20,7 @@ import type { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import type { Observable } from 'rxjs';
 import type { LogError } from '../logging/log-to-file';
 import { StorageConnectionStatus } from '../../core/storage/synced/remote-events';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 export type { AsyncSBoxCryptor } from 'xsp-files';
 export type { FolderInJSON } from './folder-node'; 
@@ -129,6 +130,7 @@ export interface Storage {
 	readonly versioned: boolean;
 
 	readonly cryptor: AsyncSBoxCryptor;
+	readonly random: AsyncRNG;
 
 	readonly nodes: NodesContainer;
 
@@ -206,7 +208,8 @@ export function wrapStorageImplementation(impl: Storage): Storage {
 		close: impl.close.bind(impl),
 		removeObj: impl.removeObj.bind(impl),
 		status: impl.status.bind(impl),
-		cryptor: impl.cryptor
+		cryptor: impl.cryptor,
+		random: impl.random
 	};
 	return Object.freeze(wrap);
 }

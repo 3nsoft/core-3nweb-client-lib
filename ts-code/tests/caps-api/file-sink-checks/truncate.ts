@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../libs-for-tests/spec-module';
-import { bytesSync as randomBytes } from '../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { bytesEqual } from '../../libs-for-tests/bytes-equal';
 import { SpecIt } from '../fs-checks/test-utils';
 
@@ -68,7 +68,7 @@ it.func = async function(s) {
 		expectSection(layout, 0, 'empty', 0, 10000);
 	}
 
-	const chunk = randomBytes(10000);
+	const chunk = await randomBytes(10000);
 	await sink.splice(0, chunk.length, chunk);
 	size = await sink.getSize();
 	expect(size).toBe(10000);

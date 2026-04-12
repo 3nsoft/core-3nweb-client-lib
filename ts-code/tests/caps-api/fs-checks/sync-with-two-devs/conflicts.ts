@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { stringOfB64CharsSync } from '../../../../lib-common/random-node';
+import { stringOfB64CharsSync } from '../../../../lib-common-on-node/random-node';
 import { deepEqual } from '../../../libs-for-tests/json-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { watchForEvents } from '../../../libs-for-tests/watching';

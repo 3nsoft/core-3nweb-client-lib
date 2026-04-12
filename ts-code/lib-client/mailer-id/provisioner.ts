@@ -21,12 +21,12 @@ import { ServiceUser, ICalcDHSharedKey, LoginCompletion } from '../user-with-pkl
 import { keyToJson, getKeyCert } from '../../lib-common/jwkeys';
 import { deepEqual } from '../../lib-common/json-utils';
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
-import * as random from '../../lib-common/random-node';
 import * as api from  '../../lib-common/service-api/mailer-id/provisioning';
 import { assert } from '../../lib-common/assert';
 import { generateSigningKeyPair, MailerIdSigner, makeMailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { verifyChainAndGetUserKey } from '../../lib-common/mailerid-sigs/relying-party';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 type SignedLoad = web3n.keys.SignedLoad;
@@ -59,7 +59,10 @@ export class MailerIdProvisioner extends ServiceUser {
 	 * @param userId
 	 * @param uri identifies place of MailerId service.
 	 */
-	constructor(userId: string, serviceUri: string, net: NetClient) {
+	constructor(
+		userId: string, serviceUri: string, net: NetClient,
+		private readonly random: AsyncRNG
+	) {
 		super(userId, {
 			login: '',
 			logout: ''
@@ -166,7 +169,7 @@ export class MailerIdProvisioner extends ServiceUser {
 	async provisionSigner(
 		keyId: string|undefined
 	): Promise<ProvisioningCompletion> {
-		const pair = generateSigningKeyPair(random.bytesSync);
+		const pair = await generateSigningKeyPair(this.random);
 		await this.setUrlAndDomain();
 		const login = await this.super_login(keyId);
 		const completion: ProvisioningCompletion['complete'] = async (

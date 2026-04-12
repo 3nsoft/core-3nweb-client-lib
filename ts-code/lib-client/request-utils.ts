@@ -59,7 +59,7 @@ export type ContentType = 'application/json' |
 	'application/octet-stream' | 'text/plain';
 
 export type RequestFn<T> = (
-	opts: RequestOpts, contentType?: ContentType, reqBody?: Uint8Array
+	opts: RequestOpts, reqContentType?: ContentType, reqBody?: Uint8Array
 ) => Promise<Reply<T>>;
 
 export async function processRequest<T>(
@@ -85,7 +85,7 @@ export async function processRequest<T>(
 }
 
 export function formHttpsReqOpts(
-	opts: RequestOpts, contentType?: ContentType, reqBody?: Uint8Array
+	opts: RequestOpts, reqContentType?: ContentType, reqBody?: Uint8Array
 ): https.RequestOptions {
 	if (!opts.url) {
 		throw new Error(`Cannot send net request, cause url is not set in given options.`);
@@ -105,8 +105,8 @@ export function formHttpsReqOpts(
 	if (reqBody) {
 		netReqOpts.headers!['Content-Length'] = reqBody.length;
 	}
-	if (contentType) {
-		netReqOpts.headers![CONTENT_TYPE_HEADER] = contentType;
+	if (reqContentType) {
+		netReqOpts.headers![CONTENT_TYPE_HEADER] = reqContentType;
 	}
 	if (opts.sessionId) {
 		netReqOpts.headers![SESSION_ID_HEADER] = opts.sessionId;

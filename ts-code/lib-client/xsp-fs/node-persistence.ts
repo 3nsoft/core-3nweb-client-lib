@@ -23,11 +23,11 @@
 import { AsyncSBoxCryptor, SegmentsWriter, makeSegmentsWriter, makeSegmentsReader, compareVectors, calculateNonce, makeDecryptedByteSource, Subscribe, ObjSource, makeEncryptingByteSink, ByteSink, ByteSource } from 'xsp-files';
 import { base64 } from '../../lib-common/buffer-utils';
 import { defer } from '../../lib-common/processes/deferred';
-import * as random from '../../lib-common/random-node';
 import { cryptoWorkLabels } from '../cryptor-work-labels';
 import { CommonAttrs, XAttrs } from './attrs';
 import * as pv1 from './xsp-payload-v1';
 import * as pv2 from './xsp-payload-v2';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 const SEG_SIZE = 16;	// in 256-byte blocks = 4K in bytes
 
@@ -42,7 +42,8 @@ export abstract class NodePersistance {
 	protected constructor(
 		private zerothHeaderNonce: Uint8Array,
 		private key: Uint8Array,
-		private cryptor: AsyncSBoxCryptor
+		private readonly cryptor: AsyncSBoxCryptor,
+		protected readonly random: AsyncRNG
 	) {
 		this.workLabel = cryptoWorkLabels.makeForNonce(
 			'storage', this.zerothHeaderNonce
@@ -73,7 +74,8 @@ export abstract class NodePersistance {
 		return makeSegmentsWriter(
 			this.key, this.zerothHeaderNonce, version,
 			{ type: 'new', segSize: SEG_SIZE, payloadFormat: 2 },
-			random.bytes, this.cryptor, this.workLabel);
+			this.random, this.cryptor, this.workLabel
+		);
 	}
 
 	private async segWriterWithBase(
@@ -83,7 +85,8 @@ export abstract class NodePersistance {
 		return makeSegmentsWriter(
 			this.key, this.zerothHeaderNonce, newVersion,
 			{ type: 'update', base, payloadFormat: 2 },
-			random.bytes, this.cryptor, this.workLabel);
+			this.random, this.cryptor, this.workLabel
+		);
 	}
 
 	private async decryptedByteSrc(src: ObjSource): Promise<{

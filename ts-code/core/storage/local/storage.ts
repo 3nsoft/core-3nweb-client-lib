@@ -17,7 +17,7 @@
 
 import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent, LocalObjStatus } from '../../../lib-client/xsp-fs/common';
 import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
-import { bytes as randomBytes } from '../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { secret_box as sbox } from 'ecma-nacl';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
@@ -25,6 +25,7 @@ import { AsyncSBoxCryptor, Subscribe, ObjSource } from 'xsp-files';
 import { ObjFiles, LocalObj } from './obj-files';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
 import { Observable } from 'rxjs';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
@@ -43,17 +44,18 @@ export class LocalStorage implements Storage {
 		private readonly files: ObjFiles,
 		private readonly getStorages: StorageGetter,
 		public readonly cryptor: AsyncSBoxCryptor,
+		public readonly random: AsyncRNG,
 		public readonly logError: LogError
 	) {
 		Object.seal(this);
 	}
 
 	static async makeAndStart(
-		path: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor,
+		path: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor, random: AsyncRNG,
 		logError: LogError
 	): Promise<Storage> {
 		const files = await ObjFiles.makeFor(path, logError);
-		const s = new LocalStorage(files, getStorages, cryptor, logError);
+		const s = new LocalStorage(files, getStorages, cryptor, random, logError);
 		return wrapStorageImplementation(s);
 	}
 

@@ -32,12 +32,12 @@ import { makeFSSyncException, StorageException } from './exceptions';
 import { defer } from '../../lib-common/processes/deferred';
 import { copy } from '../../lib-common/json-utils';
 import { AsyncSBoxCryptor, KEY_LENGTH, NONCE_LENGTH, calculateNonce, idToHeaderNonce, Subscribe, ObjSource } from 'xsp-files';
-import * as random from '../../lib-common/random-node';
 import { parseFolderInfo, serializeFolderInfo } from './folder-node-serialization';
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
 import { assert } from '../../lib-common/assert';
 import { appendArray } from './util/for-arrays';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type ListingEntry = web3n.files.ListingEntry;
 type EntryAdditionEvent = web3n.files.EntryAdditionEvent;
@@ -110,8 +110,8 @@ function jsonToInfoAndAttrs(
 
 class FolderPersistance extends NodePersistance {
 
-	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
-		super(zNonce, key, cryptor);
+	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor, random: AsyncRNG) {
+		super(zNonce, key, cryptor, random);
 		Object.seal(this);
 	}
 
@@ -133,14 +133,14 @@ class FolderPersistance extends NodePersistance {
 
 	static async readFolderContent(
 		objId: string|null, key: Uint8Array, src: ObjSource,
-		cryptor: AsyncSBoxCryptor
+		cryptor: AsyncSBoxCryptor, random: AsyncRNG
 	): Promise<FolderInfo> {
 		if (objId === null) {
 			throw new Error("Missing objId for non-root folder");
 		}
 		const zNonce = idToHeaderNonce(objId);
 		const { folderInfo } = await (
-			new FolderPersistance(zNonce, key, cryptor)
+			new FolderPersistance(zNonce, key, cryptor, random)
 		).read(src);
 		return folderInfo;
 	}
@@ -182,7 +182,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		} else if (objId === null) {
 			throw new Error("Missing objId for non-root folder");
 		}
-		this.crypto = new FolderPersistance(zNonce, key, storage.cryptor);
+		this.crypto = new FolderPersistance(zNonce, key, storage.cryptor, storage.random);
 		if (setNewAttrs) {
 			this.attrs = CommonAttrs.makeForTimeNow();
 		}
@@ -190,7 +190,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	static async newRoot(storage: Storage, key: Uint8Array): Promise<FolderNode> {
-		const zNonce = await random.bytes(NONCE_LENGTH);
+		const zNonce = await storage.random(NONCE_LENGTH);
 		const rf = new FolderNode(storage, undefined, null, zNonce, 0, undefined, key, true);
 		rf.storage.nodes.set(rf);
 		await rf.saveFirstVersion(undefined);
@@ -596,7 +596,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	private async makeAndSaveNewChildFolderNode(
 		name: string, changes: XAttrsChanges|undefined
 	): Promise<{ node: FolderNode; key: Uint8Array; }> {
-		const key = await random.bytes(KEY_LENGTH);
+		const key = await this.storage.random(KEY_LENGTH);
 		const childObjId = await this.storage.generateNewObjId();
 		const node = new FolderNode(
 			this.storage, name, childObjId, idToHeaderNonce(childObjId), 0, this.objId, key, true
@@ -629,7 +629,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	 * @param name
 	 */
 	private async makeAndSaveNewChildFileNode(name: string): Promise<{ node: FileNode; key: Uint8Array; }> {
-		const key = await random.bytes(KEY_LENGTH);
+		const key = await this.storage.random(KEY_LENGTH);
 		const node = await FileNode.makeForNew(this.storage, this.objId, name, key);
 		await node.save([]).catch((exc: StorageException) => {
 			if (!exc.objExists) { throw exc; }
@@ -647,7 +647,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	private async makeAndSaveNewChildLinkNode(
 		name: string, params: LinkParameters<any>
 	): Promise<{ node: LinkNode; key: Uint8Array; }> {
-		const key = await random.bytes(KEY_LENGTH);
+		const key = await this.storage.random(KEY_LENGTH);
 		const node = await LinkNode.makeForNew(
 			this.storage, this.objId, name, key);
 		await node.save(params).catch((exc: StorageException) => {
@@ -1017,7 +1017,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			const objs = [ node.objId ];
 			const src = await storage.getObjSrc(node.objId, versionBeforeRm, true);
 			const folderContent = await FolderPersistance.readFolderContent(
-				node.objId, node.key, src, storage.cryptor
+				node.objId, node.key, src, storage.cryptor, storage.random
 			);
 			for (const child of Object.values(folderContent.nodes)) {
 				appendArray(objs, await this.listRemovedInTreeToUploadRm(child));

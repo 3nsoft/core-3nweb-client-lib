@@ -21,6 +21,7 @@ import { ResourcesForSending } from '../delivery/common';
 import { ResourcesForReceiving } from '../inbox';
 import { ParamOnServer } from '../../../lib-client/asmail/service-config';
 import { AnonymousInvites } from './invitations-anon';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 export { SendingParams } from './params-from-others';
 
@@ -62,7 +63,8 @@ export class SendingParamsHolder {
 
 	static async makeAndInit(
 		fs: WritableFS,
-		anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>
+		anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>,
+		random: AsyncRNG
 	): Promise<SendingParamsHolder> {
 		const [ paramsFromOthers, ownParams ] = await Promise.all([
 			fs.writableFile(PARAMS_FROM_OTHERS_FILE)
@@ -71,7 +73,7 @@ export class SendingParamsHolder {
 			fs.writableFile(ANONYM_INVITES_FILE)
 			.then(async anonInvitesFile => {
 				const anonInvites = await AnonymousInvites.makeAndInit(
-					anonInvitesFile, anonInvitesOnServer
+					anonInvitesFile, anonInvitesOnServer, random
 				);
 				return await OwnSendingParams.makeAndInit(
 					await fs.writableFile(OWN_PARAMS_FILE),

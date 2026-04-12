@@ -14,7 +14,7 @@
  You should have received a copy of the GNU General Public License along with
  this program. If not, see <http://www.gnu.org/licenses/>. */
 
-import { base64urlSafe } from './buffer-utils';
+import { base64urlSafe } from '../lib-common/buffer-utils';
 import { randomBytes } from 'crypto';
 
 export function bytesSync(numOfBytes: number): Uint8Array {
@@ -33,7 +33,7 @@ export function uint8Sync(): number {
 }
 
 export async function uint8(): Promise<number> {
-	return (await randomBytes(1))[0];
+	return (await bytes(1))[0];
 }
 
 export function uint48Sync(): number {

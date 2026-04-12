@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
-import { bytesSync as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { SpecIt } from '../test-utils';
 
@@ -42,7 +42,7 @@ specs.its.push(it);
 it = { expectation: 'reads file bytes with seeking available' };
 it.func = async function(s) {
 	const { testFS } = s;
-	const original = randomBytes(12*1024+3);
+	const original = await randomBytes(12*1024+3);
 	let fName = 'file1';
 	await testFS.writeBytes(fName, original);
 

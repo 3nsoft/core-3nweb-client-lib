@@ -18,7 +18,7 @@
 import { Core, makeNetClient } from "../../lib-index";
 import { join } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
-import { stringOfB64Chars } from "../../lib-common/random-node";
+import { stringOfB64Chars, bytes as random } from "../../lib-common-on-node/random-node";
 import { UTIL_DIR } from "../../core/app-files";
 import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
@@ -114,7 +114,8 @@ export class CoreRunner {
 						else { resolve(texts as any); }
 					}))
 			}),
-			makeNativeCryptor
+			makeNativeCryptor,
+			random
 		);
 	}
 

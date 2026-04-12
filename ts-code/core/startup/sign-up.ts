@@ -22,13 +22,13 @@ import { base64 } from '../../lib-common/buffer-utils';
 import { areAddressesEqual } from '../../lib-common/canonical-address';
 import * as keyDeriv from '../../lib-client/key-derivation';
 import type { GetUsersOnDisk } from '../app-files';
-import * as random from '../../lib-common/random-node';
 import { box } from 'ecma-nacl';
 import { makeKeyGenProgressCB } from './sign-in';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { UserMidParams, UserStorageParams } from '../../lib-common/user-admin-api/signup';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
 import type { Cryptor } from 'ecma-nacl-cryptors';
+import { AsyncRNG, stringOfB64Chars } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 type ProgressCB = web3n.startup.ProgressCB;
@@ -55,14 +55,14 @@ const SALT_LEN = 32;
 const KEY_ID_LEN = 10;
 
 async function makeLabeledMidLoginKey(
-	cryptor: Cryptor
+	cryptor: Cryptor, random: AsyncRNG
 ): Promise<{ skey: JsonKey; pkey: JsonKey }> {
-	const sk = await random.bytes(box.KEY_LENGTH);
+	const sk = await random(box.KEY_LENGTH);
 	const skey = keyToJson({
 		k: sk,
 		alg: box.JWK_ALG_NAME,
 		use: keyUse.MID_PKLOGIN,
-		kid: await random.stringOfB64Chars(KEY_ID_LEN)
+		kid: await stringOfB64Chars(KEY_ID_LEN, random)
 	});
 	const pkey = keyToJson({
 		k: await cryptor.box.generate_pubkey(sk),
@@ -99,10 +99,11 @@ export class SignUp {
 
 	constructor(
 		serviceURL: string,
-		private cryptor: Cryptor,
-		private makeNet: () => NetClient,
-		private getUsersOnDisk: GetUsersOnDisk,
-		private initForNewUser: (u: CreatedUser) => Promise<void>,
+		private readonly cryptor: Cryptor,
+		private readonly random: AsyncRNG,
+		private readonly makeNet: () => NetClient,
+		private readonly getUsersOnDisk: GetUsersOnDisk,
+		private readonly initForNewUser: (u: CreatedUser) => Promise<void>,
 		private readonly watchBoot: SignUpService['watchBoot'],
 		private readonly logError: LogError
 	) {
@@ -165,7 +166,7 @@ export class SignUp {
 			logN: defaultDerivParams.logN,
 			r: defaultDerivParams.r,
 			p: defaultDerivParams.p,
-			salt: base64.pack(await random.bytes(SALT_LEN))
+			salt: base64.pack(await this.random(SALT_LEN))
 		};
 		const progressCB = makeKeyGenProgressCB(
 			progressStart, progressEnd, originalProgressCB
@@ -189,7 +190,7 @@ export class SignUp {
 			logN: defaultDerivParams.logN,
 			r: defaultDerivParams.r,
 			p: defaultDerivParams.p,
-			salt: base64.pack(await random.bytes(SALT_LEN))
+			salt: base64.pack(await this.random(SALT_LEN))
 		}
 		const progressCB = makeKeyGenProgressCB(
 			progressStart, progressEnd, originalProgressCB
@@ -197,7 +198,7 @@ export class SignUp {
 		const defaultPair = await keyDeriv.deriveMidKeyPair(
 			this.cryptor, pass, derivParams, progressCB, keyUse.MID_PKLOGIN, '_'
 		);
-		const labeledKey = await makeLabeledMidLoginKey(this.cryptor);
+		const labeledKey = await makeLabeledMidLoginKey(this.cryptor, this.random);
 		this.mid = {
 			defaultSKey: defaultPair.skey,
 			labeledSKey: labeledKey.skey,

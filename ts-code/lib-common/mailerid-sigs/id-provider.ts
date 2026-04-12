@@ -15,24 +15,25 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { signing, GetRandom, arrays } from "ecma-nacl";
+import { signing, arrays } from "ecma-nacl";
 import { keyToJson, keyFromJson } from "../jwkeys";
 import { utf8, base64 } from "../buffer-utils";
 import { KEY_USE, Keypair, makeMailerIdException } from "./index";
+import { AsyncRNG } from "../rng-def";
 
 type JsonKey = web3n.keys.JsonKey;
 type Key = web3n.keys.Key;
 type KeyCert = web3n.keys.KeyCert;
 type SignedLoad = web3n.keys.SignedLoad;
 
-function genSignKeyPair(
-	use: string, kidLen: number, random: GetRandom, arrFactory?: arrays.Factory
-): Keypair {
-	const pair = signing.generate_keypair(random(32), arrFactory);
+async function genSignKeyPair(
+	use: string, kidLen: number, random: AsyncRNG, arrFactory?: arrays.Factory
+): Promise<Keypair> {
+	const pair = signing.generate_keypair(await random(32), arrFactory);
 	const pkey: JsonKey = {
 		use: use,
 		alg: signing.JWK_ALG_NAME,
-		kid: base64.pack(random(kidLen)),
+		kid: base64.pack(await random(kidLen)),
 		k: base64.pack(pair.pkey)
 	};
 	const skey: Key = {
@@ -106,13 +107,12 @@ export function makeSelfSignedCert(
  * @return Generated root key and a self-signed certificate for respective
  * public key.
  */
-export function generateRootKey(
-	address: string, validityPeriod: number, random: GetRandom,
+export async function generateRootKey(
+	address: string, validityPeriod: number, random: AsyncRNG,
 	arrFactory?: arrays.Factory
-): { cert: SignedLoad; skey: JsonKey } {
+): Promise<{ cert: SignedLoad; skey: JsonKey }> {
 	if (validityPeriod < 1) { throw new Error(`Illegal validity period: ${validityPeriod}`); }
-	const rootPair = genSignKeyPair(KEY_USE.ROOT,
-			KID_BYTES_LENGTH, random, arrFactory);
+	const rootPair = await genSignKeyPair(KEY_USE.ROOT, KID_BYTES_LENGTH, random, arrFactory);
 	const now = Math.floor(Date.now()/1000);
 	const rootCert = makeCert(rootPair.pkey, address, address,
 			now, now+validityPeriod, rootPair.skey, arrFactory);
@@ -129,18 +129,15 @@ export function generateRootKey(
  * @return Generated provider's key and a certificate for a respective
  * public key.
  */
-export function generateProviderKey(
+export async function generateProviderKey(
 	address: string, validityPeriod: number, rootJKey: JsonKey,
-	random: GetRandom, arrFactory?: arrays.Factory
-): { cert: SignedLoad; skey: JsonKey } {
+	random: AsyncRNG, arrFactory?: arrays.Factory
+): Promise<{ cert: SignedLoad; skey: JsonKey }> {
 	if (validityPeriod < 1) { throw new Error(`Illegal validity period: ${validityPeriod}`); }
-	const rootKey = keyFromJson(rootJKey, KEY_USE.ROOT,
-			signing.JWK_ALG_NAME, signing.SECRET_KEY_LENGTH);
-	const provPair = genSignKeyPair(KEY_USE.PROVIDER,
-			KID_BYTES_LENGTH, random, arrFactory);
+	const rootKey = keyFromJson(rootJKey, KEY_USE.ROOT, signing.JWK_ALG_NAME, signing.SECRET_KEY_LENGTH);
+	const provPair = await genSignKeyPair(KEY_USE.PROVIDER, KID_BYTES_LENGTH, random, arrFactory);
 	const now = Math.floor(Date.now()/1000);
-	const rootCert = makeCert(provPair.pkey, address, address,
-			now, now+validityPeriod, rootKey, arrFactory);
+	const rootCert = makeCert(provPair.pkey, address, address, now, now+validityPeriod, rootKey, arrFactory);
 	return { cert: rootCert, skey: keyToJson(provPair.skey) };
 }
 

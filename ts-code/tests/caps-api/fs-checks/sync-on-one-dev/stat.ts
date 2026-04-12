@@ -16,7 +16,7 @@
 */
 
 import { sleep } from '../../../../lib-common/processes/sleep';
-import { bytes as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { SpecIt } from '../test-utils';
 

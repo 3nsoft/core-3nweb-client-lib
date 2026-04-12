@@ -18,6 +18,7 @@
 import { ParamOnServer } from '../../lib-client/asmail/service-config';
 import { JsonFileProc } from '../../lib-client/xsp-fs/util/file-based-json';
 import { getKeyCert } from '../../lib-common/jwkeys';
+import { AsyncRNG } from '../../lib-common/rng-def';
 import { GetSigner } from '../id-manager';
 import { generateKeyPair, JWKeyPair, MsgKeyRole } from './common';
 
@@ -48,6 +49,7 @@ export class PublishedIntroKey {
 
 	private constructor(
 		private readonly getSigner: GetSigner,
+		private readonly random: AsyncRNG,
 		private pkeyOnServer: ParamOnServer<'init-pub-key'>
 	) {
 		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
@@ -55,10 +57,10 @@ export class PublishedIntroKey {
 	}
 
 	static async makeAndInit(
-		file: WritableFile, getSigner: GetSigner,
+		file: WritableFile, getSigner: GetSigner, random: AsyncRNG,
 		pkeyOnServer: ParamOnServer<'init-pub-key'>
 	): Promise<PublishedIntroKey> {
-		const pk = new PublishedIntroKey(getSigner, pkeyOnServer);
+		const pk = new PublishedIntroKey(getSigner, random, pkeyOnServer);
 		if (file.isNew) {
 			await pk.fileProc.start(file, () => pk.toFileJSON());
 			await pk.update();
@@ -145,7 +147,7 @@ export class PublishedIntroKey {
 		pair: JWKeyPair, certs: PKeyCertChain
 	}> {
 		const signer = await this.getSigner();
-		const pair = await generateKeyPair();
+		const pair = await generateKeyPair(this.random);
 		const certs: PKeyCertChain = {
 			pkeyCert: signer.certifyPublicKey(pair.pkey, INTRO_KEY_VALIDITY),
 			userCert: signer.userCert,

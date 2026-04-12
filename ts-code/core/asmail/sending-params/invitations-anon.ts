@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import * as random from '../../../lib-common/random-node';
+// import * as random from '../../../lib-common/random-node';
 import { ParamOnServer } from '../../../lib-client/asmail/service-config';
 import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
 import * as api from '../../../lib-common/service-api/asmail/config';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { deepEqual } from '../../../lib-common/json-utils';
+import { AsyncRNG, stringOfB64Chars } from '../../../lib-common/rng-def';
 
 type WritableFile = web3n.files.WritableFile;
 type FileEvent = web3n.files.FileEvent;
@@ -43,7 +44,8 @@ export class AnonymousInvites {
 	private readonly fileProc: JsonFileProc<InvitesJSON>;
 
 	private constructor(
-		private readonly anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>
+		private readonly anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>,
+		private readonly random: AsyncRNG
 	) {
 		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
 		Object.seal(this);
@@ -51,9 +53,10 @@ export class AnonymousInvites {
 
 	static async makeAndInit(
 		file: WritableFile,
-		anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>
+		anonInvitesOnServer: ParamOnServer<'anon-sender/invites'>,
+		random: AsyncRNG
 	): Promise<AnonymousInvites> {
-		const anonInvites = new AnonymousInvites(anonInvitesOnServer);
+		const anonInvites = new AnonymousInvites(anonInvitesOnServer, random);
 		await anonInvites.fileProc.start(file, () => anonInvites.toFileJSON());
 
 		// XXX these are part of proper syncing logic
@@ -182,7 +185,7 @@ export class AnonymousInvites {
 	private async generateNewRandomInvite(): Promise<string> {
 		let invite: string;
 		do {
-			invite = await random.stringOfB64Chars(INVITE_TOKEN_LEN);
+			invite = await stringOfB64Chars(INVITE_TOKEN_LEN, this.random);
 		} while (this.invites[invite]);
 		return invite;
 	}

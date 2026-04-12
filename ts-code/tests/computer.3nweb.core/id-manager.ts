@@ -16,7 +16,7 @@
 */
 
 import { IdKeysStorage, LoginKeysJSON } from "../../core/id-manager/key-storage";
-import { stringOfB64Chars } from "../../lib-common/random-node";
+import { stringOfB64Chars } from "../../lib-common-on-node/random-node";
 import { afterEachCond, beforeAllWithTimeoutLog, itCond } from "../libs-for-tests/jasmine-utils";
 import { deepEqual } from "../libs-for-tests/json-equal";
 import { setupWithUsers } from "../libs-for-tests/setups";

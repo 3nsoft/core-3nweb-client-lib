@@ -15,12 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { signing, GetRandom, arrays, compareVectors } from "ecma-nacl";
+import { signing, arrays, compareVectors } from "ecma-nacl";
 import { keyFromJson, getKeyCert } from "../jwkeys";
 import { utf8, base64 } from "../buffer-utils";
 import { copy as jsonCopy } from "../json-utils";
 import { genSignKeyPair, makeCert } from "./utils-NaCl-Ed";
 import { AssertionLoad, KEY_USE, Keypair } from "./index";
+import { AsyncRNG } from "../rng-def";
 
 type JsonKey = web3n.keys.JsonKey;
 type Key = web3n.keys.Key;
@@ -88,7 +89,7 @@ export const KID_BYTES_LENGTH = 9;
 
 export const MAX_SIG_VALIDITY = 30*60;
 
-export function generateSigningKeyPair(random: GetRandom, arrFactory?: arrays.Factory): Keypair {
+export async function generateSigningKeyPair(random: AsyncRNG, arrFactory?: arrays.Factory): Promise<Keypair> {
 	return genSignKeyPair(KEY_USE.SIGN, KID_BYTES_LENGTH, random, arrFactory);
 }
 

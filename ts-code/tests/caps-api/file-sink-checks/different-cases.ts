@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../libs-for-tests/spec-module';
-import { bytes as randomBytes,  } from '../../../lib-common/random-node';
+import { bytes as randomBytes,  } from '../../../lib-common-on-node/random-node';
 import { SpecIt } from '../fs-checks/test-utils';
 import { ErrorWithCause } from '../../../lib-common/exceptions/error';
 

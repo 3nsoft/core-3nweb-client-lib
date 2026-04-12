@@ -41,6 +41,7 @@ import { MsgOnDisk } from './msg-on-disk';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { NetClient } from '../../../lib-client/request-utils';
 import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../../lib-client/fs-utils/fs-sync-utils';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
@@ -54,6 +55,7 @@ export interface ResourcesForReceiving {
 	getSigner: GetSigner;
 	getStorages: StorageGetter;
 	cryptor: AsyncSBoxCryptor;
+	random: AsyncRNG;
 	makeNet: () => NetClient;
 	asmailResolver: ServiceLocator;
 
@@ -137,6 +139,7 @@ export class InboxOnServer {
 		private readonly msgReceiver: MailRecipient,
 		private readonly storages: StorageGetter,
 		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly random: AsyncRNG,
 		private readonly downloader: MsgDownloader,
 		private readonly cache: CachedMessages,
 		private readonly index: MsgIndex,
@@ -163,7 +166,7 @@ export class InboxOnServer {
 			const index = await MsgIndex.make(indexSyncedFS);
 			await uploadFolderChangesIfAny(syncedFS);
 			const inbox =  new InboxOnServer(
-				r.correspondents, msgReceiver, r.getStorages, r.cryptor, downloader, cache, index, r.logError
+				r.correspondents, msgReceiver, r.getStorages, r.cryptor, r.random, downloader, cache, index, r.logError
 			);
 			return inbox;
 		} catch (err) {
@@ -456,7 +459,7 @@ export class InboxOnServer {
 		const attachments = msg.attachmentsJSON;
 		if (attachments) {
 			m.attachments = fsForAttachments(
-				msgOnDisk, attachments, this.storages, this.cryptor, this.logError
+				msgOnDisk, attachments, this.storages, this.cryptor, this.random, this.logError
 			);
 		}
 		return m;

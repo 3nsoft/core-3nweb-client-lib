@@ -30,6 +30,7 @@ import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { verifySignature } from '../../lib-common/mailerid-sigs/relying-party';
 import { getRootCertForKey } from '../asmail/key-verification';
 import { deepEqual } from '../../lib-common/json-utils';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 
@@ -70,12 +71,13 @@ export class IdManager {
 		private readonly makeNet: () => NetClient,
 		private readonly midServiceFor: ServiceLocator,
 		private address: string,
+		private readonly random: AsyncRNG
 	) {
 		Object.seal(this);
 	}
 
 	static async initWithoutStore(
-		address: string, resolver: ServiceLocator, makeNet: () => NetClient,
+		address: string, resolver: ServiceLocator, makeNet: () => NetClient, random: AsyncRNG,
 		logError: LogError, logWarning: LogWarning
 	): Promise<((midLoginKey: GenerateKey|Uint8Array) => Promise<{
 		idManager: IdManager; setupManagerStorage: SetupManagerStorage;
@@ -83,7 +85,7 @@ export class IdManager {
 		const {
 			store, setupManagerStorage
 		} = IdKeysStorage.makeWithoutStorage(logError, logWarning);
-		const idManager = new IdManager(store, makeNet, resolver, address);
+		const idManager = new IdManager(store, makeNet, resolver, address, random);
 		const provisioning = await idManager.startProvisionWithoutSavedKey(address);
 		if (!provisioning) { return; }
 		return async (midLoginKey) => {
@@ -105,19 +107,16 @@ export class IdManager {
 
 	static async initFromCachedStore(
 		address: string, fs: WritableFS, resolver: ServiceLocator,
-		makeNet: () => NetClient, logError: LogError, logWarning: LogWarning
+		makeNet: () => NetClient, random: AsyncRNG,
+		logError: LogError, logWarning: LogWarning
 	): Promise<IdManager|undefined> {
 		const store = IdKeysStorage.makeWithStorage(fs, logError, logWarning);
-		return new IdManager(store, makeNet, resolver, address);
+		return new IdManager(store, makeNet, resolver, address, random);
 	}
 
-	private async startProvisionWithoutSavedKey(
-		address: string
-	): Promise<CompleteProvisioning|undefined> {
+	private async startProvisionWithoutSavedKey(address: string): Promise<CompleteProvisioning|undefined> {
 		const midUrl = await this.midServiceFor(address);
-		const provisioner = new MailerIdProvisioner(
-			address, midUrl, this.makeNet()
-		);
+		const provisioner = new MailerIdProvisioner(address, midUrl, this.makeNet(), this.random);
 		try {
 			const provisioning = await provisioner.provisionSigner(undefined);
 			const completion = async (
@@ -160,7 +159,7 @@ export class IdManager {
 		if (proc) { return proc; }
 		proc = this.provisioningProc.start(async () => {
 			const midUrl = await this.midServiceFor(this.address);
-			const provisioner = new MailerIdProvisioner(this.address, midUrl, this.makeNet());
+			const provisioner = new MailerIdProvisioner(this.address, midUrl, this.makeNet(), this.random);
 			const key = await this.store.getSavedKey();
 			if (!key) {
 				throw new Error(`No saved MailerId login key can be found`);

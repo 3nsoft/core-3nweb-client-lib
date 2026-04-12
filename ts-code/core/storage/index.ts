@@ -38,6 +38,7 @@ import { AppDataFolders } from './system-folders/apps-data';
 import { SYSTEM_PREFIX } from './common/constants';
 import { assert } from '../../lib-common/assert';
 import type { Cryptor } from 'ecma-nacl-cryptors';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type EncryptionException = web3n.EncryptionException;
 type WritableFS = web3n.files.WritableFS;
@@ -268,8 +269,9 @@ export class Storages implements FactoryOfFSs {
 	private preCloseWaits = new Set<Promise<void>>();
 
 	constructor(
-		private cryptor: AsyncSBoxCryptor,
-		private storageDirForUser: StoragePathForUser
+		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly random: AsyncRNG,
+		private readonly storageDirForUser: StoragePathForUser
 	) {
 		Object.seal(this);
 	}
@@ -341,7 +343,7 @@ export class Storages implements FactoryOfFSs {
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, async () => {}
+				this.cryptor, this.random, async () => {}
 			),
 			key
 		)
@@ -360,7 +362,7 @@ export class Storages implements FactoryOfFSs {
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, logError
+				this.cryptor, this.random, logError
 			),
 			key
 		);
@@ -373,6 +375,7 @@ export class Storages implements FactoryOfFSs {
 			user,
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
+			this.random,
 			() => resolver(user), makeNet(),
 			logError
 		);
@@ -393,6 +396,7 @@ export class Storages implements FactoryOfFSs {
 			user, getSigner,
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
+			this.random,
 			() => resolver(user), makeNet(),
 			logError
 		);
@@ -405,7 +409,7 @@ export class Storages implements FactoryOfFSs {
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, logError
+				this.cryptor, this.random, logError
 			),
 			key
 		);
@@ -424,6 +428,7 @@ export class Storages implements FactoryOfFSs {
 			user, getSigner,
 			this.storageGetterForSyncedStorage,
 			this.cryptor,
+			this.random,
 			() => resolver(user), makeNet(),
 			logError
 		);
@@ -432,7 +437,7 @@ export class Storages implements FactoryOfFSs {
 			await LocalStorage.makeAndStart(
 				join(storageDir, LOCAL_STORAGE_DIR),
 				this.storageGetterForLocalStorage,
-				this.cryptor, logError
+				this.cryptor, this.random, logError
 			),
 			key
 		);

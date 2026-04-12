@@ -16,12 +16,12 @@
 */
 
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
-import { stringOfB64CharsSync } from '../../../../lib-common/random-node';
+import { stringOfB64CharsSync } from '../../../../lib-common-on-node/random-node';
 import { sendTxtMsg, SpecIt, throwDeliveryErrorFrom } from '../test-utils';
 import { makeContinuousSink } from '../../../../lib-common/obj-streaming/sink-utils';
 import { sleep } from '../../../../lib-common/processes/sleep';
 import { User } from '../../../libs-for-tests/core-runner';
-import { bytes as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 
 type WritableFS = web3n.files.WritableFS;
 type ReadonlyFS = web3n.files.ReadonlyFS;

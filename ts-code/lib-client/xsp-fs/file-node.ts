@@ -30,6 +30,7 @@ import { assert } from '../../lib-common/assert';
 import { CommonAttrs, XAttrs } from './attrs';
 import { makeVersionMismatchExc } from '../../lib-common/exceptions/file';
 import { NodePersistance } from './node-persistence';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
@@ -47,8 +48,8 @@ interface FileAttrs {
 
 class FilePersistance extends NodePersistance {
 
-	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
-		super(zNonce, key, cryptor);
+	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor, random: AsyncRNG) {
+		super(zNonce, key, cryptor, random);
 		Object.seal(this);
 	}
 
@@ -129,7 +130,7 @@ export class FileNode extends NodeInFS<FilePersistance> {
 			throw new Error("Bad file parameter(s) given");
 		}
 		this.crypto = new FilePersistance(
-			idToHeaderNonce(this.objId), key, this.storage.cryptor
+			idToHeaderNonce(this.objId), key, this.storage.cryptor, this.storage.random
 		);
 		Object.seal(this);
 	}

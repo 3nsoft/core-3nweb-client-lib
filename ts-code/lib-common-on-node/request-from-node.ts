@@ -20,8 +20,8 @@ import { formHttpsReqOpts, processRequest, RequestFn } from '../lib-client/reque
 
 export function makeRequestFromNode(): RequestFn<unknown> {
 	const nodeRequest = (opts: https.RequestOptions) => https.request(opts);
-	return (opts, contentType, reqBody) => {
-		const httpsOpts = formHttpsReqOpts(opts, contentType, reqBody);
+	return (opts, reqContentType, reqBody) => {
+		const httpsOpts = formHttpsReqOpts(opts, reqContentType, reqBody);
 		return processRequest<unknown>(nodeRequest, httpsOpts, opts, reqBody);
 	}
 }

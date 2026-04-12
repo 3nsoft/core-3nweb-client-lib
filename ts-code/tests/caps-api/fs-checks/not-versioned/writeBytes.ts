@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
-import { bytesSync as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { SpecIt } from '../test-utils';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 
@@ -30,7 +30,7 @@ export const specs: SpecDescribe = {
 let it: SpecIt = { expectation: 'if not allowed to create, fails for missing file' };
 it.func = async function(s) {
 	const { testFS } = s;
-	await testFS.writeBytes('non-existing-file', randomBytes(123), {})
+	await testFS.writeBytes('non-existing-file', await randomBytes(123), {})
 	.then(() => {
 		fail('should fail for missing file');
 	}, (e: FileException) => {
@@ -43,7 +43,7 @@ it = { expectation: 'creates file in existing folder' };
 it.func = async function(s) {
 	const { testFS } = s;
 	let path = 'file1';
-	let content = randomBytes(2*1024);
+	let content = await randomBytes(2*1024);
 	expect(await testFS.checkFilePresence(path)).toBe(false);
 	await testFS.writeBytes(path, content);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
@@ -62,7 +62,7 @@ it.func = async function(s) {
 	expect(await testFS.checkFolderPresence(grParent)).toBe(false);
 	expect(await testFS.checkFolderPresence(parent2)).toBe(false);
 	expect(await testFS.checkFolderPresence(path)).toBe(false);
-	let content = randomBytes(2*1024);
+	let content = await randomBytes(2*1024);
 	await testFS.writeBytes(path, content);
 	expect(await testFS.checkFolderPresence(grParent)).toBe(true);
 	expect(await testFS.checkFolderPresence(parent2)).toBe(true);
@@ -77,13 +77,13 @@ it.func = async function(s) {
 	const { testFS } = s;
 	let path = 'file3';
 	// setup initial file
-	let initBytes = randomBytes(123);
+	let initBytes = await randomBytes(123);
 	await testFS.writeBytes(path, initBytes);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 	let bytes = await testFS.readBytes(path);
 	expect(bytesEqual(initBytes, bytes!)).toBe(true);
 	// write new file content
-	let newContent = randomBytes(3223);
+	let newContent = await randomBytes(3223);
 	await testFS.writeBytes(path, newContent);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 	bytes = await testFS.readBytes(path);
@@ -96,11 +96,11 @@ it.func = async function(s) {
 	const { testFS } = s;
 	let path = 'file4';
 	// setup initial file
-	let initBytes = randomBytes(123);
+	let initBytes = await randomBytes(123);
 	await testFS.writeBytes(path, initBytes);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 	// try an exclusive write
-	let newContent = randomBytes(3223);
+	let newContent = await randomBytes(3223);
 	await testFS.writeBytes(path, newContent, { create:true, exclusive:true })
 	.then(() => {
 		fail('exclusive-create write operation must fail, when file exists.');
@@ -120,7 +120,7 @@ it.func = async function(s) {
 	const { testFS } = s;
 	let path = 'file5';
 	// write some bytes
-	let bytesToWrite = randomBytes(3000000);
+	let bytesToWrite = await randomBytes(3000000);
 	await testFS.writeBytes(path, bytesToWrite);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
 	// check that same bytes are read
@@ -138,7 +138,7 @@ it.func = async function(s) {
 		[ 'file-16kb', 4 * kb4 ],
 		[ 'file-20kb', 5 * kb4 ],
 	] as [string, number][]) {
-		const content = randomBytes(contentLen);
+		const content = await randomBytes(contentLen);
 		await testFS.writeBytes(fName, content);
 		expect(bytesEqual((await testFS.readBytes(fName))!, content)).toBeTrue();
 	}

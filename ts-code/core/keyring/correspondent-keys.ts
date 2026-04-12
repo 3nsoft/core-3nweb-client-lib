@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,13 +22,13 @@
 import { JWKeyPair, PID_LENGTH, generateKeyPair, extractKeyBytes, MsgKeyRole, extractSKeyBytes, ASMailKeyPair} from './common';
 import { SuggestedNextKeyPair } from '../asmail/msg/opener';
 import { KeyPairsStorage } from './index';
-import * as random from '../../lib-common/random-node';
 import { box } from 'ecma-nacl';
 import { base64 } from '../../lib-common/buffer-utils';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { Decryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { cryptoWorkLabels } from '../../lib-client/cryptor-work-labels';
+import { AsyncRNG, stringOfB64UrlSafeChars } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 type JsonKeyShort = web3n.keys.JsonKeyShort;
@@ -113,10 +113,10 @@ export interface RatchetedSendingPair {
 
 export type SendingPair = IntroductorySendingPair | RatchetedSendingPair;
 
-function generatePids(): string[] {
+async function generatePids(random: AsyncRNG): Promise<string[]> {
 	const pids: string[] = [];
 	for (let i=0; i<5; i+=1) {
-		pids[i] = random.stringOfB64UrlSafeCharsSync(PID_LENGTH);
+		pids[i] = await stringOfB64UrlSafeChars(PID_LENGTH, random);
 	}
 	return pids;
 }
@@ -194,7 +194,8 @@ export class CorrespondentKeys {
 	 * Either serialData, or an address should be defined, not both.
 	 */
 	constructor(
-		private keyring: KeyPairsStorage,
+		private readonly keyring: KeyPairsStorage,
+		private readonly random: AsyncRNG,
 		address: string|undefined, serialData?: string
 	) {
 		if (address) {
@@ -259,10 +260,10 @@ export class CorrespondentKeys {
 		// generate new suggested pair
 		const corrPKey = this.keys.sendingPair!.recipientPKey;
 		const isSenderIntroKey = (this.keys.sendingPair!.type === 'intro');
-		const recipientKey = await generateKeyPair();
+		const recipientKey = await generateKeyPair(this.random);
 		const msgMasterKey = calcMsgMasterKeyB64(recipientKey.skey, corrPKey);
 		const pair: ReceptionPair = {
-			pids: generatePids(),
+			pids: await generatePids(this.random),
 			recipientKey,
 			senderPKey: corrPKey,
 			isSenderIntroKey,
@@ -413,9 +414,7 @@ export class CorrespondentKeys {
 
 	async getSendingPair(
 		recipientIntroPKey?: JsonKey
-	): Promise<{
-		currentPair: ASMailKeyPair; msgMasterKey: Uint8Array; msgCount: number;
-	}> {
+	): Promise<{ currentPair: ASMailKeyPair; msgMasterKey: Uint8Array; msgCount: number; }> {
 		if (!this.keys.sendingPair) {
 			if (!recipientIntroPKey) {
 				throw new Error(`Sending pair for ${this.correspondent} is not set.`);
@@ -430,7 +429,7 @@ export class CorrespondentKeys {
 		let msgMasterKey: Uint8Array;
 		let msgCount: number;
 		if (p.type === 'intro') {
-			const senderKey = await generateKeyPair();
+			const senderKey = await generateKeyPair(this.random);
 			msgMasterKey = calcMsgMasterKey(senderKey.skey, p.recipientPKey);
 			currentPair = {
 				senderPKey: senderKey.pkey,
@@ -476,7 +475,7 @@ function selectPid(pair: RatchetedSendingPair): string {
 	if (pair.pids.length < 1) {
 		throw new Error("There are no pair ids in array.");
 	}
-	const i = Math.round((pair.pids.length-1) * random.uint8Sync()/255);
+	const i = Math.round((pair.pids.length-1) * Math.random());
 	return pair.pids[i];
 }
 

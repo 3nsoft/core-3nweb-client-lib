@@ -17,7 +17,6 @@
 
 import { Unsubscribable } from "rxjs";
 import { ObjectReference, strArrValType, errBodyType, errToMsg, Value, toVal, toOptVal } from "./protobuf-msg";
-import { stringOfB64CharsSync } from '../lib-common/random-node';
 import { ServicesSide, Envelope, EnvelopeBody, makeIPCException, ExposedFn, ExposedObj, W3N_NAME, ServicesImpl, TransferableObj } from "./connector";
 
 
@@ -199,7 +198,7 @@ export class ExposedObjs {
 	private newRef<T extends string>(objType: T): ObjectReference<T> {
 		let id: string;
 		do {
-			id = stringOfB64CharsSync(20);
+			id = `${Math.floor(Math.random()*Number.MAX_SAFE_INTEGER)}`;
 		} while (this.objs.has(id));
 		return {
 			objType, path: [ id ]

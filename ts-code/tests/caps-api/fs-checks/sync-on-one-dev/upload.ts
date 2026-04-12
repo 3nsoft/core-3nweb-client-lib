@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { bytes as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { SpecIt } from '../test-utils';
 import { deepEqual } from '../../../libs-for-tests/json-equal';

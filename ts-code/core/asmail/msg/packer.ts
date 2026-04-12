@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -19,7 +19,6 @@ import { secret_box as sbox } from 'ecma-nacl';
 import { SegmentsWriter, KEY_LENGTH, makeSegmentsWriter, AsyncSBoxCryptor, idToHeaderNonce, makeObjSourceFromArrays, makeEncryptingObjSource, ObjSource, ByteSource }
 	from 'xsp-files';
 import * as delivApi from '../../../lib-common/service-api/asmail/delivery';
-import * as random from '../../../lib-common/random-node';
 import { base64, base64urlSafe, utf8 } from '../../../lib-common/buffer-utils';
 import { FolderInJSON } from '../../../lib-client/xsp-fs/common';
 import { serializeFolderInfo } from '../../../lib-client/xsp-fs/folder-node-serialization';
@@ -31,6 +30,7 @@ import { isContainerEmpty, iterFilesIn, iterFoldersIn }
 	from './attachments-container';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
 import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FS = web3n.files.FS;
@@ -118,16 +118,17 @@ export class MsgPacker {
 
 	private meta: MetaForEstablishedKeyPair | MetaForNewKey = (undefined as any);
 	private main: MsgEnvelope;
-	private mainObjId: string;
+	private mainObjId: string = undefined as any;
 	private allObjs = new Map<string, MsgObj>();
 	private readyPack: PackJSON|undefined = undefined;
 	private hasAttachments = false;
 	private attachmentsFS: FS|undefined = undefined;
 	private attachmentsCont: AttachmentsContainer|undefined = undefined;
-	private workLabel: number;
+	private workLabel: number = undefined as any;
 
 	private constructor(
-		private segSizeIn256bs: number
+		private segSizeIn256bs: number,
+		private readonly random: AsyncRNG
 	) {
 		this.main = {
 			'Flow Params': {
@@ -137,19 +138,22 @@ export class MsgPacker {
 			'Body': {},
 			'From': undefined as any
 		};
-		this.mainObjId = this.addJsonObj(this.main);
-		this.workLabel = cryptoWorkLabels.makeFor('asmail', this.mainObjId);
 		Object.seal(this);
 	}
 
-	static empty(segSizeIn256bs: number): MsgPacker {
-		return new MsgPacker(segSizeIn256bs);
+	static async empty(segSizeIn256bs: number, random: AsyncRNG): Promise<MsgPacker> {
+		const pkr = new MsgPacker(segSizeIn256bs, random);
+		pkr.mainObjId = await pkr.addJsonObj(pkr.main);
+		pkr.workLabel = cryptoWorkLabels.makeFor('asmail', pkr.mainObjId);
+		return pkr;
 	}
 
 	static fromPack(
-		p: PackJSON, segSizeIn256bs: number, att: undefined | { fs: FS|undefined; container: AttachmentsContainer|undefined; }
+		p: PackJSON, segSizeIn256bs: number,
+		att: undefined | { fs: FS|undefined; container: AttachmentsContainer|undefined; },
+		random: AsyncRNG
 	): MsgPacker {
-		const packer = new MsgPacker(segSizeIn256bs);
+		const packer = new MsgPacker(segSizeIn256bs, random);
 		packer.readyPack = p;
 		packer.mainObjId = p.meta.objIds[0];
 		packer.workLabel = cryptoWorkLabels.makeFor('asmail', packer.mainObjId);
@@ -171,26 +175,26 @@ export class MsgPacker {
 		return packer;
 	}
 
-	private generateObjId(): string {
+	private async generateObjId(): Promise<string> {
 		let id: string;
 		do {
-			id = base64urlSafe.pack(random.bytesSync(sbox.NONCE_LENGTH));
+			id = await generateObjId(this.random);
 		} while (this.allObjs.has(id));
 		return id;
 	}
 
-	private addJsonObj(json: any): string {
-		const id = this.generateObjId();
-		const key = random.bytesSync(KEY_LENGTH);
+	private async addJsonObj(json: any): Promise<string> {
+		const id = await this.generateObjId();
+		const key = await this.random(KEY_LENGTH);
 		this.allObjs.set(id, { id, json, key });
 		return id;
 	}
 
-	private addFileInto(
+	private async addFileInto(
 		folderInfo: FolderInJSON, fName: string, file: PathInMsg
-	): void {
-		const id = this.generateObjId();
-		const key = random.bytesSync(KEY_LENGTH);
+	): Promise<void> {
+		const id = await this.generateObjId();
+		const key = await this.random(KEY_LENGTH);
 		this.allObjs.set(id, { id, file, key });
 		folderInfo.nodes[fName] = {
 			objId: id,
@@ -219,8 +223,8 @@ export class MsgPacker {
 		}
 
 		// attach folder to the rest of the message
-		const id = this.generateObjId();
-		const key = await random.bytes(KEY_LENGTH);
+		const id = await this.generateObjId();
+		const key = await this.random(KEY_LENGTH);
 		this.allObjs.set(id, { id, folder, key });
 		outerFolder.nodes[fName] = {
 			objId: id,
@@ -425,7 +429,7 @@ export class MsgPacker {
 		const segWriter = await makeSegmentsWriter(
 			obj.key, idToHeaderNonce(obj.id), 0,
 			{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
-			random.bytes, cryptor, this.workLabel
+			this.random, cryptor, this.workLabel
 		);
 
 		// make source that inserts message key pack into header
@@ -495,13 +499,13 @@ export class MsgPacker {
 			segWriter = await makeSegmentsWriter(
 				obj.key, idToHeaderNonce(obj.id), 0,
 				{ type: 'restart', header },
-				random.bytes, cryptor, this.workLabel
+				this.random, cryptor, this.workLabel
 			);
 		} else {
 			segWriter = await makeSegmentsWriter(
 				obj.key, idToHeaderNonce(obj.id), 0,
 				{ type: 'new', segSize: this.segSizeIn256bs, payloadFormat: 1 },
-				random.bytes, cryptor, this.workLabel
+				this.random, cryptor, this.workLabel
 			);
 		}
 
@@ -587,6 +591,10 @@ function fileSrcToByteSrc(fileSrc: FileByteSource): ByteSource {
 		readAt: fileSrc.readAt,
 		seek: fileSrc.seek
 	}
+}
+
+async function generateObjId(random: AsyncRNG): Promise<string> {
+	return base64urlSafe.pack(await random(sbox.NONCE_LENGTH));
 }
 
 Object.freeze(exports);

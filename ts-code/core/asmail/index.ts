@@ -29,6 +29,7 @@ import { Logger } from '../../lib-client/logging/log-to-file';
 import { ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
 import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type WritableFS = web3n.files.WritableFS;
 type Service = web3n.asmail.Service;
@@ -51,6 +52,7 @@ export class ASMail {
 
 	constructor(
 		private readonly cryptor: AsyncSBoxCryptor,
+		private readonly random: AsyncRNG,
 		private readonly makeNet: MakeNet,
 		private readonly inboxPathForUser: InboxPathForUser,
 		private readonly logger: Logger
@@ -94,7 +96,7 @@ export class ASMail {
 			syncedFS, SEND_PARAMS_DATA_FOLDER
 		);
 		this.sendingParams = await SendingParamsHolder.makeAndInit(
-			fs, this.config.makeParamSetterAndGetter('anon-sender/invites')
+			fs, this.config.makeParamSetterAndGetter('anon-sender/invites'), this.random
 		);
 	}
 
@@ -106,6 +108,7 @@ export class ASMail {
 		this.delivery = await Delivery.makeAndStart(fs, {
 			address: this.address,
 			cryptor: this.cryptor,
+			random: this.random,
 			getSigner,
 			asmailResolver: makeResolver('asmail', this.logger.logError),
 			midResolver: makeResolver('mailerid', this.logger.logError),
@@ -136,6 +139,7 @@ export class ASMail {
 			{
 				address: this.address,
 				cryptor: this.cryptor,
+				random: this.random,
 				getSigner,
 				getStorages,
 				asmailResolver: makeResolver('asmail', this.logger.logError),

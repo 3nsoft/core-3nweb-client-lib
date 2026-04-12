@@ -32,14 +32,15 @@ import { XspFS } from './fs';
 import { idToHeaderNonce, ObjSource, Subscribe } from 'xsp-files';
 import { CommonAttrs, XAttrs } from './attrs';
 import { Attrs, NodePersistance } from './node-persistence';
+import { AsyncRNG } from '../../lib-common/rng-def';
 
 type VersionedReadFlags = web3n.files.VersionedReadFlags;
 type Stats = web3n.files.Stats;
 
 class LinkPersistance extends NodePersistance {
 	
-	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor) {
-		super(zNonce, key, cryptor);
+	constructor(zNonce: Uint8Array, key: Uint8Array, cryptor: AsyncSBoxCryptor, random: AsyncRNG) {
+		super(zNonce, key, cryptor, random);
 		Object.seal(this);
 	}
 
@@ -111,10 +112,10 @@ export class LinkNode extends NodeInFS<LinkPersistance> {
 		parentId: string|undefined, key: Uint8Array
 	) {
 		super(storage, 'link', name, objId, version, parentId);
-		if (!name || !objId || !parentId) { throw new Error(
-			"Bad link parameter(s) given"); }
-		this.crypto = new LinkPersistance(
-			idToHeaderNonce(this.objId), key, this.storage.cryptor);
+		if (!name || !objId || !parentId) {
+			throw new Error("Bad link parameter(s) given");
+		}
+		this.crypto = new LinkPersistance(idToHeaderNonce(this.objId), key, this.storage.cryptor, this.storage.random);
 		Object.seal(this);
 	}
 

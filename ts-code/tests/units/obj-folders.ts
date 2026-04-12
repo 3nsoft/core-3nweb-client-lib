@@ -16,7 +16,7 @@
 */
 
 import { itCond, beforeAllWithTimeoutLog, afterAllCond } from '../libs-for-tests/jasmine-utils';
-import { stringOfB64UrlSafeCharsSync, bytes as randomBytes } from '../../lib-common/random-node';
+import { stringOfB64UrlSafeCharsSync, bytes as randomBytes } from '../../lib-common-on-node/random-node';
 import { join, basename } from 'path';
 import { mkdir, rmDirWithContent, existsFolder, readFile, readdir, writeFile } from '../../lib-common/async-fs-node';
 import { ObjFolders, Cfg } from '../../lib-client/objs-on-disk/obj-folders';

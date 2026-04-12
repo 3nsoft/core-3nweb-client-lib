@@ -20,7 +20,7 @@ import { setupWithUsers } from '../../libs-for-tests/setups';
 import { checkKeyDerivNotifications } from '../../libs-for-tests/startup';
 import { User, testApp } from '../../libs-for-tests/core-runner';
 import { sleep } from '../../../lib-common/processes/sleep';
-import { stringOfB64UrlSafeCharsSync } from '../../../lib-common/random-node';
+import { stringOfB64UrlSafeCharsSync } from '../../../lib-common-on-node/random-node';
 
 // NOTE: it-specs inside signIn process expect to run in a given order -- they
 //		change app's state, expected by following specs in this describe.

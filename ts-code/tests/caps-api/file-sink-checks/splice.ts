@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../libs-for-tests/spec-module';
-import { bytesSync as randomBytes } from '../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { bytesEqual } from '../../libs-for-tests/bytes-equal';
 import { SpecIt } from '../fs-checks/test-utils';
 
@@ -58,7 +58,7 @@ it.func = async function(s) {
 	expect(Array.isArray(layout.sections)).toBeTruthy();
 	expect(layout.sections.length).toBe(0);
 
-	const chunk1 = randomBytes(10000);
+	const chunk1 = await randomBytes(10000);
 	await sink.splice(0, chunk1.length, chunk1);
 	size = await sink.getSize();
 	expect(size).toBe(10000);
@@ -66,7 +66,7 @@ it.func = async function(s) {
 	expect(layout.sections.length).toBe(1);
 	expectSection(layout, 0, 'new', 0, size);
 
-	const chunk2 = randomBytes(100);
+	const chunk2 = await randomBytes(100);
 	await sink.splice(11000, 0, chunk2);
 	size = await sink.getSize();
 	layout = await sink.showLayout();
@@ -113,9 +113,9 @@ it.func = async function(s) {
 	const fName = 'file1';
 	let sink = await testFS.getByteSink(
 		fName, { create: true, exclusive: true });
-	const chunk1 = randomBytes(10000);
+	const chunk1 = await randomBytes(10000);
 	await sink.splice(0, chunk1.length, chunk1);
-	const chunk2 = randomBytes(100);
+	const chunk2 = await randomBytes(100);
 	await sink.splice(11000, 0, chunk2);
 	await sink.done();
 	const initSize = await sink.getSize();

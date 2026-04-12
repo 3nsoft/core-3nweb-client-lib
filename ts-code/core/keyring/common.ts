@@ -21,7 +21,7 @@
 
 import { box, secret_box as sbox } from 'ecma-nacl';
 import { base64 } from '../../lib-common/buffer-utils';
-import { bytes as randomBytes, stringOfB64Chars as randomB64String } from '../../lib-common/random-node';
+import { AsyncRNG, stringOfB64Chars } from '../../lib-common/rng-def';
 
 type JsonKey = web3n.keys.JsonKey;
 type JsonKeyShort = web3n.keys.JsonKeyShort;
@@ -64,10 +64,10 @@ Object.freeze(KEY_USE);
  * These are to be used with NaCl's box (Curve+XSalsa+Poly encryption).
  * Key ids are the same in this intimate pair.
  */
-export async function generateKeyPair(): Promise<JWKeyPair> {
-	const skeyBytes = await randomBytes(box.KEY_LENGTH);
+export async function generateKeyPair(random: AsyncRNG): Promise<JWKeyPair> {
+	const skeyBytes = await random(box.KEY_LENGTH);
 	const pkeyBytes = box.generate_pubkey(skeyBytes);
-	const kid = await randomB64String(KID_LENGTH);
+	const kid = await stringOfB64Chars(KID_LENGTH, random);
 	const skey: JsonKey = {
 		use: KEY_USE.SECRET,
 		alg: box.JWK_ALG_NAME,
@@ -90,18 +90,16 @@ export async function generateKeyPair(): Promise<JWKeyPair> {
  * This returns a JWK form of a key for NaCl's secret box (XSalsa+Poly
  * encryption).
  */
-export async function generateSymmetricKey(): Promise<JsonKey> {
+export async function generateSymmetricKey(random: AsyncRNG): Promise<JsonKey> {
 	return {
 		use: KEY_USE.SYMMETRIC,
-		k: base64.pack(await randomBytes(sbox.KEY_LENGTH)),
+		k: base64.pack(await random(sbox.KEY_LENGTH)),
 		alg: sbox.JWK_ALG_NAME,
-		kid: await randomB64String(KID_LENGTH)
+		kid: await stringOfB64Chars(KID_LENGTH, random)
 	};
 };
 
-function getKeyBytesFrom(
-	key: JsonKey, use: string, alg: string, klen: number
-): Uint8Array {
+function getKeyBytesFrom(key: JsonKey, use: string, alg: string, klen: number): Uint8Array {
 	if (key.use === use) {
 		if (key.alg === alg) {
 			const bytes = base64.open(key.k);
@@ -122,9 +120,7 @@ function getKeyBytesFrom(
  * @param key is a JWK form of a key
  */
 export function extractSKeyBytes(key: JsonKey): Uint8Array {
-	return getKeyBytesFrom(
-		key, KEY_USE.SECRET, box.JWK_ALG_NAME, box.KEY_LENGTH
-	);
+	return getKeyBytesFrom(key, KEY_USE.SECRET, box.JWK_ALG_NAME, box.KEY_LENGTH);
 }
 
 /**
@@ -132,9 +128,7 @@ export function extractSKeyBytes(key: JsonKey): Uint8Array {
  * @param key is a JWK form of a key
  */
 export function extractPKeyBytes(key: JsonKey): Uint8Array {
-	return getKeyBytesFrom(
-		key, KEY_USE.PUBLIC, box.JWK_ALG_NAME, box.KEY_LENGTH
-	);
+	return getKeyBytesFrom(key, KEY_USE.PUBLIC, box.JWK_ALG_NAME, box.KEY_LENGTH);
 }
 
 /**
@@ -143,8 +137,9 @@ export function extractPKeyBytes(key: JsonKey): Uint8Array {
  */
 export function extractKeyBytes(key: JsonKeyShort): Uint8Array {
 	const bytes = base64.open(key.k);
-	if (bytes.length !== box.KEY_LENGTH) { throw new Error(
-		`Key ${key.kid} has a wrong number of bytes`); }
+	if (bytes.length !== box.KEY_LENGTH) {
+		throw new Error(`Key ${key.kid} has a wrong number of bytes`);
+	}
 	return bytes;
 }
 

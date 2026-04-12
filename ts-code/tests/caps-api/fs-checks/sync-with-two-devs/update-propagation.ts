@@ -17,7 +17,7 @@
 
 import { utf8 } from '../../../../lib-common/buffer-utils';
 import { defer } from '../../../../lib-common/processes/deferred';
-import { stringOfB64CharsSync, bytes as randomBytes } from '../../../../lib-common/random-node';
+import { stringOfB64CharsSync, bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { deepEqual } from '../../../libs-for-tests/json-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';

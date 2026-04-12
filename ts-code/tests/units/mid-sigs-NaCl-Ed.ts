@@ -18,7 +18,7 @@
  * Testing MailerId signing module.
  */
 
-import { bytesSync as getRandom } from "../../lib-common/random-node";
+import { bytes as getRandom } from "../../lib-common-on-node/random-node";
 import { base64, utf8 } from "../../lib-common/buffer-utils";
 import { isLikeSignedLoad, keyToJson } from "../../lib-common/jwkeys";
 import { deepEqual } from '../libs-for-tests/json-equal';
@@ -26,6 +26,7 @@ import { generateProviderKey, generateRootKey, IdProviderCertifier, makeIdProvid
 import { CertsChain, Keypair } from "../../lib-common/mailerid-sigs";
 import { generateSigningKeyPair, makeMailerIdSigner } from "../../lib-common/mailerid-sigs/user";
 import { verifyAssertion, verifyChainAndGetUserKey, verifyKeyCert, verifySignature } from "../../lib-common/mailerid-sigs/relying-party";
+import { beforeAllWithTimeoutLog, itCond } from "../libs-for-tests/jasmine-utils";
 
 type JsonKey = web3n.keys.JsonKey;
 type SignedLoad = web3n.keys.SignedLoad;
@@ -43,16 +44,16 @@ describe(`MailerId utility library`, () => {
 	const rpDomain = "relying.party.domain";
 	let certChain: CertsChain;
 
-	beforeEach(() => {
+	beforeAllWithTimeoutLog(async () => {
 
 		// provider's setup functions
-		midRoot = generateRootKey(issuer, 90*24*60*60, getRandom);
-		provider = generateProviderKey(issuer, 10*24*60*60, midRoot.skey, getRandom);
+		midRoot = await generateRootKey(issuer, 90*24*60*60, getRandom);
+		provider = await generateProviderKey(issuer, 10*24*60*60, midRoot.skey, getRandom);
 		certifier = makeIdProviderCertifier(issuer, 24*60*60, provider.skey);
 
 		// user's provisioning its certificate, using provider's service
 		// user generates its signing key
-		userKeys = generateSigningKeyPair(getRandom);
+		userKeys = await generateSigningKeyPair(getRandom);
 		// provider certifies user's key
 		userKeyCert = certifier.certify(userKeys.pkey, user, 3*60*60);
 		// certs' chain
@@ -93,12 +94,12 @@ describe(`MailerId utility library`, () => {
 		expect(() => verifyAssertion(assertion, certChain, issuer, nowSecs+60*60)).toThrow();
 	}
 
-	it(`allows to create and to check assertions, used for logins`, () => {
+	itCond(`allows to create and to check assertions, used for logins`, async () => {
 
 		const signer = makeMailerIdSigner(userKeys.skey, userKeyCert, provider.cert, 20*60);
 
 		// service (relying party) generates session id
-		const sessionId = base64.pack(getRandom(24));
+		const sessionId = base64.pack(await getRandom(24));
 
 		// user creates signed assertion with given session id inside
 		let assertion = signer.generateAssertionFor(rpDomain, sessionId, 10*60);
@@ -141,10 +142,10 @@ describe(`MailerId utility library`, () => {
 		
 	});
 
-	it(`makes signatures and check them`, () => {
+	itCond(`makes signatures and check them`, async () => {
 
 		const signer = makeMailerIdSigner(userKeys.skey, userKeyCert, provider.cert);
-		const payload = getRandom(200);
+		const payload = await getRandom(200);
 
 		const sig = signer.sign(payload);
 		expect(isLikeSignedLoad(sig.signature));

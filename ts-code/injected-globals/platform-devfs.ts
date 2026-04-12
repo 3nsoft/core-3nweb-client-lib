@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Abortable } from 'events';
-import type { BufferEncodingOption, Dirent, promises as fsFns, MakeDirectoryOptions, Mode, ObjectEncodingOptions, OpenMode, RmDirOptions, StatOptions, Stats } from 'fs';
+import type { Abortable } from 'events';
+import type { BufferEncodingOption, promises as fsFns, MakeDirectoryOptions, Mode, ObjectEncodingOptions, OpenMode, RmDirOptions, StatOptions, Stats } from 'fs';
 import { FlagAndOpenMode } from 'fs/promises';
 import type Stream = require('stream');
 

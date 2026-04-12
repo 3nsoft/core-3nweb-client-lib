@@ -16,7 +16,7 @@
 */
 
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
-import { bytesSync as randomBytes } from '../../../../lib-common/random-node';
+import { bytes as randomBytes } from '../../../../lib-common-on-node/random-node';
 import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { makeContinuousSink } from '../../../../lib-common/obj-streaming/sink-utils';
 import { SpecIt } from '../test-utils';
@@ -46,7 +46,7 @@ it = { expectation: 'creates file in existing folder' };
 it.func = async function(s) {
 	const { testFS } = s;
 	const path = 'file1';
-	const content = randomBytes(2*1024);
+	const content = await randomBytes(2*1024);
 	expect(await testFS.checkFilePresence(path)).toBe(false);
 	const { sink, version: v } = await testFS.v!.getByteSink(path, {create:true});
 	expect(await testFS.checkFilePresence(path)).toBe(true);
@@ -92,7 +92,7 @@ it = { expectation: 'opens existing file' };
 it.func = async function(s) {
 	const { testFS } = s;
 	const path = 'file2';
-	const bytes = randomBytes(2*1024);
+	const bytes = await randomBytes(2*1024);
 	const originalSize = bytes.length;
 	const v = await testFS.v!.writeBytes(path, bytes);
 	expect(await testFS.checkFilePresence(path)).toBe(true);
@@ -111,7 +111,7 @@ it = { expectation: `doesn't advance file version when write is cancelled` };
 it.func = async function(s) {
 	const { testFS } = s;
 	const path = 'file2';
-	const bytes = randomBytes(2*1024);
+	const bytes = await randomBytes(2*1024);
 	const initVersion = await testFS.v!.writeBytes(path, bytes);
 
 	let { sink, version } = await testFS.v!.getByteSink(path, {});

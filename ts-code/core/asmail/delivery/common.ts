@@ -25,6 +25,7 @@ import { ASMailKeyPair } from '../../keyring/common';
 import { NetClient } from '../../../lib-client/request-utils';
 import { LogWarning, LogError } from '../../../lib-client/logging/log-to-file';
 import { ServiceLocator } from '../../../lib-client/service-locator';
+import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
@@ -214,6 +215,7 @@ export interface ResourcesForSending {
 
 	};
 	cryptor: AsyncSBoxCryptor;
+	random: AsyncRNG;
 	notifyMsgProgress: (id: string, progress: DeliveryProgress) => void;
 	logError: LogError;
 	logWarning: LogWarning;
