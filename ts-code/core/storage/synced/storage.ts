@@ -21,7 +21,6 @@ import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../..
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
 import { ObjFiles, SyncedObj } from './obj-files';
-import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { AsyncSBoxCryptor, NONCE_LENGTH, Subscribe, ObjSource } from 'xsp-files';
@@ -209,7 +208,7 @@ export class SyncedStore implements ISyncedStorage {
 	}
 	
 	async generateNewObjId(): Promise<string> {
-		const nonce = await randomBytes(NONCE_LENGTH);
+		const nonce = await this.random(NONCE_LENGTH);
 		const id = base64urlSafe.pack(nonce);
 		if (this.nodes.reserveId(id)) {
 			return id;

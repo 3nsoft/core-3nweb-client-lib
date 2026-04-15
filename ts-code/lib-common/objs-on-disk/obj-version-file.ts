@@ -30,6 +30,7 @@ import { uintFrom8Bytes, packUintTo8Bytes } from '../big-endian';
 import { assert } from '../assert';
 import { DiffInfo } from '../service-api/3nstorage/owner';
 import { getStackHere } from '../exceptions/runtime';
+import type { FileHandle as FileHandleOnNode } from 'fs/promises';
 
 
 export class ObjVersionFile {
@@ -97,6 +98,7 @@ export class ObjVersionFile {
 		await fs.writeFromBuf(fh, ofs, layoutBytes);
 		await recordLayoutOffsetInV1(fh, ofs);
 		await fh.truncate(ofs + layoutBytes.length);
+		await fh.sync();
 	}
 
 	private withRWFile<T>(action: (fd: fs.FileHandle) => Promise<T>): Promise<T> {
@@ -199,7 +201,7 @@ export class ObjVersionFile {
 		if (!chunkInfo) { return; }
 		await this.withROFile(async fd => {
 			const src = createReadStream('', {
-				fd,
+				fd: fd as FileHandleOnNode,
 				autoClose: false,
 				start: chunkInfo.fileOfs,
 				end: chunkInfo.fileOfs + chunkInfo.len - 1
@@ -235,7 +237,7 @@ export class ObjVersionFile {
 				if ((chunk.type === 'new-on-disk')
 				|| (chunk.type === 'base-on-disk')) {
 					const src = createReadStream('', {
-						fd,
+						fd: fd as FileHandleOnNode,
 						autoClose: false,
 						start: chunk.fileOfs,
 						end: chunk.fileOfs + chunk.len - 1

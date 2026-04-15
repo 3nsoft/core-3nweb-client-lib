@@ -17,7 +17,6 @@
 
 import { Storage, wrapStorageImplementation, NodesContainer, StorageGetter, ObjId, NodeEvent, LocalObjStatus } from '../../../lib-client/xsp-fs/common';
 import { makeObjExistsExc, makeObjNotFoundExc } from '../../../lib-client/xsp-fs/exceptions';
-import { bytes as randomBytes } from '../../../lib-common-on-node/random-node';
 import { secret_box as sbox } from 'ecma-nacl';
 import { base64urlSafe } from '../../../lib-common/buffer-utils';
 import { LogError } from '../../../lib-client/logging/log-to-file';
@@ -98,7 +97,7 @@ export class LocalStorage implements Storage {
 	}
 
 	async generateNewObjId(): Promise<string> {
-		const nonce = await randomBytes(sbox.NONCE_LENGTH);
+		const nonce = await this.random(sbox.NONCE_LENGTH);
 		const id = base64urlSafe.pack(nonce);
 		if (this.nodes.reserveId(id)) {
 			return id;

@@ -21,7 +21,6 @@ import { MsgKeyRole, msgKeyPackSizeFor } from './common';
 import { makeEncryptor, makeDecryptor } from '../../lib-common/async-cryptor-wrap';
 import { NONCE_LENGTH, AsyncSBoxCryptor } from 'xsp-files';
 import { SuggestedNextKeyPair, OpenedMsg } from '../asmail/msg/opener';
-import * as random from '../../lib-common-on-node/random-node';
 import { base64 } from '../../lib-common/buffer-utils';
 import { areAddressesEqual, toCanonicalAddress } from '../../lib-common/canonical-address';
 import { ResourcesForSending, addToNumberLineSegments } from '../asmail/delivery/common';
@@ -205,7 +204,7 @@ export class Keyrings {
 		} = await ck.getSendingPair(introPKeyFromServer);
 
 		// prepare message encryptor
-		const nextNonce = await random.bytes(NONCE_LENGTH);
+		const nextNonce = await this.random(NONCE_LENGTH);
 		const encryptor = makeEncryptor(
 			this.cryptor, this.workLabel, msgMasterKey, nextNonce
 		);

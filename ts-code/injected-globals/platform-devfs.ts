@@ -15,14 +15,11 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { Abortable } from 'events';
-import type { BufferEncodingOption, promises as fsFns, MakeDirectoryOptions, Mode, ObjectEncodingOptions, OpenMode, RmDirOptions, StatOptions, Stats } from 'fs';
-import { FlagAndOpenMode } from 'fs/promises';
-import type Stream = require('stream');
+import type { BufferEncodingOption, Mode, ObjectEncodingOptions, RmDirOptions, StatOptions, Stats } from 'fs';
 
 export type { Stats } from 'fs';
 export type { FileException } from '../lib-common/exceptions/file';
-export type FileHandle = fsFns.FileHandle;
+// export type FileHandle = fsFns.FileHandle;
 
 /**
  * This should be injected at globalThis.platform.device_fs
@@ -76,7 +73,7 @@ declare function writeFile(
 		options?:
 			| (ObjectEncodingOptions & {
 				mode?: Mode;
-				flag?: OpenMode;
+				flag?: string;
 				flush?: boolean;
 			})
 			| BufferEncoding
@@ -91,7 +88,7 @@ declare function appendFile(
 
 declare function mkdir(path: string, options?: { recursive?: boolean; }): Promise<unknown>;
 
-declare function open(path: string, flags?: string | number, mode?: Mode): Promise<FileHandle>;
+declare function open(path: string, flags?: string, mode?: Mode): Promise<FileHandle>;
 
 declare function symlink(target: string, path: string, type?: string | null): Promise<void>;
 
@@ -99,9 +96,9 @@ declare function readlink(path: string, options?: ObjectEncodingOptions | Buffer
 declare function readlink(path: string, options: BufferEncodingOption): Promise<Buffer>;
 declare function readlink(path: string, options?: ObjectEncodingOptions | string | null): Promise<string | Buffer>;
 
-declare function lstat(path: string, opts?: StatOptions): Promise<Stats>;
+declare function lstat(path: string): Promise<Stats>;
 
-declare function stat(path: string, opts?: StatOptions): Promise<Stats>;
+declare function stat(path: string): Promise<Stats>;
 
 declare function readdir(path: string): Promise<string[]>;
 
@@ -112,5 +109,19 @@ declare function unlink(path: string): Promise<void>;
 declare function rename(oldPath: string, newPath: string): Promise<void>;
 
 declare function truncate(path: string, len?: number): Promise<void>;
+
+export interface FileHandle {
+	readonly fd: number;
+	stat(): Promise<Stats>;
+	close(): Promise<void>;
+	read(
+		buffer: Uint8Array, offset?: number, length?: number, position?: number
+	): Promise<{ bytesRead: number; }>;
+	write(
+		buffer: Uint8Array, offset?: number, length?: number, position?: number
+	): Promise<{ bytesWritten: number; }>;
+	sync(): Promise<void>;
+	truncate(len?: number): Promise<void>;
+}
 
 Object.freeze(exports);

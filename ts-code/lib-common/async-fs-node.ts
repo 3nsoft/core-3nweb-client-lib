@@ -193,19 +193,6 @@ export async function write(fh: FileHandle, pos: number, buf: Buffer): Promise<v
 }
 
 /**
- * @param fh is an open file handle in append mode.
- * @param buf is a buffer, from which all bytes should be written into the file.
- * @returns a promise, resolvable when all bytes were written to it.
- */
-export async function append(fh: FileHandle, buf: Buffer): Promise<void> {
-	let bytesWritten = 0;
-	while (bytesWritten < buf.length) {
-		const { bytesWritten: bNum } = await fh.write(buf, bytesWritten, buf.length-bytesWritten);
-		bytesWritten += bNum;
-	}
-}
-
-/**
  * @param filePath is a path to an existing file
  * @param pos is a position in the file, from which writing should start
  * @param buf is a buffer, from which all bytes should be written into the file.
