@@ -22,7 +22,7 @@ import { CommonAttrs, XAttrs } from "./attrs";
 import { SingleProc } from "../../lib-common/processes/synced";
 import { wrapAndSyncFileSource } from "../../lib-common/byte-streaming/wrapping";
 import { Attrs, ReadonlyPayload, WritablePayload } from "./node-persistence";
-import { byteLengthIn } from "../../lib-common/buffer-utils";
+import { byteLengthIn, joinByteArrs } from "../../lib-common/buffer-utils";
 
 type FileByteSource = web3n.files.FileByteSource;
 type FileByteSink = web3n.files.FileByteSink;
@@ -133,9 +133,7 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 		return this.readSomeContentBytes(0, this.size);
 	}
 
-	async readSomeContentBytes(
-		start: number, end: number
-	): Promise<Uint8Array|undefined> {
+	async readSomeContentBytes(start: number, end: number): Promise<Uint8Array|undefined> {
 		assert(Number.isInteger(start) && (start >= 0));
 		if (start > this.size) {
 			start = this.size;
@@ -147,19 +145,15 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 		if (start === end) {
 			return undefined;
 		}
-		const startSecInd = this.contentSections
-		.findIndex(s => (s.ofs <= start));
-		const endSecInd = this.contentSections
-		.findIndex(s => ((s.ofs + s.len) >= end));
-		assert((startSecInd >= 0) && (endSecInd >= 0) &&
-			(startSecInd <= endSecInd));
+		const startSecInd = this.contentSections.findIndex(s => (s.ofs <= start));
+		const endSecInd = this.contentSections.findIndex(s => ((s.ofs + s.len) >= end));
+		assert((startSecInd >= 0) && (endSecInd >= 0) && (startSecInd <= endSecInd));
 		return await this.syncProc.startOrChain((startSecInd === endSecInd) ?
 		async () => {
 			const s = this.contentSections[startSecInd];
 			if (s.type === CONTENT_SECTION) {
 				const fstDelta = start - s.ofs;
-				return await sureReadOfBytesFrom(this.src,
-					s.ofsInSrc + fstDelta, end - start);
+				return await sureReadOfBytesFrom(this.src, s.ofsInSrc + fstDelta, end - start);
 			} else if (s.type === EMPTY_SECTION) {
 				return new Uint8Array(end - start);
 			} else {
@@ -174,8 +168,7 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 				const fstDelta = ((i === startSecInd) ? start - s.ofs : 0);
 				const len = ((i === endSecInd) ? end - s.ofs : s.len);
 				if (s.type === CONTENT_SECTION) {
-					const bytes = await sureReadOfBytesFrom(
-						this.src, s.ofsInSrc + fstDelta, len);
+					const bytes = await sureReadOfBytesFrom(this.src, s.ofsInSrc + fstDelta, len);
 					allBytes.set(bytes, ofsInAllBytes);
 				} else if (s.type === EMPTY_SECTION) {
 					allBytes.fill(0, ofsInAllBytes, len);
@@ -192,7 +185,8 @@ class ReadonlyPayloadV2 implements ReadonlyPayload {
 		let pos = 0;
 		const seek: FileByteSource['seek'] = async ofs => {
 			assert(Number.isInteger(ofs) && (ofs >= 0) && (ofs <= this.size),
-				`Offset must be an integer from 0 to size value, inclusive`);
+				`Offset must be an integer from 0 to size value, inclusive`
+			);
 			pos = ofs;
 		};
 		const readNext: FileByteSource['readNext'] = async len => {
@@ -857,8 +851,21 @@ async function sureReadOfBytesFrom(
 	src: ByteSource, ofs: number, len: number
 ): Promise<Uint8Array> {
 	const bytes = await src.readAt(ofs, len);
-	assert(!!bytes && (bytes.length === len));
-	return bytes!;
+	assert(!!bytes);
+	if (bytes!.length === len) {
+		return bytes!;
+	}
+	// somehow, on Android src.readAt(ofs, len) may produce a thing that is shorter than len, hence, loop below
+	len -= bytes!.length;
+	ofs += bytes!.length;
+	const chunks = [ bytes! ];
+	while (len > 0) {
+		const chunk = await src.readAt(ofs, len);
+		assert(!!chunk);
+		len -= chunk!.length;
+		ofs += chunk!.length;
+	}
+	return joinByteArrs(chunks);
 }
 
 function noop() {}

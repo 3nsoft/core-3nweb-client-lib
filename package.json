@@ -1,6 +1,6 @@
 {
   "name": "core-3nweb-client-lib",
-  "version": "0.48.3",
+  "version": "0.48.5",
   "description": "3NWeb client core library, embeddable into different environments",
   "main": "build/lib-index.js",
   "types": "build/lib-index.d.ts",
@@ -36,7 +36,7 @@
   "license": "GPL-3.0-or-later",
   "dependencies": {
     "ecma-nacl-cryptors": "^1.0.1",
-    "protobufjs": "^7.0.1",
+    "protobufjs": "^7.5.5",
     "punycode": "^2.1.1",
     "rxjs": "^7.5.7",
     "ws": "^8.18.3",

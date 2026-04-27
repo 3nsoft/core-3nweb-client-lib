@@ -67,7 +67,7 @@ export function exposeASMailCAP(
 				removeMsg: removeMsg.wrapService(box.removeMsg),
 				subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
 			},
-			config: exposeCofigCAP(cap.config)
+			config: exposeConfigCAP(cap.config)
 		};
 	}
 }
@@ -832,7 +832,7 @@ namespace observeDelivery {
 }
 Object.freeze(observeDelivery);
 
-function exposeCofigCAP(
+function exposeConfigCAP(
 	cap: ASMailService['config']
 ): ExposedObj<ASMailService['config']> {
 	return {

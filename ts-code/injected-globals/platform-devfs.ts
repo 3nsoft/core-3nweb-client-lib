@@ -15,11 +15,10 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import type { BufferEncodingOption, Mode, ObjectEncodingOptions, RmDirOptions, StatOptions, Stats } from 'fs';
+import type { Mode, ObjectEncodingOptions, Stats } from 'fs';
 
 export type { Stats } from 'fs';
 export type { FileException } from '../lib-common/exceptions/file';
-// export type FileHandle = fsFns.FileHandle;
 
 /**
  * This should be injected at globalThis.platform.device_fs
@@ -90,11 +89,9 @@ declare function mkdir(path: string, options?: { recursive?: boolean; }): Promis
 
 declare function open(path: string, flags?: string, mode?: Mode): Promise<FileHandle>;
 
-declare function symlink(target: string, path: string, type?: string | null): Promise<void>;
+declare function symlink(target: string, path: string): Promise<void>;
 
-declare function readlink(path: string, options?: ObjectEncodingOptions | BufferEncoding | null): Promise<string>;
-declare function readlink(path: string, options: BufferEncodingOption): Promise<Buffer>;
-declare function readlink(path: string, options?: ObjectEncodingOptions | string | null): Promise<string | Buffer>;
+declare function readlink(path: string): Promise<string>;
 
 declare function lstat(path: string): Promise<Stats>;
 
@@ -102,7 +99,7 @@ declare function stat(path: string): Promise<Stats>;
 
 declare function readdir(path: string): Promise<string[]>;
 
-declare function rmdir(path: string, options?: RmDirOptions): Promise<void>;
+declare function rmdir(path: string, options?: { recursive?: boolean; }): Promise<void>;
 
 declare function unlink(path: string): Promise<void>;
 
