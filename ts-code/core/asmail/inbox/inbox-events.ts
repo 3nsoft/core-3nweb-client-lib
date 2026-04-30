@@ -21,8 +21,9 @@ import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/re
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { filter, mergeMap, share, tap } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
-import { addToStatus, ConnectionStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import { addToStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 import { ConnectException } from '../../../lib-common/exceptions/http';
+import type { ConnectionStatus } from '../../../lib-client/request-utils';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxEventType = web3n.asmail.InboxEventType;
@@ -81,9 +82,9 @@ export class InboxEvents {
 	}
 
 	private makeProc(): Observable<IncomingMessage> {
-		const proc$ = from(this.msgReceiver.openEventSource().then(({ client, heartbeat }) => {
+		const proc$ = from(this.msgReceiver.openEventSource().then(({ client, watchHeartbeat }) => {
 			const channel = msgRecievedCompletely.EVENT_NAME;
-			heartbeat.subscribe({
+			watchHeartbeat({
 				next: ev => {
 					this.connectionEvents.next(toInboxConnectionStatus(ev));
 					if (ev.type === 'heartbeat') {

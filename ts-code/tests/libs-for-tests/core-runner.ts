@@ -28,7 +28,7 @@ import { makeServiceLocator } from "../../lib-client/service-locator";
 import { resolveTxt as resolveDnsTxt } from 'dns';
 import { makeNativeCryptor } from "napi-nacl";
 import { makeRequestFromNode } from "../../lib-common-on-node/request-from-node";
-import { openSocketFromNode } from "../../lib-common-on-node/websocket-from-node";
+import { openServiceEventsSrcFromNode } from "../../lib-common-on-node/websocket-from-node";
 
 export const testApp = {
 	appDomain: 'test.3nweb.app',
@@ -106,7 +106,7 @@ export class CoreRunner {
 		}
 		this.runningCore = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			() => makeNetClient(makeRequestFromNode(), openSocketFromNode),
+			() => makeNetClient(makeRequestFromNode(), openServiceEventsSrcFromNode),
 			makeServiceLocator({
 				resolveTxt: domain => new Promise(
 					(resolve, reject) => resolveDnsTxt(domain, (err, texts) => {

@@ -17,12 +17,12 @@
 import { makeHTTPException, makeConnectionException, HTTPException, makeMalformedReplyHTTPException } from '../lib-common/exceptions/http';
 import { BytesFIFOBuffer } from '../lib-common/byte-streaming/bytes-fifo-buffer';
 import type * as https from 'https';
-import type * as WebSocket from 'ws';
 import type { IncomingMessage, IncomingHttpHeaders, ClientRequest, OutgoingHttpHeaders } from 'http';
 import { fromEvent, lastValueFrom, merge } from 'rxjs';
 import { toBuffer, utf8 } from '../lib-common/buffer-utils';
 import { defer } from '../lib-common/processes/deferred';
 import { take, map, takeUntil, mergeMap } from 'rxjs/operators';
+import { Envelope, RawDuplex } from '../lib-common/ipc/generic-ipc';
 
 export const SESSION_ID_HEADER = "X-Session-Id";
 export const CONTENT_TYPE_HEADER = 'Content-Type';
@@ -244,7 +244,17 @@ export function extractIntHeader(rep: Reply<any>, headerName: string): number {
 	return intHeader;
 }
 
-export type OpenWebSocket = (url: string, sessionId: string) => Promise<Reply<WebSocket>>
+export type OpenServiceEventsSource = (req: RequestOpts) => Promise<{
+	status: number;
+	data: ServiceEventsSource;
+}>;
+
+export interface ServiceEventsSource {
+	comm: RawDuplex<Envelope>;
+	watch: (obs: Observer<ConnectionStatus>) => (() => void);
+}
+
+type Observer<T> = web3n.Observer<T>;
 
 export interface NetClient {
 
@@ -273,13 +283,36 @@ export interface NetClient {
 
 	reset(): void;
 
-	openWebSocket: (url: string, sessionId: string) => Promise<Reply<WebSocket>>;
+	openEventSource: OpenServiceEventsSource;
 
+}
+
+export interface ConnectionStatus {
+
+	type: 'heartbeat' | 'heartbeat-skip' | 'disconnected' | 'connected';
+
+	url: string;
+
+	/**
+	 * ping number is a number of millisecond between previous and current data receiving from server.
+	 */
+	ping?: number;
+
+	/**
+	 * This mirrors a "slow socket" exception, thrown to data sending process.
+	 */
+	slowSocket?: true;
+
+	missingPongsFromServer?: number;
+
+	socketClosed?: true;
+
+	error?: any;
 }
 
 export function makeNetClient(
 	request: RequestFn<unknown>,
-	openWebSocket: NetClient['openWebSocket'],
+	openEventSource: OpenServiceEventsSource,
 	reset = () => {}
 ): NetClient {
 
@@ -310,7 +343,7 @@ export function makeNetClient(
 
 		reset,
 
-		openWebSocket
+		openEventSource
 
 	};
 

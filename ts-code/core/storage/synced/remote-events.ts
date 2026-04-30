@@ -21,8 +21,9 @@ import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';
 import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter, share } from 'rxjs/operators';
-import { LogError } from '../../../lib-client/logging/log-to-file';
-import { addToStatus, ConnectionStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import type { LogError } from '../../../lib-client/logging/log-to-file';
+import { addToStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import type { ConnectionStatus } from '../../../lib-client/request-utils';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -64,9 +65,9 @@ export class RemoteEvents {
 	}
 
 	private makeProc(): Observable<void> {
-		return from(this.remoteStorage.openEventSource().then(({ client, heartbeat }) => {
+		return from(this.remoteStorage.openEventSource().then(({ client, watchHeartbeat }) => {
 			this.remoteStorage.connectedState.setState();
-			heartbeat.subscribe({
+			watchHeartbeat({
 				next: ev => {
 					this.connectionEvents.next(toStorageConnectionStatus(ev));
 					if (ev.type === 'heartbeat') {

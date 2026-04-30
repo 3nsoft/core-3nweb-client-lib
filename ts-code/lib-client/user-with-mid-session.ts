@@ -20,9 +20,8 @@
  * MailerId and uses respectively authenticated session.
  */
 
-import { Reply, RequestOpts, NetClient } from '../lib-client/request-utils';
+import { Reply, RequestOpts, NetClient, ServiceEventsSource } from '../lib-client/request-utils';
 import * as api from '../lib-common/service-api/mailer-id/login';
-import type * as WebSocket from 'ws';
 import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
 import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
@@ -193,16 +192,16 @@ export abstract class ServiceUser {
 		}
 	}
 
-	private async callEnsuringLogin<T>(func: () => Promise<Reply<T>>): Promise<Reply<T>> {
+	private async callEnsuringLogin<T>(func: () => Promise<{ status: number; data?: T; }>): Promise<Reply<T>> {
 		try {
 			let reply: Reply<T>;
 			if (this.loginProc || !this.sessionId) {
 				await this.login();
-				reply = await func();
+				reply = await func() as Reply<T>;
 			} else {
-				// first attepmt
+				// first attempt
 				const initSessionId = this.sessionId;
-				const rep = await func();
+				const rep = await func() as Reply<T>;
 				if (rep.status !== api.ERR_SC.needAuth) { return rep; }
 
 				// if auth is needed, do login and a second attempt
@@ -210,7 +209,7 @@ export abstract class ServiceUser {
 					this.sessionId = (undefined as any);
 				}
 				await this.login();
-				reply = await func();
+				reply = await func() as Reply<T>;
 			}
 			this.connectedState.setState();
 			return reply;
@@ -223,7 +222,7 @@ export abstract class ServiceUser {
 		}
 	}
 
-	private prepCallOpts(opts: RequestOpts, isWS?: true): void {
+	protected prepCallOpts(opts: RequestOpts, isWS?: true): RequestOpts {
 		opts.sessionId = this.sessionId;
 		if (opts.appPath) {
 			opts.url = (isWS ?
@@ -232,6 +231,7 @@ export abstract class ServiceUser {
 		} else if (!opts.url) { 
 			throw new Error(`Missing both appPath and ready url in request options.`);
 		}
+		return opts;
 	}
 
 	protected doBodylessSessionRequest<T>(opts: RequestOpts): Promise<Reply<T>> {
@@ -255,15 +255,20 @@ export abstract class ServiceUser {
 		});
 	}
 
-	protected openWS(appPath: string): Promise<Reply<WebSocket>> {
-		const opts: RequestOpts = {
-			appPath,
-			method: 'GET'
+	protected async openEventSrc(appPath: string): Promise<{
+		req: RequestOpts;
+		rep: {
+			status: number;
+			data: ServiceEventsSource;
 		};
-		return this.callEnsuringLogin<WebSocket>(() => {
-			this.prepCallOpts(opts, true);
-			return this.net.openWebSocket(opts.url!, opts.sessionId!);
+	}> {
+		let opts: RequestOpts;
+		const rep = await this.callEnsuringLogin(async () => {
+			const reqOpts = this.prepCallOpts({ appPath, method: 'GET' }, true);
+			const rep = await this.net.openEventSource(reqOpts);
+			return rep;
 		});
+		return { req: opts!, rep };
 	}
 
 }

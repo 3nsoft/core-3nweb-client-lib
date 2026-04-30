@@ -15,16 +15,17 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { extractIntHeader, NetClient } from '../request-utils';
+import { ConnectionStatus, extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/retrieval';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
-import { makeSubscriber, SubscribingClient } from '../../lib-common/ipc/ws-ipc';
-import { LogError } from '../logging/log-to-file';
+import { SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 import { getStackHere } from '../../lib-common/exceptions/runtime';
+import { makeSubscribingClient } from '../../lib-common/ipc/generic-ipc';
 
 type InboxException = web3n.asmail.InboxException;
+type Observer<T> = web3n.Observer<T>;
 
 export function makeMsgNotFoundException(msgId: string): InboxException {
 	const exc: InboxException = {
@@ -211,12 +212,17 @@ export class MailRecipient extends ServiceUser {
 		}
 	}
 
-	async openEventSource(): Promise<ReturnType<typeof makeSubscriber>> {
-		const rep = await this.openWS(api.wsEventChannel.URL_END);
+	async openEventSource(): Promise<{
+		client: SubscribingClient;
+		watchHeartbeat: (obs: Observer<ConnectionStatus>) => (() => void);
+	}> {
+		const { rep, req } = await this.openEventSrc(api.wsEventChannel.URL_END);
 		if (rep.status === api.wsEventChannel.SC.ok) {
-			return makeSubscriber(rep.data, undefined);
+			const { comm, watch: watchHeartbeat } = rep.data;
+			const client = makeSubscribingClient(undefined, comm);
+			return { client, watchHeartbeat };
 		} else {
-			throw makeUnexpectedStatusHTTPException(rep);
+			throw makeUnexpectedStatusHTTPException({ url: req.url!, method: req.method, status: rep.status });
 		}
 	}
 

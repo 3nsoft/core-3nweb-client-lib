@@ -15,19 +15,22 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { extractIntHeader, NetClient } from '../request-utils';
+import { ConnectionStatus, extractIntHeader, NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/3nstorage/owner';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
 import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from '../xsp-fs/exceptions';
-import { makeSubscriber } from '../../lib-common/ipc/ws-ipc';
+import { SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
+import { makeSubscribingClient } from '../../lib-common/ipc/generic-ipc';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
+
+type Observer<T> = web3n.Observer<T>;
 
 const storageAccessParams: ServiceAccessParams = {
 	login: api.midLogin.MID_URL_PART,
@@ -360,12 +363,17 @@ export class StorageOwner extends ServiceUser {
 		}
 	}
 
-	async openEventSource(): Promise<ReturnType<typeof makeSubscriber>> {
-		const rep = await this.openWS(api.wsEventChannel.URL_END);
+	async openEventSource(): Promise<{
+		client: SubscribingClient;
+		watchHeartbeat: (obs: Observer<ConnectionStatus>) => (() => void);
+	}> {
+		const { rep, req } = await this.openEventSrc(api.wsEventChannel.URL_END);
 		if (rep.status === api.wsEventChannel.SC.ok) {
-			return makeSubscriber(rep.data, undefined);
+			const { comm, watch: watchHeartbeat } = rep.data;
+			const client = makeSubscribingClient(undefined, comm);
+			return { client, watchHeartbeat };
 		} else {
-			throw makeUnexpectedStatusHTTPException(rep);
+			throw makeUnexpectedStatusHTTPException({ url: req.url!, method: req.method, status: rep.status });
 		}
 	}
 

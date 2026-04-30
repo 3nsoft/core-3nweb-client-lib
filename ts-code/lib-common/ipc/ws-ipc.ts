@@ -21,6 +21,7 @@ import { RawDuplex, SubscribingClient, makeSubscribingClient, Envelope, 	MultiOb
 import type * as WebSocket from 'ws';
 import type { ConnectException, HTTPException } from '../exceptions/http';
 import { sleep } from '../processes/sleep';
+import type { ConnectionStatus } from '../../lib-client/request-utils';
 
 export { RequestEnvelope, RequestHandler, EventfulServer, makeEventfulServer, SubscribingClient } from './generic-ipc';
 
@@ -34,171 +35,6 @@ export function makeWSException(params: Partial<WSException>, flags?: Partial<WS
 	return makeRuntimeException('websocket', params, flags ?? {});
 }
 
-const MAX_TXT_BUFFER = 64*1024;
-const CLIENT_SIDE_PING_PERIOD = 10*1000;
-
-/**
- * This creates a json communication point on a given web socket.
- * Point may have many listeners, allowing for single parsing of incoming
- * messages.
- * @param ws 
- */
-function makeJsonCommPoint(ws: WebSocket): {
-	comm: RawDuplex<Envelope>; heartbeat: Observable<ConnectionStatus>;
- } {
-	
-	const observers = new MultiObserverWrap<Envelope>();
-
-	const { heartbeat, healthyBeat, otherBeat } = makeHeartbeat(ws.url);
-
-	let outstandingPongs = 0;
-	let closedByPingProc = false;
-	const pingRepeat = setInterval(() => {
-		if (outstandingPongs >= 2) {
-			ws.close();
-			closedByPingProc = true;
-			clearInterval(pingRepeat);
-			return;
-		}
-		if (outstandingPongs > 0) {
-			otherBeat('heartbeat-skip', { missingPongsFromServer: outstandingPongs });
-		}
-		ws.ping();
-		outstandingPongs += 1;
-	}, CLIENT_SIDE_PING_PERIOD);
-
-	ws.on('message', data => {
-		if (observers.done) { return; }
-
-		let env: Envelope;
-		try {
-			env = JSON.parse((data as Buffer).toString('utf8'));
-		} catch (err) {
-			ws.close();
-			clearInterval(pingRepeat);
-			otherBeat('disconnected', err, true);
-			observers.error(err);
-			return;
-		}
-
-		observers.next(env);
-		healthyBeat();
-	});
-
-	ws.on('close', (code, reason) => {
-		clearInterval(pingRepeat);
-		if (code === 1000) {
-			otherBeat('disconnected', { socketClosed: true }, true);
-			observers.complete();
-		} else {
-			otherBeat('disconnected', { error: { code, reason } }, true);
-			observers.error(makeWSException({
-				socketClosed: true,
-				cause: { code, reason }
-			}));
-		}
-	});
-
-	ws.on('error', (err?: any): void => {
-		otherBeat('disconnected', err, true);
-		observers.error(makeWSException({ cause: err }));
-		clearInterval(pingRepeat);
-		ws.close();
-	});
-
-	ws.on('ping', () => {
-		ws.pong();
-		healthyBeat();
-	});
-
-	ws.on('pong', () => {
-		healthyBeat();
-		outstandingPongs = 0;
-	});
-
-	const comm: RawDuplex<Envelope> = {
-		subscribe: obs => observers.add(obs),
-		postMessage(env: Envelope): void {
-			if ((ws as any).bufferedAmount > MAX_TXT_BUFFER) {
-				otherBeat('heartbeat', { slowSocket: true });
-				throw makeWSException({ socketSlow: true });
-			}
-			ws.send(JSON.stringify(env));
-		}
-	};
-
-	otherBeat('connected', {});
-
-	return { comm, heartbeat };
-}
-
-function makeHeartbeat(url: string) {
-
-	const status = new Subject<ConnectionStatus>();
-
-	let lastInfo = Date.now();
-
-	function healthyBeat(): void {
-		const now = Date.now();
-		status.next({
-			type: 'heartbeat',
-			url,
-			ping: now - lastInfo
-		});
-		lastInfo = now;
-	}
-
-	function otherBeat(type: ConnectionStatus['type'], params: Partial<ConnectionStatus>, end = false): void {
-		status.next({
-			type,
-			url,
-			...params				
-		});
-		if (end) {
-			status.complete();
-		}
-	}
-
-	return {
-		heartbeat: status.asObservable().pipe(share()),
-		healthyBeat,
-		otherBeat
-	};
-}
-
-export interface ConnectionStatus {
-
-	type: 'heartbeat' | 'heartbeat-skip' | 'disconnected' | 'connected';
-
-	url: string;
-
-	/**
-	 * ping number is a number of millisecond between previous and current data receiving from server.
-	 */
-	ping?: number;
-
-	/**
-	 * This mirrors a "slow socket" exception, thrown to data sending process.
-	 */
-	slowSocket?: true;
-
-	missingPongsFromServer?: number;
-
-	socketClosed?: true;
-
-	error?: any;
-}
-
-export function makeSubscriber(
-	ws: WebSocket, ipcChannel: string|undefined
-): { client: SubscribingClient; heartbeat: Observable<ConnectionStatus>; } {
-	const { comm, heartbeat } = makeJsonCommPoint(ws);
-	return {
-		client: makeSubscribingClient(ipcChannel, comm),
-		heartbeat
-	};
-}
-
 export function addToStatus<T extends ConnectionStatus>(status: ConnectionStatus, params: Partial<T>): T {
 	for (const [ field, value ] of Object.entries(params)) {
 		(status as T)[field] = value;
@@ -206,7 +42,7 @@ export function addToStatus<T extends ConnectionStatus>(status: ConnectionStatus
 	return status as T;
 }
 
-export function shouldRestartWSAfterErr(
+function shouldRestartWSAfterErr(
 	exc: WSException|ConnectException|HTTPException
 ): boolean {
 	if (!exc.runtimeException) { return false; }
