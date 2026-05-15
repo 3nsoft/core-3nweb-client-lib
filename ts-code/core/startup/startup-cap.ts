@@ -112,7 +112,6 @@ function completionAndObsOfProgress(progressCB: (p: number) => void): {
 				progressCB(p);
 			}
 		},
-		complete: () => completion?.reject(new Error()),
 		error: err => completion?.reject(err)
 	};
 	return {
