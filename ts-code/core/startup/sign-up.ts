@@ -104,6 +104,7 @@ export class SignUp {
 		private readonly makeNet: () => NetClient,
 		private readonly getUsersOnDisk: GetUsersOnDisk,
 		private readonly initForNewUser: (u: CreatedUser) => Promise<void>,
+		private readonly saveStorageKeyForAutologin: ((storageKey: Uint8Array) => void)|undefined,
 		private readonly watchBoot: SignUpService['watchBoot'],
 		private readonly logError: LogError
 	) {
@@ -231,6 +232,7 @@ export class SignUp {
 			);
 		});
 		if (!accountCreated) { return false; }
+		const storeKey = this.store.skey;
 		this.initForNewUser({
 			address,
 			midSKey: {
@@ -239,7 +241,8 @@ export class SignUp {
 			},
 			storeSKey: this.store.skey,
 			storeParams: this.store.params.kdParams
-		});
+		})
+		.then(() => this.saveStorageKeyForAutologin?.(storeKey));
 		this.forgetKeys();
 		return true;
 	}

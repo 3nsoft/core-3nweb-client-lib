@@ -37,10 +37,11 @@ export class SignIn {
 	private completeInitWithoutCache: CompleteInitWithoutCache|undefined = undefined;
 
 	constructor(
-		private cryptor: Cryptor,
-		private startInitWithoutCache: StartInitWithoutCache,
-		private initWithCache: InitWithCache,
-		private getUsersOnDisk: GetUsersOnDisk,
+		private readonly cryptor: Cryptor,
+		private readonly startInitWithoutCache: StartInitWithoutCache,
+		private readonly initWithCache: InitWithCache,
+		private readonly getUsersOnDisk: GetUsersOnDisk,
+		private readonly saveStorageKeyForAutologin: ((storageKey: Uint8Array) => void)|undefined,
 		private readonly watchBoot: SignInService['watchBoot'],
 		private readonly logError: LogError
 	) {
@@ -81,12 +82,16 @@ export class SignIn {
 				await deriveMidKeyPair(this.cryptor, pass, params, midKeyProgressCB)
 			).skey;
 			const storeKeyProgressCB = makeKeyGenProgressCB(51, 100, progressCB);
-			const storeKeyGen: GenerateKey = params => deriveStorageSKey(
-				this.cryptor, pass, params, storeKeyProgressCB
-			);
-			return await this.completeInitWithoutCache(
-				midKeyGen, storeKeyGen
-			);
+			let storeKey: Uint8Array;
+			const storeKeyGen: GenerateKey = async params => {
+				storeKey = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
+				return storeKey;
+			};
+			const ok = await this.completeInitWithoutCache(midKeyGen, storeKeyGen);
+			if (ok) {
+				this.saveStorageKeyForAutologin?.(storeKey!);
+			}
+			return ok;
 		} catch(err) {
 			throw await this.logAndWrap(
 				err, 'Fail to initialize from a state without cache'
@@ -98,11 +103,17 @@ export class SignIn {
 		user: string, pass: string, progressCB: ProgressCB
 	): Promise<boolean> {
 		try {
+			let storeKey: Uint8Array;
 			const storeKeyProgressCB = makeKeyGenProgressCB(0, 99, progressCB);
-			const storeKeyGen: GenerateKey = params => deriveStorageSKey(
-				this.cryptor, pass, params, storeKeyProgressCB
-			);
-			return await this.initWithCache(user, storeKeyGen);
+			const storeKeyGen: GenerateKey = async params => {
+				storeKey = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
+				return storeKey;
+			};
+			const ok = await this.initWithCache(user, storeKeyGen);
+			if (ok) {
+				this.saveStorageKeyForAutologin?.(storeKey!);
+			}
+			return ok;
 		} catch(err) {
 			throw await this.logAndWrap(
 				err, 'Failing to start in a state with cache'

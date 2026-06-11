@@ -92,7 +92,9 @@ export class Core {
 		return core;
 	}
 
-	start(): {
+	start(
+		saveStorageKeyForAutologin?: (storageKey: Uint8Array) => void
+	): {
 		capsForStartup: web3n.startup.W3N;
 		coreInit: Promise<string>;
 		coreAppsInit: Promise<void>;
@@ -104,6 +106,7 @@ export class Core {
 			this.signUpUrl, this.cryptor.cryptor, this.random, this.makeNet,
 			this.appDirs.getUsersOnDisk,
 			user => this.initForNewUser(user, midDone, emitBootEvent),
+			saveStorageKeyForAutologin,
 			watchBoot,
 			this.logger.logError
 		);
@@ -113,6 +116,7 @@ export class Core {
 			addr => this.initForExistingUserWithoutCache(addr, midDone, emitBootEvent),
 			(addr, storageKey) => this.initForExistingUserWithCache(addr, storageKey, midDone, emitBootEvent),
 			this.appDirs.getUsersOnDisk,
+			saveStorageKeyForAutologin,
 			watchBoot,
 			this.logger.logError
 		);
