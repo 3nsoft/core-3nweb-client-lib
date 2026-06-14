@@ -20,6 +20,7 @@ import type { GetUsersOnDisk } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { ErrorWithCause, errWithCause } from '../../lib-common/exceptions/error';
 import type { Cryptor } from 'ecma-nacl-cryptors';
+import { areAddressesEqual } from '../../lib-common/canonical-address';
 
 export type GenerateKey  = (derivParams: ScryptGenParams) => Promise<Uint8Array>;
 export type StartInitWithoutCache = (address: string) => Promise<CompleteInitWithoutCache|undefined>;
@@ -61,13 +62,20 @@ export class SignIn {
 
 	private async startLoginToRemoteStorage(address: string): Promise<boolean> {
 		try {
+			const addrOnDisk = await this.getAddressFromDisk(address);
+			if (addrOnDisk) {
+				throw new Error(`${address} exists on disk as ${addrOnDisk}`);
+			}
 			this.completeInitWithoutCache = await this.startInitWithoutCache(address);
 			return !!this.completeInitWithoutCache;
 		} catch(err) {
-			throw await this.logAndWrap(
-				err, 'Fail to start login to remote storage'
-			);
+			throw await this.logAndWrap(err, 'Fail to start login to remote storage');
 		}
+	}
+
+	private async getAddressFromDisk(address: string): Promise<string|undefined> {
+			const usersOnDisk = await this.getUsersOnDisk();
+			return usersOnDisk.find(existing => areAddressesEqual(existing, address));
 	}
 
 	private async completeLoginAndLocalSetup(
@@ -84,8 +92,10 @@ export class SignIn {
 			const storeKeyProgressCB = makeKeyGenProgressCB(51, 100, progressCB);
 			let storeKey: Uint8Array;
 			const storeKeyGen: GenerateKey = async params => {
-				storeKey = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
-				return storeKey;
+				const key = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
+				storeKey = new Uint8Array(key.length);
+				storeKey.set(key);
+				return key;
 			};
 			const ok = await this.completeInitWithoutCache(midKeyGen, storeKeyGen);
 			if (ok) {
@@ -93,21 +103,25 @@ export class SignIn {
 			}
 			return ok;
 		} catch(err) {
-			throw await this.logAndWrap(
-				err, 'Fail to initialize from a state without cache'
-			);
+			throw await this.logAndWrap(err, 'Fail to initialize from a state without cache');
 		}
 	}
 
 	private async useExistingStorage(
 		user: string, pass: string, progressCB: ProgressCB
 	): Promise<boolean> {
+		const addrOnDisk = await this.getAddressFromDisk(user);
+		if (addrOnDisk) {
+			user = addrOnDisk;
+		}
 		try {
 			let storeKey: Uint8Array;
 			const storeKeyProgressCB = makeKeyGenProgressCB(0, 99, progressCB);
 			const storeKeyGen: GenerateKey = async params => {
-				storeKey = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
-				return storeKey;
+				const key = await deriveStorageSKey(this.cryptor, pass, params, storeKeyProgressCB);
+				storeKey = new Uint8Array(key.length);
+				storeKey.set(key);
+				return key;
 			};
 			const ok = await this.initWithCache(user, storeKeyGen);
 			if (ok) {
@@ -115,9 +129,7 @@ export class SignIn {
 			}
 			return ok;
 		} catch(err) {
-			throw await this.logAndWrap(
-				err, 'Failing to start in a state with cache'
-			);
+			throw await this.logAndWrap(err, 'Failing to start in a state with cache');
 		}
 	}
 

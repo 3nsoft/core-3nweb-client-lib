@@ -169,12 +169,8 @@ export class SignUp {
 			p: defaultDerivParams.p,
 			salt: base64.pack(await this.random(SALT_LEN))
 		};
-		const progressCB = makeKeyGenProgressCB(
-			progressStart, progressEnd, originalProgressCB
-		);
-		const skey = await keyDeriv.deriveStorageSKey(this.cryptor,
-			pass, derivParams, progressCB
-		);
+		const progressCB = makeKeyGenProgressCB(progressStart, progressEnd, originalProgressCB);
+		const skey = await keyDeriv.deriveStorageSKey(this.cryptor, pass, derivParams, progressCB);
 		this.store = {
 			skey: skey,
 			params: {
@@ -193,9 +189,7 @@ export class SignUp {
 			p: defaultDerivParams.p,
 			salt: base64.pack(await this.random(SALT_LEN))
 		}
-		const progressCB = makeKeyGenProgressCB(
-			progressStart, progressEnd, originalProgressCB
-		);
+		const progressCB = makeKeyGenProgressCB(progressStart, progressEnd, originalProgressCB);
 		const defaultPair = await keyDeriv.deriveMidKeyPair(
 			this.cryptor, pass, derivParams, progressCB, keyUse.MID_PKLOGIN, '_'
 		);
@@ -227,12 +221,11 @@ export class SignUp {
 			storage: this.store.params,
 			signupToken
 		}).catch (async err => {
-			throw await this.logAndWrap(
-				err, `Failed to create user account ${address}.`
-			);
+			throw await this.logAndWrap(err, `Failed to create user account ${address}.`);
 		});
 		if (!accountCreated) { return false; }
-		const storeKey = this.store.skey;
+		const storeKey = new Uint8Array(this.store.skey.length);
+		storeKey.set(this.store.skey);
 		this.initForNewUser({
 			address,
 			midSKey: {
