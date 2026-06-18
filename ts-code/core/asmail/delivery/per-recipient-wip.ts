@@ -128,8 +128,7 @@ export class WIP {
 		private state: WIPstate,
 		private cryptor: AsyncSBoxCryptor
 	) {
-		this.doStateRecording =
-			(this.msg.progress.msgSize > MSG_SIZE_FOR_STATE_RECORDING);
+		this.doStateRecording = (this.msg.progress.msgSize > MSG_SIZE_FOR_STATE_RECORDING);
 		Object.seal(this);
 	}
 
@@ -151,15 +150,12 @@ export class WIP {
 	 * @param msg
 	 * @param state
 	 */
-	static async resume(
-		msg: Msg, state: WIPstate, cryptor: AsyncSBoxCryptor
-	): Promise<WIP> {
+	static async resume(msg: Msg, state: WIPstate, cryptor: AsyncSBoxCryptor): Promise<WIP> {
 		if (state.stage === '5-send-objs') {
 			const wip = new WIP(msg, state, cryptor);
 			wip.packer = await msg.msgPacker(state.pack);
 			if (state.bytesUploaded > 0) {
-				msg.progress.recipients[state.recipient].bytesSent =
-					state.bytesUploaded;
+				msg.progress.recipients[state.recipient].bytesSent = state.bytesUploaded;
 			}
 			return wip;
 		} else {
@@ -221,11 +217,10 @@ export class WIP {
 			this.sender = await MailSender.fresh(
 				this.msg.r.makeNet(), this.msg.r.asmailResolver,
 				(sp.auth ? senderAddress : undefined),
-				recipient, sp.invitation);
+				recipient, sp.invitation
+			);
 		} else {
-			this.sender = await MailSender.fresh(
-				this.msg.r.makeNet(), this.msg.r.asmailResolver, undefined,
-				recipient);
+			this.sender = await MailSender.fresh(this.msg.r.makeNet(), this.msg.r.asmailResolver, undefined, recipient);
 		}
 		
 		await this.sender.startSession();
@@ -252,16 +247,14 @@ export class WIP {
 	private async getRecipientKeyAndEncrypt(): Promise<void> {
 
 		const recipient = this.sender.recipient;
-		const introPKeyFromServer = await this.getIntroKeyIfRecipientIsUnknown(
-			recipient);
+		const introPKeyFromServer = await this.getIntroKeyIfRecipientIsUnknown(recipient);
 
 		this.packer = await this.msg.msgPacker();
 		
 		// get crypto parts for encrypting this message
-		const { currentPair, encryptor, msgCount } =
-			await this.msg.r.correspondents.generateKeysToSend(
-				recipient, introPKeyFromServer
-			);
+		const {
+			currentPair, encryptor, msgCount
+		} = await this.msg.r.correspondents.generateKeysToSend(recipient, introPKeyFromServer);
 		
 		// add crypto parameters to the message
 		if (currentPair.pid) {
@@ -269,33 +262,31 @@ export class WIP {
 		} else {
 			const signer = await this.msg.r.getSigner();
 			const pkCerts: PKeyCertChain = {
-				pkeyCert: signer.certifyPublicKey(
-					currentPair.senderPKey!, 30*24*60*60),
+				pkeyCert: signer.certifyPublicKey(currentPair.senderPKey!, 30*24*60*60),
 				userCert: signer.userCert,
 				provCert: signer.providerCert
 			};
 			this.packer.setNewKeyInfo(
 				currentPair.recipientKid!,
 				currentPair.senderPKey!.k,
-				pkCerts, msgCount);
+				pkCerts, msgCount
+			);
 		}
 
 		// add next crypto parameters to the message
-		const nextMsgCrypto = await this.msg.r.correspondents.nextCrypto(
-			recipient);
+		const nextMsgCrypto = await this.msg.r.correspondents.nextCrypto(recipient);
 		if (nextMsgCrypto) {
 			this.packer.setNextCrypto(nextMsgCrypto);
 		}
 
 		// add updated sending parameters to the message
-		const nextSendingParams =
-			await this.msg.r.correspondents.newParamsForSendingReplies(recipient);
+		const nextSendingParams = await this.msg.r.correspondents.newParamsForSendingReplies(recipient);
 		if (nextSendingParams) {
 			this.packer.setNextSendingParams(nextSendingParams);
 		}
 
 		// pack the message
-		this.state.pack = await this.packer.pack();
+		this.state.pack = this.packer.pack();
 
 		// initialize uploads info
 		this.state.objUploads = new Array(this.state.pack.meta.objIds.length);
@@ -312,11 +303,10 @@ export class WIP {
 		}
 	}
 
-	private async getIntroKeyIfRecipientIsUnknown(
-		recipient: string
-	): Promise<JsonKey|undefined> {
-		if (!this.msg.r.correspondents.needIntroKeyFor(
-			this.sender.recipient)) { return; }
+	private async getIntroKeyIfRecipientIsUnknown(recipient: string): Promise<JsonKey|undefined> {
+		if (!this.msg.r.correspondents.needIntroKeyFor(this.sender.recipient)) {
+			return;
+		}
 		const certs = await this.sender.getRecipientsInitPubKey();
 		return checkAndExtractPKey(
 			this.sender.net, this.msg.r.midResolver, recipient, certs
@@ -346,8 +336,7 @@ export class WIP {
 		const recInfo = this.msg.progress.recipients[recipient];
 		if (complete) {
 			if (err) {
-				recInfo.err = (err.runtimeException ?
-					err : (err.stack ? err.stack : err));
+				recInfo.err = (err.runtimeException ? err : (err.stack ? err.stack : err));
 			} else {
 				recInfo.bytesSent = this.msg.progress.msgSize;
 			}
@@ -368,19 +357,20 @@ export class WIP {
 	}
 
 	private async sendMeta(): Promise<void> {
-		if (!this.state.pack) { throw new Error(`Message pack is not set.`); }
+		if (!this.state.pack) {
+			throw new Error(`Message pack is not set.`);
+		}
 		this.state.session = await this.sender.sendMetadata(this.state.pack.meta);
-		this.msg.progress.recipients[this.state.recipient].idOnDelivery =
-			this.state.session.msgId;
+		this.msg.progress.recipients[this.state.recipient].idOnDelivery = this.state.session.msgId;
 		if (this.state.stage !== "cancel") {
 			this.state.stage = "5-send-objs";
 		}
 	}
 
-	private async setMainObjAsCurrent(
-		mainObjEnc: Encryptor
-	): Promise<void> {
-		if (this.currentObjIndInMeta !== 0) { throw new Error(`This method can be called only when current object index is zero.`); }
+	private async setMainObjAsCurrent(mainObjEnc: Encryptor): Promise<void> {
+		if (this.currentObjIndInMeta !== 0) {
+			throw new Error(`This method can be called only when current object index is zero.`);
+		}
 		this.currentObj = await this.getObjToSend(mainObjEnc);
 	}
 
@@ -389,11 +379,10 @@ export class WIP {
 	 * when main object is set as current (the very first call), and it should be
 	 * missing for all other calls.
 	 */
-	private async getObjToSend(
-		mainObjEnc?: Encryptor
-	): Promise<CurrentObj|undefined> {
-		if (!this.state.objUploads || !this.state.pack) { throw new Error(
-			`Unexpected wip state: some fields are not set.`); }
+	private async getObjToSend(mainObjEnc?: Encryptor): Promise<CurrentObj|undefined> {
+		if (!this.state.objUploads || !this.state.pack) {
+			throw new Error(`Unexpected wip state: some fields are not set.`);
+		}
 		if (this.currentObjIndInMeta >= this.state.objUploads.length) { return; }
 
 		let upload = this.state.objUploads[this.currentObjIndInMeta];
@@ -418,8 +407,7 @@ export class WIP {
 			src = await this.packer.getSrcForMainObj(mainObjEnc, this.cryptor);
 		} else if (upload.header) {
 			const header = base64.open(upload.header);
-			src = await this.packer.getRestartedSrcForObj(
-				objId, header, upload.segsOffset, this.cryptor);
+			src = await this.packer.getRestartedSrcForObj(objId, header, upload.segsOffset, this.cryptor);
 		} else {
 			src = await this.packer.getNewSrcForObj(objId, this.cryptor);
 		}
@@ -436,8 +424,9 @@ export class WIP {
 	}
 
 	private setCurrentObjAsDone(): void {
-		if (!this.state.objUploads || !this.state.pack) { throw new Error(
-			`Unexpected wip state: some fields are not set.`); }
+		if (!this.state.objUploads || !this.state.pack) {
+			throw new Error(`Unexpected wip state: some fields are not set.`);
+		}
 		this.state.objUploads[this.currentObjIndInMeta] = 'done';
 		this.currentObj = undefined;
 		this.currentObjIndInMeta += 1;
@@ -494,9 +483,7 @@ export class WIP {
 		if (!isEndless) {
 			obj.upload.expectedSegsSize = size;
 		}
-		let segsChunk = await obj.src.segSrc.readNext(
-			this.sender.maxChunkSize - header.length
-		);
+		let segsChunk = await obj.src.segSrc.readNext(this.sender.maxChunkSize - header.length);
 
 		// check if we'll be done in this request
 		const segsSize = obj.upload.expectedSegsSize;
@@ -515,8 +502,7 @@ export class WIP {
 		}
 
 		// send bytes
-		await this.sender.sendObj(obj.objId, [ header, segsChunk ],
-			opts, undefined);
+		await this.sender.sendObj(obj.objId, [ header, segsChunk ], opts, undefined);
 		
 		// record progress
 		obj.upload.headerDone = true;
@@ -525,6 +511,7 @@ export class WIP {
 			obj.upload.header = base64.pack(header);
 		}
 		this.updateInfo(header.length + segsChunk.length);
+
 		return isObjDone;
 	}
 
@@ -571,6 +558,7 @@ export class WIP {
 		
 		obj.upload.segsOffset += chunk.length;
 		this.updateInfo(chunk.length);
+
 		return isObjDone;
 	}
 

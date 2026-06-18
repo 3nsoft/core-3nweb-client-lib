@@ -178,7 +178,9 @@ export class MailSender {
 	 * @param msgSize is a total number of bytes for all message objects.
 	 */
 	ensureMsgFitsLimits(msgSize: number): void {
-		if (typeof this.maxMsgLength !== 'number') { throw new Error(`Premature call to ensure size fit: maximum message length isn't set.`); }
+		if (typeof this.maxMsgLength !== 'number') {
+			throw new Error(`Premature call to ensure size fit: maximum message length isn't set.`);
+		}
 		if (msgSize > this.maxMsgLength) {
 				const exc: ASMailSendException =  {
 				runtimeException: true,
@@ -192,9 +194,9 @@ export class MailSender {
 	}
 	
 	private prepareRedirectOrThrowUp(rep: api.sessionStart.RedirectReply): void {
-		if (("string" !== typeof rep.redirect) ||
-				(rep.redirect.length === 0) ||
-				((new URL(rep.redirect)).protocol !== 'https:')) {
+		if (("string" !== typeof rep.redirect)
+		|| (rep.redirect.length === 0)
+		|| ((new URL(rep.redirect)).protocol !== 'https:')) {
 			throw this.badRedirectExc();
 		}
 		// refuse second redirect
@@ -438,8 +440,8 @@ export class MailSender {
 
 		// check and set timestamp for session restarts
 		const now = Date.now();
-		if ((typeof this.sessionRestartTimeStamp === 'number') &&
-				(now <= (this.sessionRestartTimeStamp+TOO_EARLY_RESTART_PERIOD))) {
+		if ((typeof this.sessionRestartTimeStamp === 'number')
+		&& (now <= (this.sessionRestartTimeStamp+TOO_EARLY_RESTART_PERIOD))) {
 			return false;
 		}
 		this.sessionRestartTimeStamp = now;

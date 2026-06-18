@@ -77,9 +77,7 @@ export class Delivery {
 		Object.freeze(this);
 	}
 
-	static async makeAndStart(
-		fs: WritableFS, r: ResourcesForSending
-	): Promise<Delivery> {
+	static async makeAndStart(fs: WritableFS, r: ResourcesForSending): Promise<Delivery> {
 		const delivery = new Delivery(fs, r);
 		delivery.restartDeliveryOfMsgsAtStartup()
 		.catch(err => delivery.r.logError(err));
@@ -119,9 +117,7 @@ export class Delivery {
 		}
 	}
 
-	observeDelivery(
-		id: string, observer: Observer<DeliveryProgress>
-	): () => void {
+	observeDelivery(id: string, observer: Observer<DeliveryProgress>): () => void {
 		const msg = this.msgs.get(id);
 		if (!msg) {
 			if (observer.error) {
@@ -143,11 +139,8 @@ export class Delivery {
 		return () => { subToProgress.unsubscribe(); }
 	}
 
-	observeAllDeliveries(
-		observer: Observer<{ id:string; progress: DeliveryProgress; }>
-	): () => void {
-		const subToProgress = this.allDeliveries$.subscribe(
-			toRxObserver(observer));
+	observeAllDeliveries(observer: Observer<{ id:string; progress: DeliveryProgress; }>): () => void {
+		const subToProgress = this.allDeliveries$.subscribe(toRxObserver(observer));
 		return () => subToProgress.unsubscribe();
 	}
 
@@ -158,27 +151,29 @@ export class Delivery {
 			mSender = await MailSender.fresh(
 				this.r.makeNet(), this.r.asmailResolver,
 				(sendParams.auth ? this.r.address : undefined),
-				recipient, sendParams.invitation);
+				recipient, sendParams.invitation
+			);
 		} else {
-			mSender = await MailSender.fresh(
-				this.r.makeNet(), this.r.asmailResolver, undefined, recipient);
+			mSender = await MailSender.fresh(this.r.makeNet(), this.r.asmailResolver, undefined, recipient);
 		}
 		await mSender.performPreFlight();
 		return mSender.maxMsgLength;
 	}
 
 	private async addMsg(
-		recipients: string[], msgToSend: OutgoingMessage, id: string,
-		opts?: DeliveryOptions
+		recipients: string[], msgToSend: OutgoingMessage, id: string, opts?: DeliveryOptions
 	): Promise<void> {
-		if (typeof id !== 'string') { throw new Error(
-			'Given id for message is not a string'); }
+		if (typeof id !== 'string') {
+			throw new Error('Given id for message is not a string');
+		}
 		const sender = this.r.address;
 		
 		if (!Array.isArray(recipients) || (recipients.length === 0)) {
-			throw new Error(`Given invalid recipients: ${recipients} for message ${id}`); }
-		if (this.msgs.has(id)) { throw new Error(
-			`Message with id ${id} has already been added for delivery`); }
+			throw new Error(`Given invalid recipients: ${recipients} for message ${id}`);
+		}
+		if (this.msgs.has(id)) {
+			throw new Error(`Message with id ${id} has already been added for delivery`);
+		}
 
 		const attachments = Attachments.fromMsg(msgToSend);
 		const localMeta = opts?.localMeta;
@@ -186,8 +181,7 @@ export class Delivery {
 		// save msg, in case delivery should be restarted
 		const msgFS = await this.makeFSForNewMsg(id);
 		const msg = await Msg.forNew(
-			id, msgFS, msgToSend, sender, recipients, this.r,
-			attachments, localMeta, opts?.retryRecipient
+			id, msgFS, msgToSend, sender, recipients, this.r, attachments, localMeta, opts?.retryRecipient
 		);
 
 		// add and schedule
@@ -257,8 +251,7 @@ export class Delivery {
 		}).then(() => { this.performQueuedDelivery(); });
 	}
 
-	private async listMsgs():
-			Promise<{ id: string; info: DeliveryProgress; }[]> {
+	private async listMsgs(): Promise<{ id: string; info: DeliveryProgress; }[]> {
 		const lst: { id: string; info: DeliveryProgress; }[] = [];
 		for (const entry of this.msgs.entries()) {
 			lst.push({
@@ -273,7 +266,9 @@ export class Delivery {
 		const msg = this.msgs.get(id);
 		if (!msg) { return; }
 		if (!msg.isDone()) {
-			if (!cancelSending) { throw new Error(`Cannot remove message ${id}, cause sending is not complete.`); }
+			if (!cancelSending) {
+				throw new Error(`Cannot remove message ${id}, cause sending is not complete.`);
+			}
 			await msg.cancelSending();
 		}
 		this.msgs.delete(id);

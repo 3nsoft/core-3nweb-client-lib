@@ -31,6 +31,7 @@ import { isContainerEmpty, iterFilesIn, iterFoldersIn }
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
 import { cryptoWorkLabels } from '../../../lib-client/cryptor-work-labels';
 import { AsyncRNG } from '../../../lib-common/rng-def';
+import type { Attachments } from '../delivery/common';
 
 type FileByteSource = web3n.files.FileByteSource;
 type FS = web3n.files.FS;
@@ -190,9 +191,7 @@ export class MsgPacker {
 		return id;
 	}
 
-	private async addFileInto(
-		folderInfo: FolderInJSON, fName: string, file: PathInMsg
-	): Promise<void> {
+	private async addFileInto(folderInfo: FolderInJSON, fName: string, file: PathInMsg): Promise<void> {
 		const id = await this.generateObjId();
 		const key = await this.random(KEY_LENGTH);
 		this.allObjs.set(id, { id, file, key });
@@ -204,9 +203,7 @@ export class MsgPacker {
 		};
 	}
 
-	private async addFolderInto(
-		outerFolder: FolderInJSON, fName: string, fs: FS, fsPath: PathInMsg
-	): Promise<void> {
+	private async addFolderInto(outerFolder: FolderInJSON, fName: string, fs: FS, fsPath: PathInMsg): Promise<void> {
 		const folder: FolderInJSON = { nodes: {}, ctime: outerFolder.ctime };
 		const list = await fs.listFolder('.');
 		for (const entry of list) {
@@ -214,7 +211,7 @@ export class MsgPacker {
 			const fPath = appendedPath(fsPath, fName);
 			if (entry.isFile) {
 				await fs.readonlyFile(fName);
-				this.addFileInto(folder, fName, fPath);
+				await this.addFileInto(folder, fName, fPath);
 			} else if (entry.isFolder) {
 				const f = await fs.readonlySubRoot(fName);
 				await this.addFolderInto(folder, fName, f, fPath);
@@ -283,13 +280,14 @@ export class MsgPacker {
 	 * @param name
 	 * @param value
 	 */
-	setSection<N extends keyof MsgEnvelope>(
-		name: N, value: MsgEnvelope[N]
-	): void {
+	setSection<N extends keyof MsgEnvelope>(name: N, value: MsgEnvelope[N]): void {
 		this.throwIfAlreadyPacked();
-		if (isManagedField(name)) { throw new Error(
-			"Cannot directly set message field '"+name+"'."); }
-		if ((value === undefined) || (value === null)) { return; }
+		if (isManagedField(name)) {
+			throw new Error("Cannot directly set message field '"+name+"'.");
+		}
+		if ((value === undefined) || (value === null)) {
+			return;
+		}
 		this.main[name] = JSON.parse(JSON.stringify(value));
 	}
 
@@ -302,11 +300,10 @@ export class MsgPacker {
 	 */
 	setEstablishedKeyPairInfo(pid: string, msgCount: number): void {
 		this.throwIfAlreadyPacked();
-		if (this.meta) { throw new Error(
-			"Message metadata has already been set."); }
-		this.meta = <MetaForEstablishedKeyPair> {
-			pid: pid,
-		};
+		if (this.meta) {
+			throw new Error("Message metadata has already been set.");
+		}
+		this.meta = <MetaForEstablishedKeyPair> { pid };
 		this.main['Flow Params'].msgCount = msgCount;
 		Object.freeze(this.meta);
 	}
@@ -330,13 +327,11 @@ export class MsgPacker {
 	 * This value goes into flow parameters section that sits in encrypted main
 	 * part of the message.
 	 */
-	setNewKeyInfo(
-		recipientKid: string, senderPKey: string,
-		pkeyCerts: PKeyCertChain, msgCount: number
-	): void {
+	setNewKeyInfo(recipientKid: string, senderPKey: string, pkeyCerts: PKeyCertChain, msgCount: number): void {
 		this.throwIfAlreadyPacked();
-		if (this.meta) { throw new Error(
-			"Message metadata has already been set."); }
+		if (this.meta) {
+			throw new Error("Message metadata has already been set.");
+		}
 		this.meta = <MetaForNewKey> {
 			recipientKid: recipientKid,
 			senderPKey: senderPKey,
@@ -355,47 +350,45 @@ export class MsgPacker {
 		this.main['Flow Params'].nextSendingParams = params;
 	}
 
-	async setAttachments(
-		att: { fs: FS|undefined; container: AttachmentsContainer|undefined; }
-	): Promise<void> {
+	async setAttachments({ fs, container }: Attachments): Promise<void> {
 		this.throwIfAlreadyPacked();
-		if (this.hasAttachments) { throw new Error(
-			`Attachments are already set.`); }
+		if (this.hasAttachments) {
+			throw new Error(`Attachments are already set.`);
+		}
 
 		// attachments folder json to insert into main
 		const attachments: FolderInJSON = { nodes: {}, ctime: Date.now() };
 
 		// populate attachments json
 		const path: PathInMsg = { start: 'attachments', path: [] };
-		if (att.container && !isContainerEmpty(att.container)) {
-			for (const f of iterFilesIn(att.container)) {
+		if (container && !isContainerEmpty(container)) {
+			for (const f of iterFilesIn(container)) {
 				const filePath = appendedPath(path, f.fileName);
-				this.addFileInto(attachments, f.fileName, filePath);
+				await this.addFileInto(attachments, f.fileName, filePath);
 			}
-			for (const f of iterFoldersIn(att.container)) {
+			for (const f of iterFoldersIn(container)) {
 				const fsPath = appendedPath(path, f.folderName);
-				await this.addFolderInto(
-					attachments, f.folderName, f.folder, fsPath);
+				await this.addFolderInto(attachments, f.folderName, f.folder, fsPath);
 			}
-			this.attachmentsCont = att.container;
+			this.attachmentsCont = container;
 			this.hasAttachments = true;
-		} else if (att.fs) {
-			const list = await att.fs.listFolder('.');
+		} else if (fs) {
+			const list = await fs.listFolder('.');
 			if (list.length > 0) {
 				for (const entry of list) {
 					const fName = entry.name;
 					const fPath = appendedPath(path, fName)
 					if (entry.isFile) {
-						this.addFileInto(attachments, fName, fPath);
+						await this.addFileInto(attachments, fName, fPath);
 					} else if (entry.isFolder) {
-						const f = await att.fs.readonlySubRoot(fName);
+						const f = await fs.readonlySubRoot(fName);
 						await this.addFolderInto(attachments, fName, f, fPath);
 					} else {
 						// note that links are ignored.
 						continue;
 					}
 				}
-				this.attachmentsFS = att.fs;
+				this.attachmentsFS = fs;
 				this.hasAttachments = true;
 			}
 		} else {
@@ -409,19 +402,22 @@ export class MsgPacker {
 	}
 
 	private throwupOnMissingParts() {
-		if (!this.meta) { throw new Error("Message meta is not set"); }
-		if (!this.wasBodySet) { throw new Error("Message Body is not set."); }
-		if ((this.meta as MetaForNewKey).senderPKey &&
-				!this.main['Flow Params'].introCerts) { throw new Error(
-			"Sender's key certification is missing."); }
+		if (!this.meta) {
+			throw new Error("Message meta is not set");
+		}
+		if (!this.wasBodySet) {
+			throw new Error("Message Body is not set.");
+		}
+		if ((this.meta as MetaForNewKey).senderPKey && !this.main['Flow Params'].introCerts) {
+			throw new Error("Sender's key certification is missing.");
+		}
 	}
 
-	async getSrcForMainObj(
-		msgKeyEnc: Encryptor, cryptor: AsyncSBoxCryptor
-	): Promise<ObjSource> {
+	async getSrcForMainObj(msgKeyEnc: Encryptor, cryptor: AsyncSBoxCryptor): Promise<ObjSource> {
 		const obj = this.allObjs.get(this.mainObjId);
-		if (!obj || !obj.json) { throw new Error(
-			`Missing or malformed main object.`); }
+		if (!obj || !obj.json) {
+			throw new Error(`Missing or malformed main object.`);
+		}
 
 		const msgKeyPack = await msgKeyEnc.pack(obj.key);
 		const bytes = utf8.pack(JSON.stringify(obj.json));
@@ -443,16 +439,16 @@ export class MsgPacker {
 			if (this.attachmentsCont) {
 				const fName = path.path[0];
 				if (path.path.length === 1) {
-					const file = (this.attachmentsCont.files ?
-						this.attachmentsCont.files[fName] : undefined);
-					if (!file) { throw new Error(
-						`File ${fName} is not found in attachments.`); }
+					const file = (this.attachmentsCont.files ? this.attachmentsCont.files[fName] : undefined);
+					if (!file) {
+						throw new Error(`File ${fName} is not found in attachments.`);
+					}
 					return file.getByteSource();
 				} else {
-					const fs = (this.attachmentsCont.folders ?
-						this.attachmentsCont.folders[fName] : undefined);
-					if (!fs) { throw new Error(
-						`Folder ${fName} is not found in attachments.`); }
+					const fs = (this.attachmentsCont.folders ? this.attachmentsCont.folders[fName] : undefined);
+					if (!fs) {
+						throw new Error(`Folder ${fName} is not found in attachments.`);
+					}
 					const filePath = path.path.slice(1).join('/');
 					return fs.getByteSource(filePath);
 				}
@@ -467,19 +463,17 @@ export class MsgPacker {
 		}
 	}
 
-	getNewSrcForObj(
-		objId: string, cryptor: AsyncSBoxCryptor
-	): Promise<ObjSource> {
+	getNewSrcForObj(objId: string, cryptor: AsyncSBoxCryptor): Promise<ObjSource> {
 		return this.getSrcForNonMainObj(objId, undefined, cryptor);
 	}
 
 	async getRestartedSrcForObj(
-		objId: string, header: Uint8Array, offset: number,
-		cryptor: AsyncSBoxCryptor
+		objId: string, header: Uint8Array, offset: number, cryptor: AsyncSBoxCryptor
 	): Promise<ObjSource> {
 		const src = await this.getSrcForNonMainObj(objId, header, cryptor);
-		if (!src.segSrc.seek) { throw new Error(
-			`No seek method on segment's source.`); }
+		if (!src.segSrc.seek) {
+			throw new Error(`No seek method on segment's source.`);
+		}
 		await src.segSrc.seek(offset);
 		return src;
 	}
@@ -487,11 +481,13 @@ export class MsgPacker {
 	private async getSrcForNonMainObj(
 		objId: string, header: Uint8Array|undefined, cryptor: AsyncSBoxCryptor
 	): Promise<ObjSource> {
-		if (objId === this.mainObjId) { throw new Error(
-			`Id for main object is given.`); }
+		if (objId === this.mainObjId) {
+			throw new Error(`Id for main object is given.`);
+		}
 		const obj = this.allObjs.get(objId);
-		if (!obj) { throw new Error(
-			`Object ${objId} is not found in the message.`); }
+		if (!obj) {
+			throw new Error(`Object ${objId} is not found in the message.`);
+		}
 
 		// make object segments writer
 		let segWriter: SegmentsWriter;
@@ -515,8 +511,7 @@ export class MsgPacker {
 			const bytes = utf8.pack(JSON.stringify(obj.json));
 			src = await makeObjSourceFromArrays(bytes, segWriter);
 		} else if (obj.file) {
-			const byteSrc = fileSrcToByteSrc(
-				await this.getFileByteSrc(obj.file));
+			const byteSrc = fileSrcToByteSrc(await this.getFileByteSrc(obj.file));
 			src = await makeEncryptingObjSource(byteSrc, segWriter);
 		} else if (obj.folder) {
 			const folderBytes = serializeFolderInfo(obj.folder);
@@ -527,11 +522,12 @@ export class MsgPacker {
 		return src;
 	}
 
-	async pack(): Promise<PackJSON> {
-		if (this.readyPack) { return this.readyPack; }
+	pack(): PackJSON {
+		if (this.readyPack) {
+			return this.readyPack;
+		}
 		this.throwupOnMissingParts();
-		const meta: delivApi.msgMeta.Request =
-			JSON.parse(JSON.stringify(this.meta));
+		const meta: delivApi.msgMeta.Request = JSON.parse(JSON.stringify(this.meta));
 		meta.objIds = [];
 		const objs: { [objId: string]: MsgObj; } = {};
 		for (const objEntry of this.allObjs) {

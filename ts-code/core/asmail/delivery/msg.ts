@@ -52,10 +52,8 @@ function hasError(progress: DeliveryProgress): boolean {
 	return false;
 }
 
-async function estimatedPackedSize(msgToSend: OutgoingMessage,
-		attachments?: Attachments): Promise<number> {
-	let totalSize = estimatePackedSizeOf(
-		utf8.pack(JSON.stringify(msgToSend)).length);
+async function estimatedPackedSize(msgToSend: OutgoingMessage, attachments?: Attachments): Promise<number> {
+	let totalSize = estimatePackedSizeOf(utf8.pack(JSON.stringify(msgToSend)).length);
 	if (attachments) {
 		totalSize += await attachments.estimatedPackedSize();
 	}
@@ -69,7 +67,6 @@ export class Msg {
 
 	private readonly sendingProc = new SingleProc();
 	private completionPromise: Deferred<DeliveryProgress>|undefined = undefined;
-	// private readonly progressSavingProc = new SingleProc();
 	private cancelled = false;
 	private sender: string = (undefined as any);
 	private recipients: string[] = (undefined as any);
