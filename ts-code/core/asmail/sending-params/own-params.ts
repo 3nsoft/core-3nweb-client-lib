@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018, 2025 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,17 +15,15 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
+// import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
 import { SendingParams } from '../msg/common';
-import { copy as jsonCopy } from '../../../lib-common/json-utils';
+import { copy as jsonCopy, deepEqual } from '../../../lib-common/json-utils';
 import { SendingParamsHolder } from './index';
-import { ParamOnServer } from '../../../lib-client/asmail/service-config';
+// import { ParamOnServer } from '../../../lib-client/asmail/service-config';
 import { AnonymousInvites } from './invitations-anon';
+import { initSyncedFile, watchAndApplyChangesFromOtherDevices } from '../../../lib-common/dataset-sync/single-file';
 
-type ExposedFuncs = SendingParamsHolder['thisSide'];
-
-type WritableFile = web3n.files.WritableFile;
-type FileEvent = web3n.files.FileEvent;
+type WritableFS = web3n.files.WritableFS;
 
 interface ParamsForAcceptingMsgs {
 	address: string;
@@ -41,129 +39,194 @@ interface PersistedJSON {
 const DEFAULT_INVITE_LABEL = 'Default';
 const DEFAULT_INVITE_MAX_MSG_SIZE = 1024*1024*1024;
 
-/**
- * Instance of this class keeps track of sending parameters, which user gives to
- * other correspondents for sending messages back. These parameters may have
- * invitation tokens, and this class uses config service to register tokens on
- * a server.
- */
-export class OwnSendingParams {
+export type OwnSendingParams = Awaited<ReturnType<typeof makeOwnSendingParams>>;
 
-	private readonly params = new Map<string, ParamsForAcceptingMsgs>();
-	private defaultParams: SendingParams|undefined = undefined;
-	private readonly fileProc: JsonFileProc<PersistedJSON>;
+export async function makeOwnSendingParams(
+	fs: WritableFS, fileName: string, anonInvites: AnonymousInvites
+): Promise<SendingParamsHolder['thisSide'] & { close: () => Promise<void>; }> {
 
-	private constructor(
-		private readonly anonInvites: AnonymousInvites
-	) {
-		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
-		Object.seal(this);
+	let params: Record<string, ParamsForAcceptingMsgs> = {};
+	let defaultParams: SendingParams|undefined = undefined;
+
+	const {
+		file: paramsFile, changeProc
+	} = await initSyncedFile(
+		fs, fileName,
+		newFile => newFile.writeJSON(currentToFileJSON())
+	);
+
+	if (!paramsFile.isNew) {
+		({ defaultParams, params } = parseFromJSON(await paramsFile.readJSON()));
 	}
 
-	static async makeAndInit(
-		file: WritableFile, anonInvites: AnonymousInvites
-	): Promise<OwnSendingParams> {
-		const ownParams = new OwnSendingParams(anonInvites);
-		await ownParams.fileProc.start(file, () => ownParams.toFileJSON());
-		await ownParams.absorbChangesFromFile();
-		if (!ownParams.defaultParams) {
-			await ownParams.setDefaultParams();
-		}
-		return ownParams;
+	const {
+		stopFileWatching, triggerUpload
+	} = watchAndApplyChangesFromOtherDevices(
+		paramsFile, changeProc, onChangeFromOtherDevices, doOnConflict
+	);
+
+	if (paramsFile.isNew) {
+		await setDefaultParams();
 	}
 
-	private async setDefaultParams(): Promise<void> {
-		await this.fileProc.order.startOrChain(async () => {
-			const invites = this.anonInvites.getAll();
+	async function setDefaultParams(): Promise<void> {
+		await changeProc.startOrChain(async () => {
+			const invites = anonInvites.getAll();
 			const defaultInvite = invites.get(DEFAULT_INVITE_LABEL);
 			if (defaultInvite) {
-				this.defaultParams = {
+				defaultParams = {
 					timestamp: 0,
 					invitation: defaultInvite.invite
 				};
 			} else {
-				const invitation = await this.anonInvites.create(
+				const invitation = await anonInvites.create(
 					DEFAULT_INVITE_LABEL, DEFAULT_INVITE_MAX_MSG_SIZE
 				);
-				this.defaultParams = {
+				defaultParams = {
 					timestamp: 0,
 					invitation
 				};
 			}
-			await this.persist();
+			await persist();
 		});
 	}
 
-	private toFileJSON(): PersistedJSON {
+	function currentToFileJSON(): PersistedJSON {
 		return {
-			default: this.defaultParams,
-			senderSpecific: Array.from(this.params.values())
+			default: defaultParams,
+			senderSpecific: Object.values(params)
 		};
 	}
 
-	private async persist(): Promise<void> {
-		await this.fileProc.save(this.toFileJSON(), false);
+	async function persist(): Promise<void> {
+		await paramsFile.writeJSON(currentToFileJSON());
+		triggerUpload();
 	}
 
-	private async absorbChangesFromFile(): Promise<void> {
-		const { json } = await this.fileProc.get(false);
-		// we may add checks to json data
-		this.params.clear();
-		json.senderSpecific.forEach(p => this.params.set(p.address, p));
-		this.defaultParams = json.default;
-	}
-
-	protected async onFileEvent(ev: FileEvent): Promise<void> {
-		if (ev.src === 'local') { return; }
-		if (ev.type === 'removed') { throw new Error(
-			`Unexpected removal of file with invites info`); }
-		if (ev.type !== 'file-change') { return; }
-		await this.fileProc.order.startOrChain(() => this.absorbChangesFromFile());
-	}
-
-	getFor: ExposedFuncs['getUpdated'] = async (address) => {
-		let p = this.params.get(address);
-		if (p) {
-			if (p.suggested) {
-				return p.suggested;
-			} else if (p.inUse) {
-				return;	// undefined, cause params are known to correspondent,
-							// and there are no params to suggest for future use.
-			}
+	function parseFromJSON(json: PersistedJSON) {
+		const params = {} as Record<string, ParamsForAcceptingMsgs>;
+		for (const p of json.senderSpecific) {
+			params[p.address] = p;
 		}
-
-		// XXX Or, instead, should we set defaultParams?
-		if (!this.defaultParams) { return; }
-
-		p = {
-			address,
-			suggested: jsonCopy(this.defaultParams)
+		return {
+			defaultParams: json.default,
+			params
 		};
-		p.suggested!.timestamp = Date.now();
-		this.params.set(p.address, p);
-		await this.fileProc.order.startOrChain(() => this.persist());
+	}
 
-		return p.suggested;
-	};
+	function onChangeFromOtherDevices(newVersion: number): Promise<void> {
+		return changeProc.startOrChain(async () => {
+			const { version, json } = await paramsFile.v!.readJSON<PersistedJSON>();
+			if (version === newVersion) {
+				({ defaultParams, params } = parseFromJSON(json));
+			}
+		});
+	}
 
-	setAsInUse: ExposedFuncs['setAsUsed'] = async (address, invite) => {
-		await this.fileProc.order.startOrChain(async () => {
-			const p = this.params.get(address);
-			if (!p || !p.suggested) { return; }
-			if (p.suggested.invitation !== invite) { return; }
+	function doOnConflict() {
+		return changeProc.startOrChain(async () => {
+			const { remote, state } = await paramsFile.v!.sync!.status(false);
+			if ((state !== 'conflicting') || !remote?.latest) {
+				return;
+			}
+			const onRemote = parseFromJSON(
+				(await paramsFile.v!.readJSON<PersistedJSON>({ remoteVersion: remote.latest })).json
+			);
+
+			let uploadLocal = false;
+			if (!onRemote.defaultParams && defaultParams) {
+				uploadLocal = true;
+			} else if (onRemote.defaultParams && !defaultParams) {
+				defaultParams = onRemote.defaultParams;
+			} else if (onRemote.defaultParams && defaultParams) {
+				if (onRemote.defaultParams.timestamp >= defaultParams.timestamp) {
+					defaultParams = onRemote.defaultParams;
+				} else {
+					uploadLocal = true;
+				}
+			}
+
+			for (const [addr, p] of Object.entries(params)) {
+				const remP = onRemote.params[addr];
+				if (!remP) {
+					uploadLocal = true;
+					continue;
+				}
+				if (deepEqual(p, remP)) {
+					continue;
+				}
+				const tsP = Math.max(p?.inUse?.timestamp ?? 0, p?.suggested?.timestamp ?? 0);
+				const tsRem = Math.max(remP?.inUse?.timestamp ?? 0, remP?.suggested?.timestamp ?? 0);
+				if (tsP > tsRem) {
+					uploadLocal = true;
+				} else if (tsP < tsRem) {
+					params[addr] = remP;
+				} else if (tsP !== 0) {
+					if (remP.inUse?.timestamp === tsP) {
+						params[addr] = remP;
+					} else if (p.inUse?.timestamp === tsP) {
+						uploadLocal = true;
+					}
+				}
+			}
+
+			if (uploadLocal) {
+				await paramsFile.writeJSON(currentToFileJSON());
+				await paramsFile.v!.sync!.upload({ uploadVersion: remote.latest + 1 });
+			} else {
+				await paramsFile.v!.sync!.adoptRemote({ remoteVersion: remote.latest })
+			}
+		});
+	}
+
+	async function getUpdated(address: string) {
+		return changeProc.startOrChain(async () => {
+			let p = params[address];
+			if (p) {
+				if (p.suggested) {
+					return p.suggested;
+				} else if (p.inUse) {
+					return;	// undefined, cause params are known to correspondent,
+								// and there are no params to suggest for future use.
+				}
+			}
+
+			// XXX Or, instead, should we set defaultParams?
+			if (!defaultParams) { return; }
+
+			p = {
+				address,
+				suggested: jsonCopy(defaultParams)
+			};
+			p.suggested!.timestamp = Date.now();
+			params[p.address] = p;
+			await persist();
+			return p.suggested;
+		});
+	}
+
+	function setAsUsed(address: string, invite: string) {
+		return changeProc.startOrChain(async () => {
+			const p = params[address];
+			if (!p?.suggested || (p.suggested.invitation !== invite)) {
+				return;
+			}
 			p.inUse = p.suggested;
 			p.suggested = undefined;
-			await this.persist();
+			await persist();
 		});
 	}
 
-	async close(): Promise<void> {
-		await this.anonInvites.close();
-		await this.fileProc.close();
+	async function close(): Promise<void> {
+		anonInvites.close();
+		stopFileWatching();
 	}
 
+	return {
+		close,
+		getUpdated,
+		setAsUsed
+	};
 }
-Object.freeze(OwnSendingParams.prototype);
-Object.freeze(OwnSendingParams);
 
 Object.freeze(exports);

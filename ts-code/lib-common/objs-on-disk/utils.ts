@@ -137,9 +137,7 @@ export async function streamToObjFile(
 	return deferred.promise;
 }
 
-export function chunksInOrderedStream(
-	len: number, headerLen: undefined|number, segsOfs: number
-): Chunk[] {
+export function chunksInOrderedStream(len: number, headerLen: undefined|number, segsOfs: number): Chunk[] {
 	const chunks: Chunk[] = [];
 	if (typeof headerLen === 'number') {
 		assert(len >= headerLen);
@@ -153,8 +151,7 @@ export function chunksInOrderedStream(
 
 export type ObjPipe = (outStream: NodeJS.WritableStream) => Promise<void>;
 
-export type GetObjFile =
-	(objId: string|null, version: number) => Promise<ObjVersionFile>;
+export type GetObjFile = (objId: string|null, version: number) => Promise<ObjVersionFile>;
 
 export function makeObjPipe(
 	file: ObjVersionFile, header: boolean, segsOfs: number, segsLen: number,

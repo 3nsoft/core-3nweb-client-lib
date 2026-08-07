@@ -165,8 +165,7 @@ export class LocalObj {
 			`Version ${version} already exists in object ${this.objId}`); }
 		const fPath = this.path(version);
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
-			this.objId, version, fPath, encSub, undefined,
-			this.objSegsGetterFromDisk
+			this.objId, version, fPath, encSub, undefined, this.objSegsGetterFromDisk
 		);
 		try {
 			await lastValueFrom(write$);

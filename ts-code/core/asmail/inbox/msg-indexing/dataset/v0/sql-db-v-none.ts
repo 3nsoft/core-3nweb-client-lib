@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 3NSoft Inc.
+ Copyright (C) 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,16 +15,23 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-export function appendArray<T>(arr: T[], elems: T[]|T|undefined): T[] {
-	if (elems !== undefined) {
-		if (Array.isArray(elems)) {
-			arr.push(...elems);
-		} else {
-			arr.push(elems);
-		}
-	}
-	return arr;
+import { objectFromQueryExecResult } from '../../../../../../lib-sqlite-on-3nstorage';
+import { Database } from '../../../../../../lib-sqlite-on-3nstorage/sqljs';
+
+export interface MsgIndexDbVNoneEntry {
+	msg_id: string;
+	msg_type: string;
+	delivery_ts: number;
+	key: Uint8Array;
+	key_status: string;
+	main_obj_header_ofs: number;
+	remove_after: number;
 }
 
-
-Object.freeze(exports);
+export function getAllRecordsFromVersionNone(db: Database): MsgIndexDbVNoneEntry[] {
+	const result = db.exec(
+		`--sql
+		SELECT * FROM inbox_index`
+	)[0];
+	return (result ? objectFromQueryExecResult<MsgIndexDbVNoneEntry>(result) : []);
+}

@@ -29,9 +29,7 @@ export function exposeKeyringsCAP(cap: Keyrings): ExposedObj<Keyrings> {
 	};
 }
 
-function exposeIntroKey(
-	cap: Keyrings['introKeyOnASMailServer']
-): ExposedObj<IntroKeyOnASMailServer> {
+function exposeIntroKey(cap: Keyrings['introKeyOnASMailServer']): ExposedObj<IntroKeyOnASMailServer> {
 	return {
 		getCurrent: wrapReqReplySrvMethod(cap, 'getCurrent'),
 		makeAndPublishNew: wrapReqReplySrvMethod(cap, 'makeAndPublishNew'),
@@ -45,28 +43,18 @@ function callIntroKeyOnASMailServer<M extends keyof IntroKeyOnASMailServer>(
 	return makeReqRepObjCaller(caller, objPath, method);
 }
 
-function makeIntroKeyCaller(
-	caller: Caller, objPath: string[]
-): IntroKeyOnASMailServer {
+function makeIntroKeyCaller(caller: Caller, objPath: string[]): IntroKeyOnASMailServer {
 	return {
 		getCurrent: callIntroKeyOnASMailServer(caller, objPath, 'getCurrent'),
-		makeAndPublishNew: callIntroKeyOnASMailServer(
-			caller, objPath, 'makeAndPublishNew'
-		),
+		makeAndPublishNew: callIntroKeyOnASMailServer(caller, objPath, 'makeAndPublishNew'),
 		remove: callIntroKeyOnASMailServer(caller, objPath, 'remove'),
 	};
 }
 
-export function makeKeyringsCaller(
-	caller: Caller, objPath: string[]
-): Keyrings {
+export function makeKeyringsCaller(caller: Caller, objPath: string[]): Keyrings {
 	return {
-		introKeyOnASMailServer: makeIntroKeyCaller(
-			caller, objPath.concat('introKeyOnASMailServer')
-		),
-		getCorrespondentKeys: makeReqRepFuncCaller(
-			caller, objPath.concat('getCorrespondentKeys')
-		)
+		introKeyOnASMailServer: makeIntroKeyCaller(caller, objPath.concat('introKeyOnASMailServer')),
+		getCorrespondentKeys: makeReqRepFuncCaller(caller, objPath.concat('getCorrespondentKeys'))
 	};
 }
 

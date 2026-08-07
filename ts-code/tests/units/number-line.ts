@@ -15,8 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { addToNumberLineSegments } from "../../core/asmail/delivery/common";
 import { deepEqual } from "../../lib-common/json-utils";
+import { addToNumberLineSegments } from "../../lib-common/number-line";
 
 describe(`Function addToNumberLineSegments`, () => {
 

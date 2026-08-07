@@ -42,9 +42,7 @@ export class ServicesRunner {
 	}
 
 	async start(): Promise<void> {
-		const { stop } = await serverMod.mock.startOnLocalhost(
-			this.dataFolder, this.port, this.domains
-		);
+		const { stop } = await serverMod.mock.startOnLocalhost(this.dataFolder, this.port, this.domains);
 		this.stopFn = stop;
 	}
 

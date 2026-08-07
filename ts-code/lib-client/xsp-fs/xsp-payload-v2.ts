@@ -396,10 +396,8 @@ class WritablePayloadV2 implements WritablePayload {
 	private async spliceContent(
 		contentOfs: number, del: number, ins?: Uint8Array
 	): Promise<void> {
-		assert(Number.isInteger(contentOfs) && (contentOfs >= 0),
-			`Content offset should be a non-negative integer`);
-		assert(Number.isInteger(del) && (del >= 0),
-			`Number of bytes to delete should be a non-negative integer`);
+		assert(Number.isInteger(contentOfs) && (contentOfs >= 0), `Content offset should be a non-negative integer`);
+		assert(Number.isInteger(del) && (del >= 0), `Number of bytes to delete should be a non-negative integer`);
 		if (!this.sink) { this.throwOnNoSink(); }
 		try {
 
@@ -661,8 +659,7 @@ class WritablePayloadV2 implements WritablePayload {
 		if (!this.sink) { this.throwOnNoSink(); }
 		// locate sections in cut area
 		if (this.sectionsInSink.length === 0) { return; }
-		let fstNoCutSectionInd = this.sectionsInSink
-		.findIndex(s => (s.ofsInSrc >= this.cutonlyAreaEnd));
+		let fstNoCutSectionInd = this.sectionsInSink.findIndex(s => (s.ofsInSrc >= this.cutonlyAreaEnd));
 		if (fstNoCutSectionInd < 0) {
 			fstNoCutSectionInd = this.sectionsInSink.length;
 		}
@@ -787,8 +784,7 @@ class WritablePayloadV2 implements WritablePayload {
 			await this.syncProc.startOrChain(() => this.replaceXAttrs(xattrs));
 		}
 		return {
-			done: err => this.syncProc.startOrChain(() =>
-				this.completeWriting(err)),
+			done: err => this.syncProc.startOrChain(() => this.completeWriting(err)),
 
 			getSize: () => this.syncProc.startOrChain(async () => {
 				return this.contentLen;
@@ -811,8 +807,7 @@ class WritablePayloadV2 implements WritablePayload {
 				};
 			}),
 
-			splice: (pos, del, bytes) => this.syncProc.startOrChain(() =>
-				this.spliceContent(pos, del, bytes)),
+			splice: (pos, del, bytes) => this.syncProc.startOrChain(() => this.spliceContent(pos, del, bytes)),
 
 			truncate: size => this.syncProc.startOrChain(async () => {
 				assert(Number.isInteger(size) && (size >= 0),

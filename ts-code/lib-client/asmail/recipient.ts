@@ -38,6 +38,17 @@ export function makeMsgNotFoundException(msgId: string): InboxException {
 	return exc;
 }
 
+export function makeFailToDecryptMsgException(msgId: string): InboxException {
+	const exc: InboxException = {
+		runtimeException: true,
+		type: 'inbox',
+		msgId,
+		failToDecrypt: true,
+		stack: getStackHere(1)
+	};
+	return exc;
+}
+
 export function makeObjNotFoundException(msgId: string, objId: string): InboxException {
 	const exc: InboxException = {
 		runtimeException: true,

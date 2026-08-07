@@ -40,39 +40,36 @@ export async function initSysFolders(root: WritableFS): Promise<void> {
 	for (const sysFolder of Object.values(sysFolders)) {
 		await root.makeFolder(sysFolder);
 		if (root.v?.sync) {
-			// XXX must add work with not-online condition
+			// XXX need not-online condition, but it runs only on first install, when network is required
 			await root.v.sync.upload(sysFolder);
 		}
 	}
 	if (root.v?.sync) {
-		// XXX must add work with not-online condition
+		// XXX need not-online condition, but it runs only on first install, when network is required
 		await root.v.sync.upload('.');
 	}
 }
 
-export async function userFilesOnDevice(): Promise<WritableFS> {
+export async function userFilesOnDevice(): Promise<FSItem> {
 	if (process.platform === 'win32') {
-		return DeviceFS.makeWritable(process.env.USERPROFILE!);
+		if (process.env.USERPROFILE) {
+			return {
+				isFolder: true,
+				item: await DeviceFS.makeWritable(process.env.USERPROFILE)
+			};
+		}
 	} else {
-		return DeviceFS.makeWritable(process.env.HOME!);
+		if (process.env.HOME) {
+			return {
+				isFolder: true,
+				item: await DeviceFS.makeWritable(process.env.HOME)
+			};
+		}
 	}
-}
-
-export async function sysFilesOnDevice(): Promise<FSItem> {
-	const c = makeFSCollection();
-	if (process.platform === 'win32') {
-		const sysDrive = process.env.SystemDrive!;
-		await c.set!(sysDrive, {
-			isFolder: true,
-			item: await DeviceFS.makeWritable(sysDrive)
-		});
-	} else {
-		await c.set!('', {
-			isFolder: true,
-			item: await DeviceFS.makeWritable('/')
-		});
-	}
-	return { isCollection: true, item: c };
+	return {
+		isCollection: true,
+		item: makeFSCollection()
+	};
 }
 
 

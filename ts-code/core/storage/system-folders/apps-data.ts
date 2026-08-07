@@ -41,8 +41,7 @@ export class AppDataFolders {
 	}
 
 	static async make(rootFS: WritableFS): Promise<AppDataFolders> {
-		const fs = await rootFS.writableSubRoot(
-			sysFolders.appData, { create: false });
+		const fs = await rootFS.writableSubRoot(sysFolders.appData, { create: false });
 		return new AppDataFolders(fs);
 	}
 
@@ -83,8 +82,12 @@ export class AppDataFolders {
 					throw exc;
 				}
 			}
+
 			const fs = await this.fs.writableSubRoot(folder, { create: false });
-			await this.uploadAfterCreationOf(folder);
+
+			await this.fs.v!.sync!.upload(folder);
+			await this.fs.v!.sync!.upload('');
+
 			return fs;
 		});
 	}
@@ -94,12 +97,6 @@ export class AppDataFolders {
 		if (state === 'behind') {
 			await this.fs.v!.sync!.adoptRemote('');
 		}
-	}
-
-	private async uploadAfterCreationOf(folder: string): Promise<void> {
-		// XXX must add work with not-online condition
-		await this.fs.v!.sync!.upload(folder);
-		await this.fs.v!.sync!.upload('');
 	}
 
 	private startSyncProc(): void {

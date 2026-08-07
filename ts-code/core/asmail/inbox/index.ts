@@ -17,13 +17,12 @@
 
 import { StorageGetter } from '../../../lib-client/xsp-fs/common';
 import { ConnectException } from '../../../lib-common/exceptions/http';
-import { errWithCause } from '../../../lib-common/exceptions/error';
 import { NamedProcs } from '../../../lib-common/processes/synced';
-import { MailRecipient, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
+import { MailRecipient, makeFailToDecryptMsgException, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
 import { ServiceLocator } from '../../../lib-client/service-locator';
 import { OpenedMsg, openMsg } from '../msg/opener';
 import { MsgKeyInfo } from '../../keyring';
-import { MsgIndex } from './msg-indexing';
+import { makeMsgIndex } from './msg-indexing';
 import { fsForAttachments } from './attachments/fs';
 import { areAddressesEqual } from '../../../lib-common/canonical-address';
 import { checkAndExtractPKeyWithAddress } from '../key-verification';
@@ -40,7 +39,7 @@ import { MsgMeta } from '../../../lib-common/service-api/asmail/retrieval';
 import { MsgOnDisk } from './msg-on-disk';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { NetClient } from '../../../lib-client/request-utils';
-import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../../lib-client/fs-utils/fs-sync-utils';
+import { getOrMakeDirOnInit } from '../../../lib-client/fs-utils/fs-sync-utils';
 import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type MsgInfo = web3n.asmail.MsgInfo;
@@ -128,225 +127,187 @@ const MSG_INDEX_FOLDER = 'msg-index';
  * messages have not been removed via direct action or due to expiry.
  * This object is also responsible for expiring messages on the server.
  */
-export class InboxOnServer {
+export type InboxOnServer = Awaited<ReturnType<typeof makeInboxOnServer>>;
 
-	private readonly inboxEvents: InboxEvents;
-	private readonly procs = new NamedProcs();
-	private readonly recentlyOpenedMsgs = makeTimedCache<string, OpenedMsg>(60*1000);
+export async function makeInboxOnServer(
+	cachePath: string, syncedFS: WritableFS, localFS: WritableFS, r: ResourcesForReceiving
+) {
 
-	private constructor(
-		private readonly r: R,
-		private readonly msgReceiver: MailRecipient,
-		private readonly storages: StorageGetter,
-		private readonly cryptor: AsyncSBoxCryptor,
-		private readonly random: AsyncRNG,
-		private readonly downloader: MsgDownloader,
-		private readonly cache: CachedMessages,
-		private readonly index: MsgIndex,
-		private readonly logError: LogError
-	) {
-		this.inboxEvents = new InboxEvents(
-			this.msgReceiver, this.getMsg.bind(this), this.listNewMsgs.bind(this), this.removeMsg.bind(this),
-			this.logError
-		);
-		Object.seal(this);
+	const procs = new NamedProcs();
+	const recentlyOpenedMsgs = makeTimedCache<string, OpenedMsg>(60*1000);
+	const {
+		getStorages, cryptor, random, logError,
+	} = r;
+
+	ensureCorrectFS(syncedFS, 'synced', true);
+	const indexSyncedFS = await getOrMakeDirOnInit(syncedFS, MSG_INDEX_FOLDER);
+	const indexLocalFS = await localFS.writableSubRoot(MSG_INDEX_FOLDER);
+
+	const msgReceiver = new MailRecipient(
+		r.address, r.getSigner, () => r.asmailResolver(r.address), r.makeNet()
+	);
+	const downloader = new MsgDownloader(msgReceiver);
+	const cache = await CachedMessages.makeFor(cachePath, downloader, r.logError);
+	const index = await makeMsgIndex(indexSyncedFS, indexLocalFS, r.logError);
+	const inboxEvents = new InboxEvents(msgReceiver, getMsg, listNewMsgs, removeMsg, r.logError);
+
+	async function close(): Promise<void> {
+		index.stopSyncing();
+		inboxEvents.close();
 	}
 
-	static async makeAndStart(
-		cachePath: string, syncedFS: WritableFS, r: ResourcesForReceiving
-	): Promise<InboxOnServer> {
-		try {
-			ensureCorrectFS(syncedFS, 'synced', true);
-			const msgReceiver = new MailRecipient(
-				r.address, r.getSigner, () => r.asmailResolver(r.address), r.makeNet()
-			);
-			const downloader = new MsgDownloader(msgReceiver);
-			const cache = await CachedMessages.makeFor(cachePath, downloader, r.logError);
-			const indexSyncedFS = await getOrMakeAndUploadFolderIn(syncedFS, MSG_INDEX_FOLDER);
-			const index = await MsgIndex.make(indexSyncedFS);
-			await uploadFolderChangesIfAny(syncedFS);
-			const inbox =  new InboxOnServer(
-				r.correspondents, msgReceiver, r.getStorages, r.cryptor, r.random, downloader, cache, index, r.logError
-			);
-			return inbox;
-		} catch (err) {
-			throw errWithCause(err, 'Failed to initialize Inbox');
-		}
-	}
-
-	async close(): Promise<void> {
-		this.index.stopSyncing();
-		this.inboxEvents.close();
-	}
-
-	makeCAP(): InboxService {
+	function makeCAP(): InboxService {
 		const service: InboxService = {
-			getMsg: this.getMsg.bind(this),
-			listMsgs: this.listMsgs.bind(this),
-			removeMsg: this.removeMsg.bind(this),
-			subscribe: this.inboxEvents.subscribe.bind(this.inboxEvents)
+			getMsg,
+			listMsgs,
+			removeMsg,
+			subscribe: inboxEvents.subscribe.bind(inboxEvents)
 		};
 		return Object.freeze(service);
 	}
 
-	private async removeMsg(msgId: string): Promise<void> {
+	async function removeMsg(msgId: string): Promise<void> {
 		// check for an already started process
 		const procId = 'removal of '+msgId;
-		const promise = this.procs.latestTaskAtThisMoment<void>(procId);
+		const promise = procs.latestTaskAtThisMoment<void>(procId);
 		if (promise) { return promise; }
 		// start removal process
-		return this.procs.start<any>(procId, (async () => {
+		return procs.start<any>(procId, (async () => {
 			await Promise.all([
-				this.index.remove(msgId),
-				this.removeMsgFromServerAndCache(msgId)
+				index.remove(msgId),
+				removeMsgFromServerAndCache(msgId)
 			]);
 		}));
 	}
 
-	private async removeMsgFromServerAndCache(msgId: string): Promise<void> {
+	async function removeMsgFromServerAndCache(msgId: string): Promise<void> {
 		await Promise.all([
-			this.cache.deleteMsg(msgId),
+			cache.deleteMsg(msgId),
 			// XXX the following is suspicious, as it swallows other exceptions too
-			this.msgReceiver.removeMsg(msgId).catch(() => {})
+			msgReceiver.removeMsg(msgId).catch(() => {})
 		]);
 	}
 
-	private async msgFromDiskOrDownload(msgId: string): Promise<MsgOnDisk> {
-		const msgOnDisk = await this.cache.findMsg(msgId);
+	async function msgFromDiskOrDownload(msgId: string): Promise<MsgOnDisk> {
+		const msgOnDisk = await cache.findMsg(msgId);
 		if (msgOnDisk) { return msgOnDisk; }
-		const meta = await this.downloader.getMsgMeta(msgId);
-		return await this.cache.addMsg(msgId, meta);
+		const meta = await downloader.getMsgMeta(msgId);
+		return await cache.addMsg(msgId, meta);
 	}
 
-	private async startCachingAndAddKeyToIndex(msgId: string): Promise<boolean> {
-		const msgOnDisk = await this.msgFromDiskOrDownload(msgId);
+	function checkerOfMidKeyCerts(deliveryTS: number) {
+		return (certs: PKeyCertChain) => checkAndExtractPKeyWithAddress(
+			msgReceiver.getNet(), r.correspondents.midResolver, certs, Math.round(deliveryTS / 1000)
+		);
+	}
+
+	function msgReadingAndOpening(msgId: string, mainObjId: string, msgOnDisk: MsgOnDisk) {
+		// lazy main obj source
+		let mainObjSrc: ObjSource|undefined = undefined;
+		async function getMainObjHeader() {
+			if (!mainObjSrc) {
+				mainObjSrc = await msgOnDisk.getMsgObj(mainObjId);
+			}
+			return mainObjSrc.readHeader();
+		}
+		async function getOpenedMsg(mainObjFileKey: Uint8Array, msgKeyPackLen: number): Promise<OpenedMsg> {
+			if (!mainObjSrc) {
+				mainObjSrc = await msgOnDisk.getMsgObj(mainObjId);
+			}
+			return await openMsg(msgId, mainObjId, mainObjSrc, msgKeyPackLen, mainObjFileKey, cryptor);
+		}
+		return {
+			getMainObjHeader, getOpenedMsg
+		};
+	}
+
+	async function startCachingAndAddKeyToIndex(msgId: string): Promise<boolean> {
+		const msgOnDisk = await msgFromDiskOrDownload(msgId);
 		const meta = await msgOnDisk.getMsgMeta();
-
+		const {
+			getMainObjHeader, getOpenedMsg
+		} = msgReadingAndOpening(msgId, meta.extMeta.objIds[0], msgOnDisk);
 		try {
-
-			// setup closures, some memoized, for use by keyring
-			let mainObjSrc: ObjSource|undefined = undefined;
-			const mainObjId = meta.extMeta.objIds[0];
-			const getMainObjHeader = async (): Promise<Uint8Array> => {
-				if (!mainObjSrc) {
-					mainObjSrc = await msgOnDisk.getMsgObj(mainObjId);
-				}
-				return mainObjSrc.readHeader();
-			};
-			const getOpenedMsg = async (
-				mainObjFileKey: Uint8Array, msgKeyPackLen: number
-			): Promise<OpenedMsg> => {
-				if (!mainObjSrc) {
-					mainObjSrc = await msgOnDisk.getMsgObj(mainObjId);
-				}
-				const openedMsg = await openMsg(
-					msgId, mainObjId,
-					mainObjSrc, msgKeyPackLen, mainObjFileKey, this.cryptor
-				);
-				return openedMsg;
-			};
-			const checkMidKeyCerts = (
-				certs: PKeyCertChain
-			): Promise<{ pkey: JsonKey; address: string; }> => {
-				return checkAndExtractPKeyWithAddress(
-					this.msgReceiver.getNet(), this.r.midResolver, certs,
-					Math.round(msgOnDisk.deliveryTS / 1000)
-				);
-			};
-
-			const decrOut = await this.r.msgDecryptor(
-				meta.extMeta, getMainObjHeader, getOpenedMsg, checkMidKeyCerts
+			const decrOut = await r.correspondents.msgDecryptor(
+				meta.extMeta, getMainObjHeader, getOpenedMsg, checkerOfMidKeyCerts(msgOnDisk.deliveryTS)
 			);
-
 			if (decrOut) {
 				const { decrInfo, openedMsg } = decrOut;
 				openedMsg.setMsgKeyRole(decrInfo.keyStatus);
-
-				this.checkServerAuthIfPresent(meta, decrInfo);
-
+				// XXX we have never used this part of protocol, should it be removed at all from ASMail protocol?
+				checkServerAuthIfPresent(meta, decrInfo);
 				// add records cache and to index
-				this.recentlyOpenedMsgs.set(msgId, openedMsg);
+				recentlyOpenedMsgs.set(msgId, openedMsg);
 				const msgInfo: MsgInfo = {
 					msgType: openedMsg.getSection('Msg Type'),
 					msgId,
 					deliveryTS: msgOnDisk.deliveryTS
 				};
-				await this.index.add(msgInfo, decrInfo);
-
+				await index.add(msgInfo, decrInfo);
 				await Promise.all([
-					this.absorbSendingParams(openedMsg),
-					this.markOwnParams(meta, openedMsg.sender)
+					absorbSendingParams(openedMsg),
+					markOwnParams(meta, openedMsg.sender)
 				]);
-
 			} else {
 				// check, if msg has already been indexed
-				const knownDecr = await this.index.getKeyFor(
-					msgId, msgOnDisk.deliveryTS
-				);
+				const knownDecr = await index.getKeyFor(msgId, msgOnDisk.deliveryTS);
 				if (!knownDecr) {
-					await msgOnDisk.updateMsgKeyStatus('not-found');
 					return false;
 				}
-
-				// TODO try to open main message, just as a check
-
 			}
-			await msgOnDisk.updateMsgKeyStatus('ok');
 			return true;
 		} catch (exc) {
-			await this.logError(exc, `Problem with opening message ${msgId}`);
-			if (msgOnDisk.keyStatus !== 'ok') {
-				await msgOnDisk.updateMsgKeyStatus('fail');
-			}
+			await logError(exc, `Problem with opening message ${msgId}`);
 			return false;
 		}
 	}
 
-	private async markOwnParams(meta: MsgMeta, sender: string): Promise<void> {
+	async function markOwnParams(meta: MsgMeta, sender: string): Promise<void> {
+
+		// DEBUG
+		// console.log(`  markOwnParams (if invite used) ->`, {sender, 'meta.invite':meta.invite});
+
 		if (!meta.invite) { return; }
-		await this.r.markOwnSendingParamsAsUsed(sender, meta.invite);
+		await r.correspondents.markOwnSendingParamsAsUsed(sender, meta.invite);
 	}
 
-	private async absorbSendingParams(openedMsg: OpenedMsg): Promise<void> {
+	async function absorbSendingParams(openedMsg: OpenedMsg): Promise<void> {
 		const sendingParams = openedMsg.nextSendingParams;
+
+		// DEBUG
+		// console.log(`  openedMsg.nextSendingParams ->`, openedMsg.nextSendingParams);
+
 		if (!sendingParams) { return; }
 		const address = openedMsg.sender;
-		await this.r.saveParamsForSendingTo(address, sendingParams);
+		await r.correspondents.saveParamsForSendingTo(address, sendingParams);
 	}
 
-	private checkServerAuthIfPresent(meta: MsgMeta, decrInfo: MsgKeyInfo): void {
-		// if sender authenticated to server, check that it matches address,
-		// recovered from message decryption 
-		if (meta.authSender
-		&& !areAddressesEqual(meta.authSender, decrInfo.correspondent)) {
-			throw new Error(
-				`Sender authenticated to server as ${meta.authSender}, while decrypting key is associated with ${decrInfo.correspondent}`
-			);
+	function debouncingProc<T>(procId: string, action: () => Promise<T>): Promise<T> {
+		const promise = procs.latestTaskAtThisMoment<T>(procId);
+		if (promise) {
+			return promise;
 		}
+		return procs.start(procId, action);
 	}
 
-	private async listMsgs(fromTS?: number): Promise<MsgInfo[]> {
+	async function listMsgs(fromTS?: number): Promise<MsgInfo[]> {
 		const checkServer = true;	// XXX in future this will be an option from req
-		if (!checkServer) { return this.index.listMsgs(fromTS); }
-
-		// check for an already started process
-		const procId = 'listing msgs';
-		const promise = this.procs.latestTaskAtThisMoment<MsgInfo[]>(procId);
-		if (promise) { return promise; }
-		// start message listing process
-		return this.procs.start(procId, async () => {
+		if (!checkServer) {
+			return index.listMsgs(fromTS);
+		}
+		return debouncingProc('listing msgs', async () => {
 			// message listing info is located in index, yet, process involves
 			// getting and caching messages' metadata
 			let msgIds: string[];
 			try {
-				msgIds = await this.msgReceiver.listMsgs(fromTS);
+				msgIds = await msgReceiver.listMsgs(fromTS);
 			} catch (exc) {
 				if ((exc as ConnectException).type !== 'connect') {
 					throw exc;
 				}
-				return this.index.listMsgs(fromTS);
+				return index.listMsgs(fromTS);
 			}
-			const indexedMsgs = await this.index.listMsgs(fromTS);
+			const indexedMsgs = await index.listMsgs(fromTS);
 			for (const info of indexedMsgs) {
 				const ind = msgIds.indexOf(info.msgId);
 				if (ind >= 0) {
@@ -355,19 +316,19 @@ export class InboxOnServer {
 			}
 			if (msgIds.length === 0) { return indexedMsgs; }
 			await Promise.all(msgIds.map(msgId =>
-				this.startCachingAndAddKeyToIndex(msgId)
+				startCachingAndAddKeyToIndex(msgId)
 				.catch(async (exc) => {
-					await this.logError(exc, `Failed to start caching message ${msgId}`);
+					await logError(exc, `Failed to start caching message ${msgId}`);
 				})
 			));
-			return this.index.listMsgs(fromTS);
+			return index.listMsgs(fromTS);
 		});
 	}
 
-	private async listNewMsgs(fromTS: number): Promise<MsgInfo[]> {
-		const msgIds = await this.msgReceiver.listMsgs(fromTS);
+	async function listNewMsgs(fromTS: number): Promise<MsgInfo[]> {
+		const msgIds = await msgReceiver.listMsgs(fromTS);
 		// remove from listing messages already in index
-		const indexedMsgs = await this.index.listMsgs(fromTS);
+		const indexedMsgs = await index.listMsgs(fromTS);
 		for (const info of indexedMsgs) {
 			const ind = msgIds.indexOf(info.msgId);
 			if (ind >= 0) {
@@ -376,64 +337,41 @@ export class InboxOnServer {
 		}
 		if (msgIds.length === 0) { return []; }
 		// cache and index these
-		await Promise.all(msgIds.map(msgId => this.startCachingAndAddKeyToIndex(msgId)));
+		await Promise.all(msgIds.map(msgId => startCachingAndAddKeyToIndex(msgId)));
 		// get info's from index, focusing on specific messages only
-		return (await this.index.listMsgs(fromTS)).filter(({ msgId }) => msgIds.includes(msgId));
+		return (await index.listMsgs(fromTS)).filter(({ msgId }) => msgIds.includes(msgId));
 	}
 
-	private async getMsg(msgId: string): Promise<IncomingMessage> {
+	async function getMsg(msgId: string): Promise<IncomingMessage> {
 		if (!msgId || (typeof msgId !== 'string')) {
 			throw `Given message id is not a non-empty string`;
 		}
-		const procId = `get msg #${msgId}`;
-		const promise = this.procs.latestTaskAtThisMoment<IncomingMessage>(procId);
-		if (promise) { return promise; }
-		return this.procs.start(procId, async () => {
-
-			const msgOnDisk = await this.msgFromDiskOrDownload(msgId);
-
-			let msg = this.recentlyOpenedMsgs.get(msgId);
+		return debouncingProc(`get msg #${msgId}`, async () => {
+			const msgOnDisk = await msgFromDiskOrDownload(msgId);
+			let msg = recentlyOpenedMsgs.get(msgId);
 			if (msg) {
-				return this.msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
+				return msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
 			}
-
-			if ((msgOnDisk.keyStatus === 'not-found') ||
-					(msgOnDisk.keyStatus === 'fail')) {
-				// XXX 
-				// message cannot be opened, and should be removed
-				// await Promise.all([
-				// 	this.index.remove(msgInfo),
-				// 	this.removeMsgFromServerAndCache(msgId)
-				// ]);
-				throw makeMsgNotFoundException(msgId);
-			} else if (msgOnDisk.keyStatus === 'not-checked') {
-				await this.startCachingAndAddKeyToIndex(msgId);
-			} else if (msgOnDisk.keyStatus !== 'ok') {
-				throw new Error(`Unknown message key status ${msgOnDisk.keyStatus}`);
-			}
-
 			const meta = await msgOnDisk.getMsgMeta();
 			const mainObjId = meta.extMeta.objIds[0];
 			const mainObj = await msgOnDisk.getMsgObj(mainObjId);
-			const msgKey = await this.index.getKeyFor(
-				msgId, meta.deliveryCompletion!
-			);
+			let msgKey = await index.getKeyFor(msgId, meta.deliveryCompletion!);
 			if (!msgKey) {
-				throw makeMsgNotFoundException(msgId);
+				if (!(await startCachingAndAddKeyToIndex(msgId))) {
+					throw makeFailToDecryptMsgException(msgId);
+				}
+				msgKey = await index.getKeyFor(msgId, meta.deliveryCompletion!);
+				if (!msgKey) {
+					throw makeFailToDecryptMsgException(msgId);
+				}
 			}
-
-			msg = await openMsg(
-				msgId, mainObjId, mainObj,
-				msgKey.mainObjHeaderOfs, msgKey.msgKey, this.cryptor
-			);
+			msg = await openMsg(msgId, mainObjId, mainObj, msgKey.mainObjHeaderOfs, msgKey.msgKey, cryptor);
 			msg.setMsgKeyRole(msgKey.msgKeyRole);
-			return this.msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
+			return msgToUIForm(msg, msgOnDisk.deliveryTS, msgOnDisk);
 		});
 	}
 
-	private msgToUIForm(
-		msg: OpenedMsg, deliveryTS: number, msgOnDisk: MsgOnDisk
-	): IncomingMessage {
+	function msgToUIForm(msg: OpenedMsg, deliveryTS: number, msgOnDisk: MsgOnDisk): IncomingMessage {
 		const m: IncomingMessage = {
 			sender: msg.sender,
 			establishedSenderKeyChain: msg.establishedKeyChain,
@@ -458,27 +396,31 @@ export class InboxOnServer {
 		}
 		const attachments = msg.attachmentsJSON;
 		if (attachments) {
-			m.attachments = fsForAttachments(
-				msgOnDisk, attachments, this.storages, this.cryptor, this.random, this.logError
-			);
+			m.attachments = fsForAttachments(msgOnDisk, attachments, getStorages, cryptor, random, logError);
 		}
 		return m;
 	}
 
-	suspendNetworkActivity(): void {
-		this.inboxEvents.suspendNetworkActivity();
-	}
+	return {
+		connectivityEvent$: inboxEvents.connectionEvent$,
+		resumeNetworkActivity: inboxEvents.resumeNetworkActivity.bind(inboxEvents),
+		suspendNetworkActivity: inboxEvents.suspendNetworkActivity.bind(inboxEvents),
 
-	resumeNetworkActivity(): void {
-		this.inboxEvents.resumeNetworkActivity();
+		close,
+		makeCAP
 	}
-
-	get connectivityEvent$() {
-		return this.inboxEvents.connectionEvent$
-	}
-
 }
-Object.freeze(InboxOnServer.prototype);
-Object.freeze(InboxOnServer);
+
+
+function checkServerAuthIfPresent(meta: MsgMeta, { correspondent }: MsgKeyInfo): void {
+	// if sender authenticated to server, check that it matches address,
+	// recovered from message decryption 
+	if (meta.authSender && !areAddressesEqual(meta.authSender, correspondent)) {
+		throw new Error(
+			`Sender authenticated to server as ${meta.authSender}, while decrypting key is associated with ${correspondent}`
+		);
+	}
+}
+
 
 Object.freeze(exports);

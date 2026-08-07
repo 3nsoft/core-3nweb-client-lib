@@ -32,6 +32,8 @@ export type MsgKeyRole = 'suggested' | 'in_use' | 'old' |
 export const KID_LENGTH = 16;
 export const PID_LENGTH = 2;
 
+export const MIN_PERIOD_FOR_PAIR = 15*60*1000;
+
 export interface JWKeyPair {
 	skey: JsonKey;
 	pkey: JsonKey;

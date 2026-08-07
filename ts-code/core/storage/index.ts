@@ -33,7 +33,7 @@ import { errWithCause } from '../../lib-common/exceptions/error';
 import { StoragePathForUser } from '../app-files';
 import { LogError } from '../../lib-client/logging/log-to-file';
 import { MakeNet } from '..';
-import { initSysFolders, sysFilesOnDevice, sysFolders, userFilesOnDevice } from './system-folders';
+import { initSysFolders, sysFolders, userFilesOnDevice } from './system-folders';
 import { AppDataFolders } from './system-folders/apps-data';
 import { SYSTEM_PREFIX } from './common/constants';
 import { assert } from '../../lib-common/assert';
@@ -271,7 +271,8 @@ export class Storages implements FactoryOfFSs {
 	constructor(
 		private readonly cryptor: AsyncSBoxCryptor,
 		private readonly random: AsyncRNG,
-		private readonly storageDirForUser: StoragePathForUser
+		private readonly storageDirForUser: StoragePathForUser,
+		private readonly sysFilesOnDevice: () => Promise<FSItem>
 	) {
 		Object.seal(this);
 	}
@@ -466,7 +467,7 @@ export class Storages implements FactoryOfFSs {
 			// TypeError for undefined local can be due to no init
 			fs = await this.local!.userFS();
 		} else if (type === 'device') {
-			fs = await userFilesOnDevice();
+			return await userFilesOnDevice();
 		} else {
 			throw new Error(`Unknown storage type ${type}`);
 		}
@@ -490,7 +491,7 @@ export class Storages implements FactoryOfFSs {
 				item: await this.local!.sysFSs()
 			};
 		} else if (type === 'device') {
-			return sysFilesOnDevice();
+			return this.sysFilesOnDevice();
 		} else {
 			throw new Error(`Unknown storage type ${type}`);
 		}

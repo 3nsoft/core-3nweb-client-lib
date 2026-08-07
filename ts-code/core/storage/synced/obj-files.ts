@@ -268,7 +268,15 @@ export class SyncedObj {
 		const fPath = obj.remoteVerPath(version);
 		const objVer = await ObjOnDisk.createFileForExistingVersion(
 			obj.objId, version, fPath, obj.downloader, obj.remoteObjSegsGetterFromDisk, parts
-		);
+		).catch((exc: FileException) => {
+			if (exc.alreadyExists) {
+				return ObjOnDisk.forExistingFile(
+					obj.objId, version, fPath, obj.downloader, obj.remoteObjSegsGetterFromDisk
+				);
+			} else {
+				throw exc;
+			}
+		});
 		obj.remoteVers.set(version, objVer);
 		return obj;
 	}
@@ -318,8 +326,8 @@ export class SyncedObj {
 		if (objVer) { return objVer; }
 		const fPath = this.localVerPath(version);
 		objVer = await ObjOnDisk.forExistingFile(
-			this.objId, version, fPath,
-			this.downloader, this.localAndSyncedObjSegsGetterFromDisk);
+			this.objId, version, fPath, this.downloader, this.localAndSyncedObjSegsGetterFromDisk
+		);
 		this.localVers.set(version, objVer);
 		return objVer;
 	}
@@ -330,12 +338,10 @@ export class SyncedObj {
 		const fPath = this.remoteVerPath(version);
 		objVer = ((await isOnDisk(fPath)) ?
 			await ObjOnDisk.forExistingFile(
-				this.objId, version, fPath,
-				this.downloader, this.remoteObjSegsGetterFromDisk
+				this.objId, version, fPath, this.downloader, this.remoteObjSegsGetterFromDisk
 			) :
 			await ObjOnDisk.createFileForExistingVersion(
-				this.objId, version, fPath,
-				this.downloader, this.remoteObjSegsGetterFromDisk
+				this.objId, version, fPath, this.downloader, this.remoteObjSegsGetterFromDisk
 			)
 		);
 		this.remoteVers.set(version, objVer);
@@ -351,8 +357,7 @@ export class SyncedObj {
 		let objVer = this.localVers.get(v);
 		if (!objVer) {
 			objVer = await ObjOnDisk.forExistingFile(
-				this.objId, v, this.localVerPath(v), this.downloader,
-				this.localAndSyncedObjSegsGetterFromDisk);
+				this.objId, v, this.localVerPath(v), this.downloader, this.localAndSyncedObjSegsGetterFromDisk);
 			this.localVers.set(v, objVer);
 		}
 		return objVer.readSegsOnlyFromDisk(ofs, len);
@@ -364,8 +369,7 @@ export class SyncedObj {
 		if (!objVer) {
 			try {
 				objVer = await ObjOnDisk.forExistingFile(
-					this.objId, v, this.remoteVerPath(v), this.downloader,
-					this.remoteObjSegsGetterFromDisk
+					this.objId, v, this.remoteVerPath(v), this.downloader, this.remoteObjSegsGetterFromDisk
 				);
 				this.remoteVers.set(v, objVer);
 			} catch (exc) {
@@ -384,8 +388,7 @@ export class SyncedObj {
 			`Version ${version} already exists in object ${this.objId}`); }
 		const fPath = this.localVerPath(version);
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
-			this.objId, version, fPath, encSub, this.downloader,
-			this.localAndSyncedObjSegsGetterFromDisk
+			this.objId, version, fPath, encSub, this.downloader, this.localAndSyncedObjSegsGetterFromDisk
 		);
 		this.localVers.set(version, obj);
 		const fileWrite$ = write$.pipe(
@@ -516,7 +519,7 @@ export class SyncedObj {
 	}
 
 	async isRemoteVersionOnDisk(version: number): Promise<'complete'|'partial'|'none'> {
-		if (!this.status.isAmongRemote(version)) {
+		if (!this.status.isAmongRemoteOrSynced(version)) {
 			throw makeObjVersionNotFoundExc(this.objId, version);
 		}
 		const verPath = this.remoteVerPath(version);
@@ -526,7 +529,7 @@ export class SyncedObj {
 	}
 
 	async getNumOfBytesNeedingDownload(version: number): Promise<number|'unknown'> {
-		if (!this.status.isAmongRemote(version)) {
+		if (!this.status.isAmongRemoteOrSynced(version)) {
 			if (this.status.isLocalOnlyVersion(version)) {
 				return 0;
 			} else {

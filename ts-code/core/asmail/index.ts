@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { InboxOnServer } from './inbox';
+import { InboxOnServer, makeInboxOnServer } from './inbox';
 import { errWithCause } from '../../lib-common/exceptions/error';
 import { KeyringForASMail } from '../keyring';
 import { ConfigOfASMailServer } from './config';
@@ -24,11 +24,11 @@ import { Delivery } from './delivery';
 import { StorageGetter } from '../../lib-client/xsp-fs/common';
 import { GetSigner } from '../id-manager';
 import { AsyncSBoxCryptor } from 'xsp-files';
-import { SendingParamsHolder } from './sending-params';
+import { makeSendingParamsHolder, SendingParamsHolder } from './sending-params';
 import { Logger } from '../../lib-client/logging/log-to-file';
 import { ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
-import { getOrMakeAndUploadFolderIn, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
+import { getOrMakeDirOnInit, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
 import { AsyncRNG } from '../../lib-common/rng-def';
 
 type WritableFS = web3n.files.WritableFS;
@@ -79,7 +79,7 @@ export class ASMail {
 			await this.setupSendingParams(syncedFS);
 
 			await Promise.all([
-				this.setupInbox(syncedFS, getSigner, getStorages, makeResolver),
+				this.setupInbox(syncedFS, localFS, getSigner, getStorages, makeResolver),
 				this.setupDelivery(localFS, getSigner, makeResolver)
 			]);
 
@@ -92,10 +92,8 @@ export class ASMail {
 	}
 
 	private async setupSendingParams(syncedFS: WritableFS): Promise<void> {
-		const fs = await getOrMakeAndUploadFolderIn(
-			syncedFS, SEND_PARAMS_DATA_FOLDER
-		);
-		this.sendingParams = await SendingParamsHolder.makeAndInit(
+		const fs = await getOrMakeDirOnInit(syncedFS, SEND_PARAMS_DATA_FOLDER);
+		this.sendingParams = await makeSendingParamsHolder(
 			fs, this.config.makeParamSetterAndGetter('anon-sender/invites'), this.random
 		);
 	}
@@ -114,8 +112,8 @@ export class ASMail {
 			midResolver: makeResolver('mailerid', this.logger.logError),
 			correspondents: {
 				needIntroKeyFor: this.keyring.needIntroKeyFor,
-				generateKeysToSend: this.keyring.generateKeysToSend,
-				nextCrypto: this.keyring.nextCrypto,
+				generateIntroKeysToSendMsg: this.keyring.generateIntroKeysToSendMsg,
+				getEstablishedKeysToSendMsg: this.keyring.getEstablishedKeysToSendMsg,
 				paramsForSendingTo: this.sendingParams.otherSides.get,
 				newParamsForSendingReplies: this.sendingParams.thisSide.getUpdated
 			},
@@ -127,15 +125,14 @@ export class ASMail {
 	}
 
 	private async setupInbox(
-		syncedFS: WritableFS, getSigner: GetSigner,
+		syncedFS: WritableFS, localFS: WritableFS, getSigner: GetSigner,
 		getStorages: StorageGetter, makeResolver: ServiceLocatorMaker
 	): Promise<void> {
 		const cachePath = this.inboxPathForUser(this.address);
-		const inboxSyncedFS = await getOrMakeAndUploadFolderIn(
-			syncedFS, INBOX_DATA_FOLDER
-		);
-		this.inbox = await InboxOnServer.makeAndStart(
-			cachePath, inboxSyncedFS,
+		const inboxSyncedFS = await getOrMakeDirOnInit(syncedFS, INBOX_DATA_FOLDER);
+		const inboxLocalFS = await localFS.writableSubRoot(INBOX_DATA_FOLDER);
+		this.inbox = await makeInboxOnServer(
+			cachePath, inboxSyncedFS, inboxLocalFS,
 			{
 				address: this.address,
 				cryptor: this.cryptor,

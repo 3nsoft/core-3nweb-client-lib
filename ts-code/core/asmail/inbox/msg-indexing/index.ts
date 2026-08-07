@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2022 - 2023, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,8 +15,13 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MsgKeyInfo, MsgKeyRole } from '../../../keyring';
-import { IndexedRecords, MsgLogs, makeJsonBasedIndexedRecords } from './logs-n-entries';
+import type { MsgKeyInfo } from '../../../keyring';
+import { makeSqliteDBs } from './dataset/v1/sql-db';
+import { makeRecentMsgIndexChangesLogs } from './dataset/v1/logs';
+import type { LogError } from '../../../../lib-client/logging/log-to-file';
+import { getOrMakeDirOnInit } from '../../../../lib-client/fs-utils/fs-sync-utils';
+import { makeSyncedFunc } from '../../../../lib-common/processes/synced';
+import { startDatasetSync } from '../../../../lib-common/dataset-sync/per-device-json-array-logs';
 
 type WritableFS = web3n.files.WritableFS;
 type MsgInfo = web3n.asmail.MsgInfo;
@@ -24,97 +29,74 @@ type MsgInfo = web3n.asmail.MsgInfo;
 const LOGS_DIR = 'logs';
 const INDEX_DIR = 'index';
 
-async function getOrMakeDirStructure(syncedFS: WritableFS): Promise<{
-	logsFS: WritableFS; indexFS: WritableFS;
-}> {
-	const logsFS = await syncedFS.writableSubRoot(LOGS_DIR);
-	const indexFS = await syncedFS.writableSubRoot(INDEX_DIR);
-	return { logsFS, indexFS };
-}
-
-async function syncDirStructureIfNeeded(syncedFS: WritableFS): Promise<void> {
-
-	// XXX need uploading of initial folders, and of syncedFS itself
-	// const logsDirInfo = await logsFS.v!.sync!.status(LOGS_DIR);
-	// logsDirInfo.state
-
-
-	// Or, is this enough?
-	// await getRemoteFolderChanges(syncedFS);
-	// await uploadFolderChangesIfAny(syncedFS);
-
-}
-
+const NUM_OF_ENTRIES_TO_CHOP_DB = 200;
 
 /**
- * This message index stores info for messages present on the server, in the
- * inbox. Records contain message key info, time of delivery, and time of
- * desired removal.
- * 
- * Message info with keys is stored in SQLite dbs sharded/partitioned by
- * delivery timestamp. The latest shard, shard without upper time limit
- * is stored in local storage, while all other shards with limits are stored in
- * synced storage. Information in synced storage is a sum of all limited shards
- * and action logs. Action logs 
- * 
+ * This message index stores info for messages present on the server, in the inbox.
+ * Records contain message key info, time of delivery, and time of desired removal.
  */
-export class MsgIndex {
+export type MsgIndex = Awaited<ReturnType<typeof makeMsgIndex>>;
 
-	private constructor(
-		private readonly logs: MsgLogs,
-		private readonly indexed: IndexedRecords
-	) {
-		Object.seal(this);
-	}
+export async function makeMsgIndex(syncedFS: WritableFS, localFS: WritableFS, logError: LogError) {
 
-	static async make(syncedFS: WritableFS): Promise<MsgIndex> {
-		const { logsFS, indexFS } = await getOrMakeDirStructure(syncedFS);
-		await syncDirStructureIfNeeded(syncedFS);
-		const logs = await MsgLogs.makeAndStartSyncing(logsFS);
-		let indexed: IndexedRecords;
-		if (global.WebAssembly) {
-			indexed = await require('./sql-indexing').makeSqliteBasedIndexedRecords(indexFS);
-		} else {
-			indexed = makeJsonBasedIndexedRecords(logs);
+	// file systems within dataset
+	const logsFS = await getOrMakeDirOnInit(syncedFS, LOGS_DIR);
+	const localLogsFS = await localFS.writableSubRoot(LOGS_DIR);
+	const indexFS = await getOrMakeDirOnInit(syncedFS, INDEX_DIR);
+
+	const logs = await makeRecentMsgIndexChangesLogs(logsFS, localLogsFS, logError);
+	const indexed = await makeSqliteDBs(indexFS);
+
+	async function add(msgInfo: MsgInfo, decrInfo: MsgKeyInfo): Promise<void> {
+		const shouldAddToLog = await indexed.addToLatest(msgInfo, decrInfo);
+		if (shouldAddToLog) {
+			await logs.recordMsgAddition(msgInfo, decrInfo);
 		}
-		const index = new MsgIndex(logs, indexed);
-		return index;
 	}
 
-	stopSyncing(): void {
-		this.logs.stopSyncing();
-		this.indexed.stopSyncing();
-	}
-
-	async add(
-		msgInfo: MsgInfo, decrInfo: MsgKeyInfo, removeAfter = 0
-	): Promise<void> {
-		const msgAlreadyExists = await this.indexed.msgExists(msgInfo);
-		if (msgAlreadyExists) { return; }
-		await this.logs.add(msgInfo, decrInfo, removeAfter);
-		await this.indexed.add(msgInfo, decrInfo, removeAfter);
-	}
-
-	async remove(msgId: string): Promise<void> {
-		const deliveryTS = await this.indexed.remove(msgId);
+	async function remove(msgId: string): Promise<void> {
+		const deliveryTS = await indexed.remove(msgId);
 		if (deliveryTS) {
-			await this.logs.remove(msgId, deliveryTS);
+			await logs.recordMsgRemoval(msgId, deliveryTS);
 		}
 	}
 
-	listMsgs(fromTS: number|undefined): Promise<MsgInfo[]> {
-		return this.indexed.listMsgs(fromTS);
+	async function periodicCheckAndUploadOfData() {
+		const shardTS = Date.now() - 10*60*1000;
+		const countBefore = indexed.numberOfRecordsInLatestBefore(shardTS);
+		if (countBefore >= NUM_OF_ENTRIES_TO_CHOP_DB) {
+			const syncedIndexDbVersion = await indexed.makeNewShardWithRecordsUpToTS(shardTS);
+			await logs.cutLogOnDatasetSyncAndUpload(syncedIndexDbVersion, { shardTS });
+		}
 	}
 
-	getKeyFor(msgId: string, deliveryTS: number): Promise<{
-		msgKey: Uint8Array; msgKeyRole: MsgKeyRole; mainObjHeaderOfs: number;
-	}|undefined> {
-		return this.indexed.getKeyFor(msgId, deliveryTS);
+	function millisBeforeNextRun() {
+		return 30*60*1000 + Math.floor(10*60*1000 * Math.random());
 	}
 
+	const { stopSyncing, changeProc } = startDatasetSync(
+		periodicCheckAndUploadOfData, millisBeforeNextRun,
+		{
+			watchAndApplyOpsFromOtherDevices: logs.watchAndApplyOpsFromOtherDevices
+		},
+		{
+			absorbOpsFromOtherDevices: indexed.absorbOpsFromOtherDevices,
+			watchAndApplyOpsFromOtherDevices: indexed.watchAndApplyOpsFromOtherDevices
+		}
+
+	);
+
+	// XXX
+	//  - check if indexed latest is too old, chopping to the latest shard
+
+	return {
+		add: makeSyncedFunc(changeProc, undefined, add),
+		remove: makeSyncedFunc(changeProc, undefined, remove),
+		listMsgs: makeSyncedFunc(changeProc, undefined, indexed.listMsgs),
+		getKeyFor: makeSyncedFunc(changeProc, undefined, indexed.getKeyFor),
+		stopSyncing
+	};
 }
-Object.freeze(MsgIndex.prototype);
-Object.freeze(MsgIndex);
 
 
 Object.freeze(exports);

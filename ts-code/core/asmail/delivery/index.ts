@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 - 2023 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020 - 2023, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -36,8 +36,9 @@ const SMALL_MSG_SIZE = 1024*1024;
 
 const MSGS_FOLDER = 'msgs';
 function idToMsgFolder(id: string): string {
-	if (id.indexOf('/') > -1) { throw new Error(
-		`Message id ${id} contains illegal character '/'.`); }
+	if (id.includes('/') || id.includes('.')) {
+		throw new Error(`Message id ${id} contains illegal character(s).`);
+	}
 	return `${MSGS_FOLDER}/${id}`;
 }
 

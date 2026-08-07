@@ -26,7 +26,7 @@ import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
 import { ServiceLocatorMaker } from '../lib-client/service-locator';
-import { Keyrings } from './keyring';
+import { makeKeyrings } from './keyring';
 import { ASMAIL_APP_NAME, KEYRINGS_APP_NAME, MAILERID_APP_NAME } from './storage/common/constants';
 import { ConfigOfASMailServer } from './asmail/config';
 import { defer, Deferred } from '../lib-common/processes/deferred';
@@ -45,6 +45,7 @@ type BootProcessObserver = web3n.startup.BootProcessObserver;
 type BootEvent = web3n.startup.BootEvent;
 type ConnectException = web3n.ConnectException;
 type ProgressCB = web3n.startup.ProgressCB;
+type FSItem = web3n.files.FSItem;
 
 export interface CoreConf {
 	dataDir: string;
@@ -59,7 +60,7 @@ export class Core {
 	private cryptor: ReturnType<makeCryptor>;
 	private storages: Storages;
 	private asmail: ASMail;
-	private keyrings: Keyrings;
+	private keyrings: Awaited<ReturnType<typeof makeKeyrings>>|undefined = undefined;
 	private idManager: IdManager|undefined = undefined;
 	private closingProc: Promise<void>|undefined = undefined;
 	private isInitialized = false;
@@ -70,12 +71,14 @@ export class Core {
 		makeCryptor: makeCryptor,
 		private readonly random: AsyncRNG,
 		private readonly appDirs: AppDirs,
+		sysFilesOnDevice: () => Promise<FSItem>,
 		private readonly logger: Logger,
 		private readonly signUpUrl: string
 	) {
 		this.cryptor = makeCryptor(this.logger.logError, this.logger.logWarning);
-		this.storages = new Storages(this.cryptor.cryptor.sbox, this.random, this.appDirs.storagePathFor);
-		this.keyrings = new Keyrings(this.cryptor.cryptor.sbox, this.random, this.logger);
+		this.storages = new Storages(
+			this.cryptor.cryptor.sbox, this.random, this.appDirs.storagePathFor, sysFilesOnDevice
+		);
 		this.asmail = new ASMail(
 			this.cryptor.cryptor.sbox, this.random, this.makeNet, this.appDirs.inboxPathFor, this.logger
 		);
@@ -83,12 +86,14 @@ export class Core {
 	}
 
 	static make(
-		conf: CoreConf, makeNet: MakeNet,
-		makeResolver: ServiceLocatorMaker, makeCryptor: makeCryptor, random: AsyncRNG
+		conf: CoreConf, makeNet: MakeNet, makeResolver: ServiceLocatorMaker, sysFilesOnDevice: () => Promise<FSItem>,
+		makeCryptor: makeCryptor, random: AsyncRNG
 	): Core {
 		const dirs = appDirs(conf.dataDir);
 		const logger = makeLogger(dirs.getUtilFS());
-		const core = new Core(makeNet, makeResolver, makeCryptor, random, dirs, logger, conf.signUpUrl);
+		const core = new Core(
+			makeNet, makeResolver, makeCryptor, random, dirs, sysFilesOnDevice, logger, conf.signUpUrl
+		);
 		return core;
 	}
 
@@ -391,7 +396,7 @@ export class Core {
 	private makeKeyringsCAP(requestedCAPs: RequestedCAPs): W3N['keyrings'] {
 		if (requestedCAPs.keyrings
 		&& (requestedCAPs.keyrings === 'all')) {
-			return this.keyrings.makeKeyringsCAP();
+			return this.keyrings?.makeKeyringsCAP();
 		} else {
 			return undefined;
 		}
@@ -422,7 +427,7 @@ export class Core {
 			this.closingProc = (async () => {
 				if (this.isInitialized) {
 					await this.asmail.close();
-					await this.keyrings.close();
+					await this.keyrings?.close();
 					await this.storages.close();
 					this.asmail = (undefined as any);
 					this.keyrings = (undefined as any);
@@ -467,22 +472,17 @@ export class Core {
 			);
 
 			emitBootEvent({ coreApp: KEYRINGS_APP_NAME, message: `starting initialization` });
-			const keyringsSyncedFS = await this.storages.makeSyncedFSForApp(
-				KEYRINGS_APP_NAME
-			);
-			await this.keyrings.init(
-				keyringsSyncedFS, this.idManager!.getSigner,
-				asmailServerConfig.makeParamSetterAndGetter('init-pub-key')
+			const keyringsSyncedFS = await this.storages.makeSyncedFSForApp(KEYRINGS_APP_NAME);
+			const keyringsLocalFS = await this.storages.makeLocalFSForApp(KEYRINGS_APP_NAME);
+			this.keyrings = await makeKeyrings(
+				this.cryptor.cryptor.sbox, this.random, this.logger, keyringsSyncedFS, keyringsLocalFS,
+				this.idManager!.getSigner, asmailServerConfig.makeParamSetterAndGetter('init-pub-key')
 			);
 			emitBootEvent({ coreApp: KEYRINGS_APP_NAME, message: `✔️  initialized` });
 
 			emitBootEvent({ coreApp: ASMAIL_APP_NAME, message: `starting initialization` });
-			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(
-				ASMAIL_APP_NAME
-			);
-			const inboxLocalFS = await this.storages.makeLocalFSForApp(
-				ASMAIL_APP_NAME
-			);
+			const inboxSyncedFS = await this.storages.makeSyncedFSForApp(ASMAIL_APP_NAME);
+			const inboxLocalFS = await this.storages.makeLocalFSForApp(ASMAIL_APP_NAME);
 			await this.asmail.init(
 				this.idManager!.getId(), this.idManager!.getSigner,
 				inboxSyncedFS, inboxLocalFS,

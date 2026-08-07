@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 3NSoft Inc.
+ Copyright (C) 2016 - 2019, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -24,7 +24,6 @@ import { ObjSource } from 'xsp-files';
 import { MsgDownloader } from './msg-downloader';
 import { join } from 'path';
 
-export type MsgKeyStatus = 'not-checked' | 'not-found' | 'fail' | 'ok';
 
 export interface ObjSize {
 	header: number;
@@ -33,7 +32,6 @@ export interface ObjSize {
 
 export interface MsgStatus {
 	msgId: string;
-	keyStatus: MsgKeyStatus;
 	onDisk: boolean;
 	mainObjId: string;
 	deliveryTS: number;
@@ -45,7 +43,6 @@ const STATUS_FNAME = 'status.json';
 function makeInitMsgStatus(msgId: string, meta: MsgMeta): MsgStatus {
 	return {
 		msgId,
-		keyStatus: 'not-checked',
 		onDisk: false,
 		mainObjId: meta.extMeta.objIds[0],
 		deliveryTS: meta.deliveryStart
@@ -102,12 +99,14 @@ export class MsgOnDisk {
 
 	async getObjFile(objId: string): Promise<ObjOnDisk> {
 		let file = this.objs.get(objId);
-		if (file) { return file; }
-		if (!this.objsIds.has(objId)) { throw new Error(
-			`Obj ${objId} not present in message ${this.msgId}`); }
+		if (file) {
+			return file;
+		}
+		if (!this.objsIds.has(objId)) {
+			throw new Error(`Obj ${objId} not present in message ${this.msgId}`);
+		}
 		const path = this.objFilePath(objId);
-		const isOnDisk = !!(await fs.stat(path)
-		.catch((exc: fs.FileException) => {
+		const isOnDisk = !!(await fs.stat(path).catch((exc: fs.FileException) => {
 			if (exc.notFound) { return; }
 			throw errWithCause(exc, `Cannot stat message obj at ${path}`);
 		}));
@@ -128,26 +127,6 @@ export class MsgOnDisk {
 		return this.status.deliveryTS;
 	}
 
-	get keyStatus(): MsgKeyStatus {
-		return this.status.keyStatus;
-	}
-
-	updateMsgKeyStatus(newStatus: Exclude<MsgKeyStatus, 'not-checked'>): Promise<void> {
-		return this.syncProc.startOrChain(async () => {
-			if (this.status.keyStatus === 'not-checked') {
-				this.status.keyStatus = newStatus;
-			} else if (this.status.keyStatus === newStatus) {
-				return;
-			} else {
-				throw Error(`Message has key status ${this.status.keyStatus}, and can't be updated to ${newStatus}`);
-			}
-			await this.saveStatusToDisk();
-		});
-	}
-
-	private async saveStatusToDisk(): Promise<void> {
-		await writeJSON(this.msgFolderPath, STATUS_FNAME, this.status);
-	}
 
 }
 Object.freeze(MsgOnDisk.prototype);

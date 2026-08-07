@@ -386,18 +386,24 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 	async syncStatus(): Promise<SyncStatus> {
 		const storage = this.syncedStorage();
 		const status = (await storage.status(this.objId)).syncStatus();
+		status.existsInSyncedParent = await this.isThisPresentInSyncedParent();
+		return status;
+	}
+
+	private async isThisPresentInSyncedParent(): Promise<boolean|undefined> {
 		if (this.parentId) {
+			const storage = this.syncedStorage();
 			const parent = storage.nodes.get<FolderNode>(this.parentId);
 			if (parent) {
-				status.existsInSyncedParent = await parent.childExistsInSyncedVersion(this.objId);
+				return await parent.childExistsInSyncedVersion(this.objId);
 			}
 		}
-		return status;
 	}
 
 	async updateStatusInfo(): Promise<SyncStatus> {
 		const storage = this.syncedStorage();
 		const status = await storage.updateStatusInfo(this.objId);
+		status.existsInSyncedParent = await this.isThisPresentInSyncedParent();
 		return status;
 	}
 

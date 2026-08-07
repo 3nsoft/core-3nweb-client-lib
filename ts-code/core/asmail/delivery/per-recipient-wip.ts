@@ -214,12 +214,20 @@ export class WIP {
 		
 		const sp = this.msg.r.correspondents.paramsForSendingTo(recipient);
 		if (sp) {
+
+			// DEBUG
+			// console.log(`sending params for sending to ${recipient} invitation are`, sp);
+
 			this.sender = await MailSender.fresh(
 				this.msg.r.makeNet(), this.msg.r.asmailResolver,
 				(sp.auth ? senderAddress : undefined),
 				recipient, sp.invitation
 			);
 		} else {
+
+			// DEBUG
+			// console.log(`have no sending params to use for sending to ${recipient}`);
+
 			this.sender = await MailSender.fresh(this.msg.r.makeNet(), this.msg.r.asmailResolver, undefined, recipient);
 		}
 		
@@ -250,11 +258,14 @@ export class WIP {
 		const introPKeyFromServer = await this.getIntroKeyIfRecipientIsUnknown(recipient);
 
 		this.packer = await this.msg.msgPacker();
-		
+
 		// get crypto parts for encrypting this message
 		const {
-			currentPair, encryptor, msgCount
-		} = await this.msg.r.correspondents.generateKeysToSend(recipient, introPKeyFromServer);
+			currentPair, encryptor, msgCount, nextMsgCrypto
+		} = await (introPKeyFromServer ?
+			this.msg.r.correspondents.generateIntroKeysToSendMsg(recipient, introPKeyFromServer) :
+			this.msg.r.correspondents.getEstablishedKeysToSendMsg(recipient)
+		);
 		
 		// add crypto parameters to the message
 		if (currentPair.pid) {
@@ -267,14 +278,11 @@ export class WIP {
 				provCert: signer.providerCert
 			};
 			this.packer.setNewKeyInfo(
-				currentPair.recipientKid!,
-				currentPair.senderPKey!.k,
-				pkCerts, msgCount
+				currentPair.recipientKid!, currentPair.senderPKey!.k, pkCerts, msgCount
 			);
 		}
 
 		// add next crypto parameters to the message
-		const nextMsgCrypto = await this.msg.r.correspondents.nextCrypto(recipient);
 		if (nextMsgCrypto) {
 			this.packer.setNextCrypto(nextMsgCrypto);
 		}

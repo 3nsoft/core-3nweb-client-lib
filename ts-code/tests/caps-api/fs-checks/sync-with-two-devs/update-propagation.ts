@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022, 2025 3NSoft Inc.
+ Copyright (C) 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,6 +22,7 @@ import { bytesEqual } from '../../../libs-for-tests/bytes-equal';
 import { deepEqual } from '../../../libs-for-tests/json-equal';
 import { SpecDescribe } from '../../../libs-for-tests/spec-module';
 import { observeFileForOneEvent, observeFolderForOneEvent, SpecItWithTwoDevsFSs } from '../test-utils';
+import { omit } from 'lodash';
 
 type FileException = web3n.files.FileException;
 type RemoteChangeEvent = web3n.files.RemoteChangeEvent;
@@ -187,7 +188,10 @@ it.func = async function({ dev1FS, dev2FS }) {
 
 	let fileEv = await fileEventAt2;
 	expect(fileEv.type).toBe('remote-change');
-	expect(deepEqual(fileEv.syncStatus, await fs2.v!.sync!.status(file))).toBeTrue();
+	expect(deepEqual(
+		fileEv.syncStatus,
+		omit(await fs2.v!.sync!.status(file), 'existsInSyncedParent', 'uploading')
+	)).toBeTrue();
 
 	expect(await fs2.v!.sync!.isRemoteVersionOnDisk(file, fileEv.newRemoteVersion)).toBe('none');
 
@@ -269,6 +273,12 @@ it.func = async function({ dev1FS, dev2FS }) {
 		}
 	];
 
+	// XXX enable attr writes, when sink's bug is fixed
+
+	// const TEST_XATTR = 'attr-for-test';
+	// const attrValue1 = Date.now();
+	// const attrValue2 = { comment: 'now json value', ts: Date.now() };
+
 	// we do this file writing and uploading, cause this pattern hit an error,
 	// hence, we add this test with this seemingly out of the blue setup
 
@@ -282,6 +292,7 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await sink.splice(1, 0, bytes);
 	await sink.splice(1+bytes.length, 0, SQ_BRACKET_BYTE);
 	await sink.done();
+	// await fs1.updateXAttrs(file, { set: { [TEST_XATTR]: attrValue1 } });
 	await fs1.v!.sync!.upload(file);
 
 	sink = await fs1.getByteSink(file, { truncate: false });
@@ -290,7 +301,9 @@ it.func = async function({ dev1FS, dev2FS }) {
 	bytes = utf8.pack(JSON.stringify(completeContent[1]));
 	await sink.splice(len, 0, bytes);
 	await sink.splice(len+bytes.length, 0, SQ_BRACKET_BYTE);
+	// const attrWrite = fs1.updateXAttrs(file, { set: { [TEST_XATTR]: attrValue2 } });
 	await sink.done();
+	// await attrWrite;
 
 	expect(deepEqual(completeContent, await fs1.readJSONFile(file))).toBeTrue();
 
@@ -302,7 +315,8 @@ it.func = async function({ dev1FS, dev2FS }) {
 	await fs2.v!.sync!.adoptRemote('');
 
 	expect((await fs2.v!.sync!.status(file)).state).toBe('synced');
-	expect(deepEqual(completeContent, await fs2.readJSONFile(file))).toBeTrue();
+	expect(deepEqual(completeContent, await fs2.readJSONFile(file))).withContext(`contents of files should be same`).toBeTrue();
+	// expect(deepEqual(attrValue2, await fs2.getXAttr(file, TEST_XATTR))).withContext(`content of attr should be same`).toBeTrue();
 
 };
 specs.its.push(it);

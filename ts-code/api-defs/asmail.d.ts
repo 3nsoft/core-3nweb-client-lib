@@ -299,6 +299,7 @@ declare namespace web3n.asmail {
 		objNotFound?: true;
 		objId?: string;
 		msgIsBroken?: true;
+		failToDecrypt?: true;
 	}
 
 	interface ASMailSendException extends RuntimeException {

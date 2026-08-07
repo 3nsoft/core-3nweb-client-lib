@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2018, 2025 3NSoft Inc.
+ Copyright (C) 2017 - 2018, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,94 +15,132 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { JsonFileProc } from '../../../lib-client/xsp-fs/util/file-based-json';
+import { initSyncedFile, watchAndApplyChangesFromOtherDevices } from '../../../lib-common/dataset-sync/single-file';
 import { SendingParams } from '../msg/common';
 import { SendingParamsHolder } from '../sending-params';
 
-export { SendingParams } from '../msg/common';
+export type { SendingParams } from '../msg/common';
 
-type ExposedFuncs = SendingParamsHolder['otherSides'];
-
-type WritableFile = web3n.files.WritableFile;
-type FileEvent = web3n.files.FileEvent;
+type WritableFS = web3n.files.WritableFS;
 
 interface ParamsForSending extends SendingParams {
 	address: string;
 }
 
-export class ParamsFromOthers {
+export type ParamsFromOthers = Awaited<ReturnType<typeof makeParamsFromOthers>>;
 
-	private readonly params = new Map<string, ParamsForSending>();
-	private readonly fileProc: JsonFileProc<ParamsForSending[]>;
+export async function makeParamsFromOthers(
+	fs: WritableFS, fileName: string
+): Promise<SendingParamsHolder['otherSides'] & { close: () => Promise<void>; }> {
 
-	private constructor() {
-		this.fileProc = new JsonFileProc(this.onFileEvent.bind(this));
-		Object.seal(this);
-	}
+	const {
+		file: paramsFile, changeProc
+	} = await initSyncedFile(
+		fs, fileName,
+		newFile => newFile.writeJSON([])
+	);
 
-	static async makeAndInit(file: WritableFile): Promise<ParamsFromOthers> {
-		const paramsFromOthers = new ParamsFromOthers();
-		await paramsFromOthers.fileProc.start(file, []);
-		await paramsFromOthers.absorbRemoteChanges();
-		return paramsFromOthers;
-	}
-
-	private async absorbRemoteChanges(): Promise<void> {
-		// XXX
-		//  - check for changes: what is needed here from fileProc, and what is
-		//    generic in absorbing remote changes to refactor it into JsonFileProc
-		//  - absorb and sync, if needed: what can be in JsonFileProc
-		// Code from pre-v.sync:
-		// const { json } = await this.fileProc.get();
-		// this.setFromJSON(json);
-	}
-
-	protected async onFileEvent(ev: FileEvent): Promise<void> {
-		if (ev.src === 'local') { return; }
-		switch (ev.type) {
-			case 'file-change':
-				await this.fileProc.order.startOrChain(
-					() => this.absorbRemoteChanges()
-				);
-				break;
-			case 'removed':
-				throw new Error(`Unexpected removal of file with invites info`);
-			default:
-				return;
+	function parseParamsFromJSON(json: any): Record<string, SendingParams> {
+		if (Array.isArray(json)) {
+			// older serialization form
+			const p: Record<string, SendingParams> = {};
+			for (const paramsForSending of json) {
+				const { address, timestamp, auth, invitation } = paramsForSending as ParamsForSending;
+				p[address] = { timestamp, auth, invitation };
+			}
+			return p;
+		} else if (json && (typeof json === 'object')) {
+			return json as any;
+		} else {
+			return {};
 		}
 	}
 
-	getFor: ExposedFuncs['get'] = (address) => {
-		const p = this.params.get(address);
+	let params = parseParamsFromJSON(await paramsFile.readJSON());
+
+	async function onChangeFromOtherDevices(newVersion: number) {
+		changeProc.startOrChain(async () => {
+			const { version, json } = await paramsFile.v!.readJSON<Record<string, SendingParams>>();
+			if (version === newVersion) {
+				const incomingParams = parseParamsFromJSON(json);
+				mergeIncomingParams(incomingParams);
+			}
+		});
+	}
+
+	function mergeIncomingParams(incomingParams: Record<string, SendingParams>) {
+		for (const [address, inP] of Object.entries(incomingParams)) {
+			const existing = params[address];
+			if (existing && (existing.timestamp >= inP.timestamp)) {
+				return;
+			}
+			params[address] = inP;
+		}
+	}
+
+	function doOnConflict() {
+		return changeProc.startOrChain(async () => {
+			const { remote, state } = await paramsFile.v!.sync!.status(false);
+			if ((state !== 'conflicting') || !remote?.latest) {
+				return;
+			}
+			const onRemote = parseParamsFromJSON(
+				(await paramsFile.v!.readJSON<Record<string, SendingParams>>({ remoteVersion: remote.latest })).json
+			);
+			const numRemRecs = Object.keys(onRemote).length;
+			const numExistingRecs = Object.keys(params).length;
+			let paramsWhereUpdated = (numExistingRecs > numRemRecs);
+			for (const [address, inP] of Object.entries(onRemote)) {
+				const existing = params[address];
+				if (existing.timestamp < inP.timestamp) {
+					params[address] = inP;
+					paramsWhereUpdated = true;
+				} else if (existing.timestamp > inP.timestamp) {
+					paramsWhereUpdated = true;
+				}
+			}
+			if (paramsWhereUpdated) {
+				await paramsFile.v!.sync!.upload({ uploadVersion: remote.latest + 1 });
+			} else {
+				await paramsFile.v!.sync!.adoptRemote({ remoteVersion: remote.latest });
+			}
+		});
+	}
+
+	const {
+		stopFileWatching, triggerUpload
+	} = watchAndApplyChangesFromOtherDevices(
+		paramsFile, changeProc, onChangeFromOtherDevices, doOnConflict
+	);
+
+	function get(address: string) {
+		const p = params[address];
 		if (!p) { return; }
 		return copyParams(p);
 	};
 
-	setFor: ExposedFuncs['set'] = (address, params) => {
-		return this.fileProc.order.startOrChain(async () => {
-			const existing = this.params.get(address);
-			if (existing && (existing.timestamp >= params.timestamp)) { return; }
-
-			const p = { address } as ParamsForSending;
-			copyParams(params, p);
-
-			this.params.set(p.address, p);
-			await this.persist();
+	async function set(address: string, params: SendingParams) {
+		return changeProc.startOrChain(async () => {
+			const existing = params[address];
+			if (existing && (existing.timestamp >= params.timestamp)) {
+				return;
+			}
+			params[address] = copyParams(params);
+			await paramsFile.writeJSON(params);
+			triggerUpload();
 		});
 	}
 
-	private async persist(): Promise<void> {
-		const json = Array.from(this.params.values());
-		await this.fileProc.save(json, false);
+	async function close(): Promise<void> {
+		stopFileWatching();
 	}
 
-	async close(): Promise<void> {
-		await this.fileProc.close();
-	}
-
+	return {
+		get,
+		set,
+		close
+	};
 }
-Object.freeze(ParamsFromOthers.prototype);
-Object.freeze(ParamsFromOthers);
 
 /**
  * This copies SendingParams' fields, returning a copy, which was either

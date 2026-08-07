@@ -37,9 +37,9 @@ const ALL_SPECS = [
 	'caps-api/mailerid.js',
 	'caps-api/storage.js',
 	'caps-api/asmail.js',
-	// 'computer.3nweb.core/*.js',
+	'computer.3nweb.core/keyrings.js',
 	'computer.3nweb.core/id-manager.js',
-	// 'computer.3nweb.core/inbox/*.js'
+	'computer.3nweb.core/inbox/*.js'
 ];
 
 jas.loadConfig({

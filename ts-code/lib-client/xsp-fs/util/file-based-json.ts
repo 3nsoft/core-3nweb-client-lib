@@ -27,8 +27,7 @@ export type FileEventHandler = (
 	ev: FileEvent|RemoteEvent
 ) => Promise<void>;
 
-
-// XXX File proc can have general flow for sync
+// XXX File proc can have general flow for sync, missing now!
 
 export class JsonFileProc<T> {
 

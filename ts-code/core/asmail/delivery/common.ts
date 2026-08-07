@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2020 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2020, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -172,22 +172,12 @@ export interface ResourcesForSending {
 		 */
 		needIntroKeyFor(address: string): boolean;
 
-		/**
-		 * This function generates keys that are needed to send a message, i.e.
-		 * current crypto encryptor and identifiers to place in message's meta.
-		 * Returned object has following fields:
-		 * (a) encryptor - with encryptor, which should be used to pack message's
-		 * main part's key,
-		 * (b) currentPair - contains sendable form for current key pair.
-		 * (c) msgCount - message count for a current pair.
-		 * @param address
-		 * @param introPKeyFromServer is an optional recipient's key from a mail
-		 * server.
-		 */
-		generateKeysToSend: (
-			address: string, introPKeyFromServer?: JsonKey
-		) => Promise<{
-			encryptor: Encryptor; currentPair: ASMailKeyPair; msgCount: number;
+		getEstablishedKeysToSendMsg: (address: string) => Promise<{
+			encryptor: Encryptor; currentPair: ASMailKeyPair; msgCount: number; nextMsgCrypto?: SuggestedNextKeyPair;
+		}>;
+
+		generateIntroKeysToSendMsg: (address: string, introPKey: JsonKey) => Promise<{
+			encryptor: Encryptor; currentPair: ASMailKeyPair; msgCount: number; nextMsgCrypto?: SuggestedNextKeyPair;
 		}>;
 
 		/**
@@ -199,19 +189,12 @@ export interface ResourcesForSending {
 		paramsForSendingTo: (address: string) => SendingParams|undefined;
 
 		/**
-		 * This function returns next key pair
-		 * @param address 
-		 */
-		nextCrypto: (address: string) => Promise<SuggestedNextKeyPair|undefined>;
-
-		/**
 		 * This returns a new sending parameters that given address should use to
 		 * send messages back. Undefined is returned, if current parameters don't
 		 * have to be updated.
 		 * @param address
 		 */
-		newParamsForSendingReplies: (address: string) =>
-			Promise<SendingParams|undefined>;
+		newParamsForSendingReplies: (address: string) => Promise<SendingParams|undefined>;
 
 	};
 	cryptor: AsyncSBoxCryptor;
@@ -226,55 +209,6 @@ export interface SavedMsgToSend {
 	sender: string;
 	recipients: string[];
 	retryOpts: DeliveryOptions['retryRecipient'];
-}
-
-/**
- * This is a utility function that adds a number into given number line
- * segments. Each segment is represented by an array, in which 0-th element is
- * the smallest number in the segment, while 1-st element is the largest.
- * Segments don't overlap and are ordered as they would on a number line:
- * segment with smaller numbers go first.
- * @param segments 
- * @param n 
- */
-export function addToNumberLineSegments(segments: number[][], n: number): void {
-
-	for (let i=(segments.length-1); i>=0; i-=1) {
-		const [ low, high ] = segments[i];
-
-		if (high < n) {
-			if ((high + 1) >= n) {
-				// segment should be grown on a high side.
-				// But now bigger segment won't merge with higher segment, cause if
-				// it does, it would've merge from lower side of a higher segment.
-				segments[i][1] = n;
-			} else {
-				// new segment should be added higher than this one
-				segments.splice(i+1, 0, [ n, n ]);
-			}
-			return;
-		}
-
-		if ((low <= n) && (n <= high)) {
-			// do nothing as number falls into current segment
-			return;
-		}
-
-		if (low <= (n + 1)) {
-			// segment should be grown on a lower side
-			segments[i][0] = n;
-			if ((i-1) >= 0) {
-				// bigger segment may overlap with a lower one
-				const lowerSeg = segments[i-1];
-				if ((lowerSeg[1] + 1) >= n) {
-					lowerSeg[1] = high;
-					segments.splice(i, 1);
-				}
-			}
-			return;
-		}
-	}
-	segments.unshift([ n, n ]);
 }
 
 Object.freeze(exports);

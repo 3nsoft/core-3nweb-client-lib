@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2022 - 2023 3NSoft Inc.
+ Copyright (C) 2022 - 2023, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,13 +23,9 @@ export type BindParams = QueryParams;
 export type QueryExecResult = QueryResult;
 
 type WritableFile = web3n.files.WritableFile;
+type WritableFileSyncAPI = web3n.files.WritableFileSyncAPI;
 type ReadonlyFile = web3n.files.ReadonlyFile;
 type FileException = web3n.files.FileException;
-
-export interface SaveOpts {
-	skipUpload?: boolean;
-}
-
 
 export abstract class SQLiteOn3NStorage {
 
@@ -40,20 +36,30 @@ export abstract class SQLiteOn3NStorage {
 		protected readonly file: WritableFile
 	) {}
 
-	static async makeAndStart(file: WritableFile): Promise<SQLiteOn3NStorage> {
-		const SQL = await initSqlJs(true);
-		const fileContent = await readFileContent(file);
-		const db = new SQL.Database(fileContent);
-		let sqlite: SQLiteOn3NStorage;
-		if (file.v?.sync) {
-			sqlite = new SQLiteOnSyncedFS(db, file);
-		} else if (file.v) {
-			sqlite = new SQLiteOnLocalFS(db, file);
-		} else {
-			sqlite = new SQLiteOnDeviceFS(db, file);
+	// static async makeAndStart(file: WritableFile): Promise<SQLiteOn3NStorage> {
+	// 	const SQL = await initSqlJs(true);
+	// 	const fileContent = await readFileContent(file);
+	// 	const db = new SQL.Database(fileContent);
+	// 	let sqlite: SQLiteOn3NStorage;
+	// 	if (file.v?.sync) {
+	// 		sqlite = new SQLiteOnSyncedFS(db, file);
+	// 	} else if (file.v) {
+	// 		sqlite = new SQLiteOnLocalFS(db, file);
+	// 	} else {
+	// 		sqlite = new SQLiteOnDeviceFS(db, file);
+	// 	}
+	// 	await sqlite.start();
+	// 	return sqlite;
+	// }
+
+	static async makeSynced(file: WritableFile, startWithFileContent = true): Promise<SQLiteOnSyncedFS> {
+		if (!file.v?.sync) {
+			throw new TypeError(`Expected synced file to make synced db`);
 		}
-		await sqlite.start();
-		return sqlite;
+		const SQL = await initSqlJs(true);
+		const initialContent = startWithFileContent ? (await readFileContent(file)) : undefined;
+		const db = new SQL.Database(initialContent);
+		return new SQLiteOnSyncedFS(db, file);
 	}
 
 	private async start(): Promise<void> {
@@ -61,7 +67,7 @@ export abstract class SQLiteOn3NStorage {
 
 	}
 
-	async saveToFile(opts?: SaveOpts): Promise<void> {
+	async saveToFile(): Promise<void> {
 		await this.syncProc.startOrChain(async () => {
 			const dbFileContent = this.database.export();
 			await this.file.writeBytes(dbFileContent);
@@ -86,25 +92,40 @@ export abstract class SQLiteOn3NStorage {
 		);
 	}
 
+	async makeCopyIn(file: WritableFile): Promise<SQLiteOn3NStorage> {
+		const SQL = await initSqlJs(true);
+		const fileContent = this.database.export();
+		const db = new SQL.Database(fileContent);
+		let sqlite: SQLiteOn3NStorage;
+		if (file.v?.sync) {
+			sqlite = new SQLiteOnSyncedFS(db, file);
+		} else if (file.v) {
+			sqlite = new SQLiteOnLocalFS(db, file);
+		} else {
+			sqlite = new SQLiteOnDeviceFS(db, file);
+		}
+		await sqlite.start();
+		return sqlite;
+	}
+
 }
 Object.freeze(SQLiteOn3NStorage.prototype);
 Object.freeze(SQLiteOn3NStorage);
 
 
-class SQLiteOnSyncedFS extends SQLiteOn3NStorage {
+export class SQLiteOnSyncedFS extends SQLiteOn3NStorage {
 
 	constructor(db: Database, file: WritableFile) {
 		super(db, file);
 		Object.seal(this);
 	}
 
-	async saveToFile(opts?: SaveOpts): Promise<void> {
-		await super.saveToFile();
-		if (opts?.skipUpload) {
-			return;
-		} else {
-			await this.file.v!.sync!.upload();
-		}
+	get dbFile(): WritableFile {
+		return this.file;
+	}
+
+	get dbFileSync(): WritableFileSyncAPI {
+		return this.file.v!.sync!;
 	}
 
 }
@@ -166,10 +187,23 @@ type KeyedInfo<T> = { [columnName in keyof T]: string; };
 
 export class TableColumnsAndParams<EntryType extends object> {
 
+	/**
+	 * c is column name, just column name
+	 */
 	public readonly c: KeyedInfo<EntryType>;
+
 	public readonly cReversed: { [colName: string ]: keyof EntryType; };
+
+	/**
+	 * p is parameter for column
+	 */
 	public readonly p: KeyedInfo<EntryType>;
+
+	/**
+	 * q is a qualified column name with table name
+	 */
 	public readonly q: KeyedInfo<EntryType>;
+
 	public readonly columnsCreateSection: string;
 
 	constructor(

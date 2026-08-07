@@ -92,8 +92,7 @@ class FilePersistance extends NodePersistance {
 	}
 
 	async saveBytes(
-		bytes: Uint8Array|Uint8Array[], version: number,
-		attrs: CommonAttrs, xattrs: XAttrs|undefined
+		bytes: Uint8Array|Uint8Array[], version: number, attrs: CommonAttrs, xattrs: XAttrs|undefined
 	): Promise<Subscribe> {
 		return super.writeWhole(bytes, version, attrs, xattrs);
 	}

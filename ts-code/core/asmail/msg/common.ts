@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020, 2022 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020, 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -63,7 +63,6 @@ export interface MsgEnvelope {
 export interface SuggestedNextKeyPair {
 	pids: string[];
 	senderKid: string;
-	isSenderIntroKey?: boolean;
 	recipientPKey: JsonKeyShort;
 	timestamp: number;
 }

@@ -141,8 +141,7 @@ export abstract class NodePersistance {
 	}
 
 	protected async writeWhole(
-		content: Uint8Array|Uint8Array[], newVersion: number,
-		attrs?: CommonAttrs, xattrs?: XAttrs
+		content: Uint8Array|Uint8Array[], newVersion: number, attrs?: CommonAttrs, xattrs?: XAttrs
 	): Promise<Subscribe> {
 		const bytes = (Array.isArray(content) ? content : [ content ]);
 		const segWriter = await this.segWriter(newVersion);
@@ -179,9 +178,7 @@ export abstract class NodePersistance {
 	protected async writableSink(
 		newVersion: number, attrs?: CommonAttrs, xattrs?: XAttrs, base?: ObjSource
 	): Promise<{ sinkPromise: Promise<FileByteSink>; sub: Subscribe; }> {
-		const segWriter = await (base ?
-			this.segWriterWithBase(newVersion, base) :
-			this.segWriter(newVersion));
+		const segWriter = await (base ? this.segWriterWithBase(newVersion, base) : this.segWriter(newVersion));
 		const { sink, sub } = makeEncryptingByteSink(segWriter);
 		const defSink = defer<FileByteSink>();
 		return {

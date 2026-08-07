@@ -1,5 +1,5 @@
 /*
- Copyright 2022 3NSoft Inc.
+ Copyright 2022, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -15,9 +15,8 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MsgIndex } from "../../../core/asmail/inbox/msg-indexing";
-// import { MsgKeyInfo } from "../core/asmail/keyring";
-import { afterEachCond, beforeAllWithTimeoutLog, fitCond, itCond, xitCond } from "../../libs-for-tests/jasmine-utils";
+import { makeMsgIndex, MsgIndex } from "../../../core/asmail/inbox/msg-indexing";
+import { afterEachCond, beforeAllWithTimeoutLog, itCond } from "../../libs-for-tests/jasmine-utils";
 import { setupWithUsers } from "../../libs-for-tests/setups";
 import { makeSetupWithTwoDevsFSs } from "../test-utils";
 import { base64 } from '../../../lib-common/buffer-utils';
@@ -95,7 +94,7 @@ const msgs: { m: MsgInfo; k: MsgKeyInfo }[] = [
 	}
 ];
 
-xdescribe(`Inbox MsgIndex`, () => {
+describe(`Inbox MsgIndex`, () => {
 
 	const baseSetup = setupWithUsers();
 
@@ -112,7 +111,9 @@ xdescribe(`Inbox MsgIndex`, () => {
 	}, 20000);
 
 	beforeEach(async () => {
-		dev1Index = await MsgIndex.make(setup.dev1FS());
+		dev1Index = await makeMsgIndex(
+			setup.dev1FS(), setup.dev1LocalFS(), async (err, msg) => console.error(msg, err)
+		);
 	});
 
 	afterEachCond(async () => {
@@ -144,9 +145,12 @@ xdescribe(`Inbox MsgIndex`, () => {
 		lst = await dev1Index.listMsgs(undefined);
 		expect(lst.length).toBe(1);
 
-		const keyInfo = await dev1Index.getKeyFor(m1.m.msgId, m1.m.deliveryTS);
-		expect(bytesEqual(keyInfo!.msgKey, m1.k.key!))
-		.toBeTrue();
+		let keyInfo = await dev1Index.getKeyFor(m1.m.msgId, m1.m.deliveryTS);
+		expect(bytesEqual(keyInfo!.msgKey, m1.k.key!)).toBeTrue();
+
+		// getting removed / non-existing message
+		keyInfo = await dev1Index.getKeyFor(m0.m.msgId, m0.m.deliveryTS);
+		expect(keyInfo).toBeUndefined();
 	}, undefined, setup);
 
 	itCond(`work with race conditions on different devices`, async () => {
@@ -156,14 +160,19 @@ xdescribe(`Inbox MsgIndex`, () => {
 		// sleep to allow time for propagation to dev2
 		await sleep(100);
 
-		const dev2Index = await MsgIndex.make(setup.dev2FS());
-
+		const dev2Index = await makeMsgIndex(
+			setup.dev2FS(), setup.dev2LocalFS(), async (err, msg) => console.error(msg, err)
+		);
+		await sleep(100);
 		let lst = await dev2Index.listMsgs(undefined);
-		expect(lst.length)
-		.withContext(``)
-		.toBe(2);
+		expect(lst.length).withContext(`messages at a start of 2nd device`).toBe(2);
+
+		await dev1Index.add(msgs[2].m, msgs[2].k);
+		await sleep(100);
+		lst = await dev2Index.listMsgs(undefined);
+		expect(lst.length).withContext(`added message on the 1st device should show up on the 2nd`).toBe(3);
 
 		dev2Index.stopSyncing();
-	});
+	}, 10000);
 
 });

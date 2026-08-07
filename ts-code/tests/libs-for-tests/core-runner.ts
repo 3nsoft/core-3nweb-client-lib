@@ -29,6 +29,7 @@ import { resolveTxt as resolveDnsTxt } from 'dns';
 import { makeNativeCryptor } from "napi-nacl";
 import { makeRequestFromNode } from "../../lib-common-on-node/request-from-node";
 import { openServiceEventsSrcFromNode } from "../../lib-common-on-node/websocket-from-node";
+import { sysFilesOnDevice } from "../../lib-common-on-node/device-fs-places";
 
 export const testApp = {
 	appDomain: 'test.3nweb.app',
@@ -114,6 +115,7 @@ export class CoreRunner {
 						else { resolve(texts as any); }
 					}))
 			}),
+			sysFilesOnDevice,
 			makeNativeCryptor,
 			random
 		);

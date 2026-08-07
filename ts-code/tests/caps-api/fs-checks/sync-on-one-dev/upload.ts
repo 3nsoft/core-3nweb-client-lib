@@ -194,11 +194,46 @@ it.func = async function(s) {
 	await testFS.v!.sync!.upload(folder);
 	syncStatus = await testFS.v!.sync!.status(folder, true);
 	expect(syncStatus.state).toBe('synced');
+	expect(syncStatus.existsInSyncedParent).toBeFalsy();
 
 	// note again that upload is not uploading children
 	syncStatus = await testFS.v!.sync!.status(childPath, true);
 	expect(syncStatus.state).toBe('unsynced');
-	expect(syncStatus.existsInSyncedParent).toBeTruthy();
+	expect(syncStatus.existsInSyncedParent).toBeTrue();
+
+	const subFS = await testFS.writableSubRoot(folder);
+	syncStatus = await subFS.v!.sync!.status('', true);
+	expect(syncStatus.existsInSyncedParent).toBeFalsy();
+
+	await testFS.v!.sync!.upload('');
+	syncStatus = await testFS.v!.sync!.status(folder, true);
+	expect(syncStatus.existsInSyncedParent).toBeTrue();
+	syncStatus = await subFS.v!.sync!.status('', true);
+	expect(syncStatus.existsInSyncedParent).toBeTrue();
+
+	const childFolder = `child-folder`;
+	await subFS.makeFolder(childFolder);
+
+	// child never uploaded at this point
+	await subFS.v!.sync!.upload('').then(
+		() => fail(`upload of folder must fail with child that was never uploaded`),
+		(exc: FSSyncException) => {
+			expect(exc.type).toBe('fs-sync');
+			expect(exc.childNeverUploaded).toBeTrue();
+			expect(exc.childName).toBe(childFolder);
+		}
+	);
+
+	// uploading child, but it isn't yet in synced version of parent
+	await subFS.v!.sync!.upload(childFolder);
+	syncStatus = await subFS.v!.sync!.status(childFolder);
+	expect(syncStatus.state).toBe('synced');
+	expect(syncStatus.existsInSyncedParent).toBeFalsy();
+
+	// syncing parent makes child findable from upper synced point, and sync UX guarantees can be provided
+	await subFS.v!.sync!.upload('');
+	syncStatus = await subFS.v!.sync!.status(childFolder);
+	expect(syncStatus.existsInSyncedParent).toBeTrue();
 
 };
 specs.its.push(it);

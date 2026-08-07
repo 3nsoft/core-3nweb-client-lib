@@ -314,7 +314,7 @@ declare namespace web3n.files {
 		 * sink with this error. When err is given, no errors will be thrown back
 		 * to this call.
 		 */
-		done(err?: any, xattrChanges?: XAttrsChanges): Promise<void>;
+		done(err?: any): Promise<void>;
 
 	}
 
@@ -1172,33 +1172,39 @@ declare namespace web3n.files {
 
 	interface FileChangeEvent extends FSChangeEvent {
 		type: 'file-change';
-		newVersion?: number;
+		newVersion: number;
 	}
 
 	type RemoteEvent = RemoteVersionArchivalEvent | RemoteArchVerRemovalEvent |
 		RemoteRemovalEvent | RemoteChangeEvent;
 
+	/**
+	 * SyncStatus has fields that connect to item's parent, uploading, i.e. not just state of the item.
+	 * Hence, we pick only related fields.
+	 */
+	type ItemSyncStatus = Pick<SyncStatus, 'state' | 'remote' | 'synced' | 'local'>;
+
 	interface RemoteVersionArchivalEvent extends FSEvent {
 		type: 'remote-version-archival';
 		archivedVersion: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteArchVerRemovalEvent extends FSEvent {
 		type: 'remote-arch-ver-removal';
 		removedArchVer: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteRemovalEvent extends FSEvent {
 		type: 'remote-removal';
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	interface RemoteChangeEvent extends FSEvent {
 		type: 'remote-change';
 		newRemoteVersion: number;
-		syncStatus: SyncStatus;
+		syncStatus: ItemSyncStatus;
 	}
 
 	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadDoneEvent;

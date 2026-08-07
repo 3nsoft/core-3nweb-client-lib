@@ -668,8 +668,9 @@ class V implements WritableFSVersionedAPI, N {
 	async getOrCreateFile(path: string, flags: FileFlags): Promise<FileNode> {
 		const { fileName, folderPath } = split(path);
 		const { create, exclusive } = flags;
-		const folder = await this.getRootIfNotClosed(path).getFolderInThisSubTree(
-			folderPath, create).catch(setExcPath(path));
+		const folder = await this.getRootIfNotClosed(path)
+		.getFolderInThisSubTree(folderPath, create)
+		.catch(setExcPath(path));
 		const nullOnMissing = create;
 		let file = await folder.getFile(fileName, nullOnMissing)
 		.catch(setExcPath(path));

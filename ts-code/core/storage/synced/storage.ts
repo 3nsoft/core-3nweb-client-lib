@@ -16,7 +16,7 @@
 */
 
 import { IGetMailerIdSigner } from '../../../lib-client/user-with-mid-session';
-import { SyncedStorage as ISyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus, DownloadEventSink } from '../../../lib-client/xsp-fs/common';
+import { SyncedStorage, wrapSyncStorageImplementation,  NodesContainer, wrapStorageImplementation, Storage as IStorage, StorageGetter, ObjId, NodeEvent, SyncedObjStatus, DownloadEventSink } from '../../../lib-client/xsp-fs/common';
 import { makeObjNotFoundExc, makeObjExistsExc, StorageException } from '../../../lib-client/xsp-fs/exceptions';
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { ScryptGenParams } from '../../../lib-client/key-derivation';
@@ -39,7 +39,7 @@ type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type UploadEvent = web3n.files.UploadEvent;
 
 
-export class SyncedStore implements ISyncedStorage {
+export class SyncedStore implements SyncedStorage {
 	
 	public readonly type: web3n.files.FSType = 'synced';
 	public readonly versioned = true;
@@ -67,7 +67,7 @@ export class SyncedStore implements ISyncedStorage {
 		path: string, user: string, getSigner: IGetMailerIdSigner, getStorages: StorageGetter,
 		cryptor: AsyncSBoxCryptor, random: AsyncRNG,
 		remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
-	): Promise<{ syncedStore: ISyncedStorage; startObjProcs: () => void; }> {
+	): Promise<{ syncedStore: SyncedStorage; startObjProcs: () => void; }> {
 		const remote = RemoteStorage.make(user, getSigner, remoteServiceUrl, net);
 		const objFiles = await ObjFiles.makeFor(path, remote, () => s.whenConnected(), logError);
 		const s = new SyncedStore(objFiles, remote, getStorages, cryptor, random, logError);
@@ -84,7 +84,7 @@ export class SyncedStore implements ISyncedStorage {
 		path: string, user: string, getStorages: StorageGetter, cryptor: AsyncSBoxCryptor, random: AsyncRNG,
 		remoteServiceUrl: () => Promise<string>, net: NetClient, logError: LogError
 	): Promise<{
-		syncedStore: ISyncedStorage;
+		syncedStore: SyncedStorage;
 		setupRemoteAndStartObjProcs: (getSigner: IGetMailerIdSigner) => void;
 	}> {
 		const {
@@ -253,9 +253,7 @@ export class SyncedStore implements ISyncedStorage {
 		if (version === 1) {
 			const obj = await this.files.findObj(objId);
 			if (obj) { throw makeObjExistsExc(objId); }
-			const { fileWrite$ } = await this.files.saveFirstVersion(
-				objId, encSub
-			);
+			const { fileWrite$ } = await this.files.saveFirstVersion(objId, encSub);
 			await lastValueFrom(fileWrite$);
 		} else {
 			const obj = await this.getObjOrThrow(objId);

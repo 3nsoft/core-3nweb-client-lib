@@ -52,12 +52,12 @@ export class ObjVersionFile {
 	static async createNew(path: string): Promise<ObjVersionFile> {
 		const layout = ObjVersionBytesLayout.forNewFile();
 		const objFile = new ObjVersionFile(path, layout);
-		objFile.startCreatingFileOnDisk();
+		await objFile.creatingFileOnDisk();
 		return objFile;
 	}
 
-	private startCreatingFileOnDisk(): void {
-		this.writeProc.addStarted(createNewV1File(this.path));
+	private async creatingFileOnDisk(): Promise<void> {
+		await this.writeProc.addStarted(createNewV1File(this.path));
 	}
 
 	moveFile(newPath: string, newHeader: Uint8Array|undefined): Promise<void> {

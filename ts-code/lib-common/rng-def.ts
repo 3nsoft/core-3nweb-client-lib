@@ -31,4 +31,12 @@ export async function stringOfB64Chars(numOfChars: number, random: AsyncRNG): Pr
   return (byteArr as Buffer).toString('base64').substring(0, numOfChars);
 }
 
+export async function pseudoRNG(n: number): Promise<Uint8Array> {
+  const bytes = new Uint8Array(n);
+  for (let i=0; i<n; i+=1) {
+    bytes[i] = Math.floor(Math.random()*256);
+  }
+  return bytes;
+}
+
 Object.freeze(exports);

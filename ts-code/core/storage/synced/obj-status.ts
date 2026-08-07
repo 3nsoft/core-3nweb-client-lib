@@ -235,16 +235,12 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		Object.seal(this);
 	}
 
-	static async readFrom(
-		objFolder: string, objId: ObjId, logError: LogError
-	): Promise<ObjStatus> {
+	static async readFrom(objFolder: string, objId: ObjId, logError: LogError): Promise<ObjStatus> {
 		const status = await readAndCheckStatus(objFolder, objId);
 		return new ObjStatus(objFolder, status, logError);
 	}
 
-	static async makeNew(
-		objFolder: string, objId: ObjId, logError: LogError
-	): Promise<ObjStatus> {
+	static async makeNew(objFolder: string, objId: ObjId, logError: LogError): Promise<ObjStatus> {
 		const status = makeObjStatusInfo(objId);
 		const s = new ObjStatus(objFolder, status, logError);
 		await s.triggerSaveProc();
@@ -252,8 +248,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	}
 
 	static async makeForDownloadedVersion(
-		objFolder: string, objId: ObjId, version: number, currentRemote: number,
-		logError: LogError
+		objFolder: string, objId: ObjId, version: number, currentRemote: number, logError: LogError
 	): Promise<ObjStatus> {
 		const status = makeObjStatusInfo(objId);
 		status.remote.current = currentRemote;
@@ -360,9 +355,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		await this.triggerSaveProc().catch(skipNotFoundExc);
 	}
 
-	private async triggerSaveProc(
-		captureErrors = false, logErr = false
-	): Promise<void> {
+	private async triggerSaveProc(captureErrors = false, logErr = false): Promise<void> {
 		try {
 			await this.saveProc.trigger();
 		} catch (exc) {
@@ -423,9 +416,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		}
 	}
 
-	recordUploadCompletion(
-		localVersion: number, uploadVersion: number
-	): Promise<void> {
+	recordUploadCompletion(localVersion: number, uploadVersion: number): Promise<void> {
 		const { local, synced, remote, upload } = this.status;
 		if ((upload?.type !== 'new-version')
 		|| (upload.uploadVersion !== uploadVersion)) {
@@ -504,9 +495,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		return this.triggerSaveProc();
 	}
 
-	async recordStatusFromServer(
-		{ archived, current }: RemoteObjStatus
-	): Promise<void> {
+	async recordStatusFromServer({ archived, current }: RemoteObjStatus): Promise<void> {
 		const remote = this.status.remote;
 		let changedCurrent = false;
 		if (current) {
@@ -567,9 +556,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		 }
 	}
 
-	async setLocalCurrentVersion(
-		version: number, baseVer: number|undefined
-	): Promise<void> {
+	async setLocalCurrentVersion(version: number, baseVer: number|undefined): Promise<void> {
 		if (!this.status.local) {
 			this.status.local = makeVersions();
 		}
@@ -696,9 +683,11 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		await this.triggerSaveProc();
 	}
 
-	isAmongRemote(version: number): boolean {
+	isAmongRemoteOrSynced(version: number): boolean {
 		if (this.status.remote.current === version) { return true; }
 		if (this.status.remote.archived?.includes(version)) { return true; }
+		if (this.status.remote.baseToDiff[version]) { return true; }
+		if (this.status.synced?.version === version) { return true; }
 		return false;
 	}
 
@@ -711,11 +700,8 @@ Object.freeze(ObjStatus.prototype);
 Object.freeze(ObjStatus);
 
 
-export async function readAndCheckStatus(
-	objFolder: string, objId: ObjId
-): Promise<ObjStatusInfo> {
-	const status = await readJSONInfoFileIn<ObjStatusInfo>(
-		objFolder, STATUS_FILE_NAME);
+export async function readAndCheckStatus(objFolder: string, objId: ObjId): Promise<ObjStatusInfo> {
+	const status = await readJSONInfoFileIn<ObjStatusInfo>(objFolder, STATUS_FILE_NAME);
 	if (!status) {
 		throw makeStorageException({
 			message: `Obj status file is not found in obj folder ${objFolder}`
@@ -733,9 +719,7 @@ export async function readAndCheckStatus(
 	return status;
 }
 
-function localVersionFromStatus(
-	tagged: LocalVersions|undefined
-): LocalVersion|undefined {
+function localVersionFromStatus(tagged: LocalVersions|undefined): LocalVersion|undefined {
 	return (tagged ? {
 		latest: tagged.current,
 		isArchived: tagged.isArchived
@@ -765,8 +749,7 @@ function splitVersionsIntoBranches(
 }
 
 function versionsToBranch(
-	{ current, archived, isArchived }: VersionsOnServer,
-	splitVersion?: number, aboveSplit?: boolean
+	{ current, archived, isArchived }: VersionsOnServer, splitVersion?: number, aboveSplit?: boolean
 ): SyncVersionsBranch {
 	if (splitVersion) {
 		let splitArchived: number[]|undefined = undefined;
@@ -798,9 +781,7 @@ function versionsToBranch(
 	}
 }
 
-function removeArchVersionsNotInList(
-	remote: VersionsOnServer, versionsToKeep: number[]|undefined
-): boolean {
+function removeArchVersionsNotInList(remote: VersionsOnServer, versionsToKeep: number[]|undefined): boolean {
 	let isAnythingChanged = false;
 	if (remote.archived) {
 		for (const v of remote.archived) {
@@ -813,9 +794,7 @@ function removeArchVersionsNotInList(
 	return isAnythingChanged;
 }
 
-function addArchVersionsFromList(
-	remote: VersionsOnServer, existingVersions: number[]|undefined
-): boolean {
+function addArchVersionsFromList(remote: VersionsOnServer, existingVersions: number[]|undefined): boolean {
 	if (!existingVersions) { return false; }
 	let isAnythingChanged = false;
 	for (const v of existingVersions) {

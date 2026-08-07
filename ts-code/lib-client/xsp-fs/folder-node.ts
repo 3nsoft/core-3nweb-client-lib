@@ -36,7 +36,6 @@ import { parseFolderInfo, serializeFolderInfo } from './folder-node-serializatio
 import { CommonAttrs, XAttrs } from './attrs';
 import { NodePersistance } from './node-persistence';
 import { assert } from '../../lib-common/assert';
-import { appendArray } from './util/for-arrays';
 import { AsyncRNG } from '../../lib-common/rng-def';
 
 type ListingEntry = web3n.files.ListingEntry;
@@ -1278,6 +1277,17 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 Object.freeze(FolderNode.prototype);
 Object.freeze(FolderNode);
 
+
+function appendArray<T>(arr: T[], elems: T[]|T|undefined): T[] {
+	if (elems !== undefined) {
+		if (Array.isArray(elems)) {
+			arr.push(...elems);
+		} else {
+			arr.push(elems);
+		}
+	}
+	return arr;
+}
 
 const EMPTY_ARR = new Uint8Array(0);
 
