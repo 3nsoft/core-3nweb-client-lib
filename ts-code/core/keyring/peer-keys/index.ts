@@ -182,9 +182,14 @@ export async function makePeersKeyring(
 				senderPKey: introKey.pkey.k
 			});
 		}
-		const entryToLog = keysDB.getSendingPair(peerCAddr)!;
-		await keysDB.saveIfNeeded();
-		await logs.recordGettingCryptoFromPeer(entryToLog, peerAddr);
+		const entryToLog = keysDB.getSendingPair(peerCAddr);
+		if (entryToLog) {
+			await keysDB.saveIfNeeded();
+			await logs.recordGettingCryptoFromPeer(entryToLog, peerAddr);
+		} else {
+			// XXX we see code come here. sql not recording? why?
+			logger.logError(`Suggested sending pair somehow didn't get into db within this absorbNextPairSuggestedByPeer()`);
+		}
 	}
 
 	async function periodicCheckAndUploadOfData() {

@@ -92,7 +92,9 @@ export async function makeParamsFromOthers(
 			let paramsWhereUpdated = (numExistingRecs > numRemRecs);
 			for (const [address, inP] of Object.entries(onRemote)) {
 				const existing = params[address];
-				if (existing.timestamp < inP.timestamp) {
+				if (!existing) {
+					params[address] = inP;
+				} else if (existing.timestamp < inP.timestamp) {
 					params[address] = inP;
 					paramsWhereUpdated = true;
 				} else if (existing.timestamp > inP.timestamp) {

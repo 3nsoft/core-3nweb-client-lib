@@ -38,6 +38,18 @@ export function makeMsgNotFoundException(msgId: string): InboxException {
 	return exc;
 }
 
+export function makeMsgIncompleteException(msgId: string, deliveryStart: number): InboxException {
+	const exc: InboxException = {
+		runtimeException: true,
+		type: 'inbox',
+		msgId,
+		incompleteDelivery: true,
+		deliveryStart,
+		stack: getStackHere(1)
+	};
+	return exc;
+}
+
 export function makeFailToDecryptMsgException(msgId: string): InboxException {
 	const exc: InboxException = {
 		runtimeException: true,
@@ -108,14 +120,18 @@ export class MailRecipient extends ServiceUser {
 		}
 	}
 
-	async getMsgMeta(msgId: string): Promise<api.MsgMeta> {
+	async getMsgMeta(msgId: string, allowIncomplete: boolean): Promise<api.MsgMeta> {
 		const rep = await this.doBodylessSessionRequest<api.MsgMeta>({
 			appPath: api.msgMetadata.genUrlEnd(msgId),
 			method: 'GET',
 			responseType: 'json'
 		});
 		if (rep.status === api.msgMetadata.SC.ok) {
-			const { meta, errMsg } = api.sanitizedMeta(rep.data);
+			if (!rep.data.deliveryCompletion && !allowIncomplete) {
+				const { deliveryStart } = rep.data;
+				throw makeMsgIncompleteException(msgId, deliveryStart);
+			}
+			const { meta, errMsg } = api.sanitizedMeta(rep.data, allowIncomplete);
 			if (!meta) {
 				throw makeMalformedReplyHTTPException(rep, {
 					message: `Malformed message metadata in a server response: ${errMsg}`

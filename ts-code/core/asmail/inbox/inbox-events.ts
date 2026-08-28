@@ -26,6 +26,7 @@ import { ConnectException } from '../../../lib-common/exceptions/http';
 import type { ConnectionStatus } from '../../../lib-client/request-utils';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
+type InboxException = web3n.asmail.InboxException;
 type InboxEventType = web3n.asmail.InboxEventType;
 type Observer<T> = web3n.Observer<T>;
 type Events = msgRecievedCompletely.Event;
@@ -118,17 +119,13 @@ export class InboxEvents {
 		return this.msgReceiver.connectedState.whenStateIsSet();
 	}
 
-	private async getMessage(msgId: string): Promise<IncomingMessage|undefined> {
-		try {
-			return await this.getMsg(msgId)
-		} catch (err) {
-
-			// XXX we need to skip, if it is a connectivity error here;
-			//     should we remove on non-connectivity error
-			// await this.rmMsg(msgId).catch(noop);
-
-			await this.logError(err, `Cannot get message ${msgId}`);
-		}
+	private getMessage(msgId: string): Promise<IncomingMessage|undefined> {
+		return this.getMsg(msgId).catch(async (exc: InboxException|ConnectException) => {
+			if ((exc.type === 'connect') || (exc.type === 'inbox')) {
+				return undefined;
+			}
+			await this.logError(exc, `Cannot get message ${msgId}`);
+		});
 	}
 
 	subscribe<T>(event: InboxEventType, observer: Observer<T>): () => void {

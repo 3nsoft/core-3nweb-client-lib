@@ -143,8 +143,7 @@ const queryToCreatePeerKeysDbV2 = [
     msgMasterKeyAlg TEXT NOT NULL,
     msgMasterKey BLOB NOT NULL,
     --
-    PRIMARY KEY (peerCAddr, recipientKId, peerKId),
-    UNIQUE (peerCAddr, recipientKId) ON CONFLICT FAIL
+    PRIMARY KEY (peerCAddr, recipientKId, peerKId)
   )
   `,
   `--sql

@@ -310,36 +310,37 @@ export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorM
 	}
 	return (serviceLabel, logError) => async address => {
 		const domain = domainOfAddress(address);
-		let prevConnectionExc: DNSConnectException|undefined = undefined;
+		let exc: any = undefined;
+		let connectionExc: DNSConnectException|undefined = undefined;
 		for (let i=0; i<resolvers.length; i+=1) {
-			const resolver = resolvers[i]
+			const resolver = resolvers[i];
+			let txtRecords: string[][];
 			try {
-				const txtRecords = await resolver.resolveTxt(domain);
-				const recValue = extractPair(txtRecords, serviceLabel);
-				if (!recValue) { throw noServiceRecordExc(address); }
-				const url = checkAndPrepareURL(recValue);
-				return url;
+				txtRecords = await resolver.resolveTxt(domain);
 			} catch (err) {
 				await logError(err, `Resolver ${i+1} fails to get TXT records of ${domain}`);
 				const { code, hostname, message } = (err as DnsError);
 				if (code === NODATA) {
-					throw noServiceRecordExc(address);
+					exc = noServiceRecordExc(address);
 				} else if ((code === SERVFAIL)
 				|| (code === CONNREFUSED)
 				|| (code === TIMEOUT)) {
-					if (!prevConnectionExc) {
-						prevConnectionExc = noConnectionExc({ code, hostname, message });
-					}
+					connectionExc ??= noConnectionExc({ code, hostname, message });
 				} else if ((code === NOTFOUND) || hostname) {
-					throw domainNotFoundExc(address, { code, hostname, message });
+					exc ??= domainNotFoundExc(address, { code, hostname, message });
 				} else {
-					if (!prevConnectionExc) {
-						prevConnectionExc = err;
-					}
+					exc ??= err;
 				}
+				continue;
+			}
+			const recValue = extractPair(txtRecords, serviceLabel);
+			if (recValue) {
+				return checkAndPrepareURL(recValue);
+			} else {
+				exc ??= noServiceRecordExc(address);
 			}
 		}
-		throw prevConnectionExc;
+		throw exc ?? connectionExc;
 	};
 }
 

@@ -139,21 +139,25 @@ Object.freeze(msgMetadata);
  * This function returns either a checked version of given meta object, if it
  * passes as message meta, or undefined, otherwise.
  * @param meta is an object that is expected to be message meta
+ * @param allowIncomplete
  */
-export function sanitizedMeta(meta: MsgMeta): { meta?: MsgMeta; errMsg?: string; } {
+export function sanitizedMeta(meta: MsgMeta, allowIncomplete: boolean): { meta?: MsgMeta; errMsg?: string; } {
 	if (typeof meta !== 'object') {
 		return { errMsg: `is not a json object: ${JSON.stringify(meta)}` };
 	}
-	if (typeof meta.objs !== 'object') {
-		return { errMsg: `objs field is not an object in: ${JSON.stringify(meta)}` };
-	}
-	for (const objId of Object.keys(meta.objs)) {
-		const st = meta.objs[objId];
-		if (typeof st.size.header !== 'number') {
-			return { errMsg: `obj's header is not a number in: ${JSON.stringify(meta)}` };
+	if (typeof meta.objs === 'object') {
+		for (const objId of Object.keys(meta.objs)) {
+			const st = meta.objs[objId];
+			if (typeof st.size.header !== 'number') {
+				return { errMsg: `obj's header is not a number in: ${JSON.stringify(meta)}` };
+			}
+			if (st.completed && (st.size.segments === undefined)) {
+				return { errMsg: `obj's segments is not a number in: ${JSON.stringify(meta)}` };
+			}
 		}
-		if (st.completed && (st.size.segments === undefined)) {
-			return { errMsg: `obj's segments is not a number in: ${JSON.stringify(meta)}` };
+	} else {
+		if (!allowIncomplete) {
+			return { errMsg: `objs field is not an object in: ${JSON.stringify(meta)}` };
 		}
 	}
 	// TODO add more checks and return new object instead of a given one

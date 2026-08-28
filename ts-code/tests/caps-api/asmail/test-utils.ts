@@ -19,9 +19,12 @@ import { SpecIt as GenericSpecIt } from "../../libs-for-tests/spec-module";
 import { MultiUserSetup } from "../../libs-for-tests/setups";
 import { assert } from "../../../lib-common/assert";
 import { errWithCause, stringifyErr } from "../../../lib-common/exceptions/error";
+import { defer, Deferred } from "../../../lib-common/processes/deferred";
 
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
+type InboxService = web3n.asmail.InboxService;
+type IncomingMessage = web3n.asmail.IncomingMessage;
 type commonW3N = web3n.caps.common.W3N;
 
 /**
@@ -70,5 +73,37 @@ export function throwDeliveryErrorFrom(
 				`Error occured in message delivery:\n${stringifyErr(info.err)}`
 			);
 		}
+	}
+}
+
+export async function* getMsgsFrom(inbox: InboxService, numOfMsgsToGet: number) {
+	let msgCounter = 0;
+	let expectedMsg: Deferred<IncomingMessage|undefined>|undefined = defer();
+	const unsub= inbox!.subscribe('message', {
+		next: msg => {
+			expectedMsg?.resolve(msg);
+			msgCounter += 1;
+			expectedMsg = ((msgCounter < numOfMsgsToGet) ? defer() : undefined);
+		},
+		error: err => {
+			expectedMsg?.reject(err);
+			expectedMsg = undefined;
+		},
+		complete: () => {
+			expectedMsg?.resolve(undefined);
+			expectedMsg = undefined;
+		}
+	});
+	try {
+		while (expectedMsg) {
+			const msg = await expectedMsg?.promise;
+			if (msg) {
+				yield msg;
+			} else {
+				break;
+			}
+		}
+	} finally {
+		unsub();
 	}
 }

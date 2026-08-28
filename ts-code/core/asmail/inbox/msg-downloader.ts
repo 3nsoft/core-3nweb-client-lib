@@ -15,11 +15,14 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { MailRecipient } from "../../../lib-client/asmail/recipient";
+import { MailRecipient, makeMsgNotFoundException } from "../../../lib-client/asmail/recipient";
 import { ObjDownloader, InitDownloadParts, splitSegsDownloads, DownloadsRunner } from "../../../lib-client/objs-on-disk/obj-on-disk";
 import { MsgMeta } from "../../../lib-common/service-api/asmail/retrieval";
 import { Layout } from "xsp-files";
 import { ObjId } from "../../../lib-client/xsp-fs/common";
+import { sleep } from "../../../lib-common/processes/sleep";
+
+type InboxException = web3n.asmail.InboxException;
 
 const MAX_GETTING_CHUNK = 512*1024;
 const DOWNLOAD_START_CHUNK = 128*1024;
@@ -34,8 +37,19 @@ export class MsgDownloader {
 		Object.freeze(this);
 	}
 
-	getMsgMeta(msgId: string): Promise<MsgMeta> {
-		return this.msgReceiver.getMsgMeta(msgId);
+	async getMsgMeta(msgId: string, allowIncomplete: boolean): Promise<MsgMeta> {
+		return await this.msgReceiver.getMsgMeta(msgId, allowIncomplete)
+		.catch(async (exc: InboxException) => {
+			if (exc.incompleteDelivery) {
+				// cleanout old incomplete messages
+				const deliveryStart = exc.deliveryStart!;
+				if (!(Math.abs(Date.now() - deliveryStart) < 12*60*60*1000)) {
+					await this.msgReceiver.removeMsg(msgId).catch(noop);
+					throw makeMsgNotFoundException(msgId);
+				}
+			}
+			throw exc;
+		});
 	}
 
 	getObjDownloader(msgId: string): ObjDownloader {
@@ -63,6 +77,10 @@ export class MsgDownloader {
 }
 Object.freeze(MsgDownloader.prototype);
 Object.freeze(MsgDownloader);
+
+
+
+function noop() {}
 
 
 Object.freeze(exports);

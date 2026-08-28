@@ -232,13 +232,17 @@ async function fileTSsOfDBShards(dbsFS: WritableFS): Promise<number[]> {
 	const fileTSs: number[] = [];
 	for (const { isFile, name } of lst) {
 		if (!isFile || !name.endsWith(DB_EXT)) { continue; }
-		const numStr = name.substring(0, DB_EXT.length);
+		const numStr = name.substring(0, name.length - DB_EXT.length);
 		const fileTS = parseInt(numStr);
 		if (isNaN(fileTS)) { continue; }
 		fileTSs.push(fileTS);
 	}
-	fileTSs.sort();
+	fileTSs.sort(compareNumbers);
 	return fileTSs;
+}
+
+function compareNumbers(a: number, b: number): number {
+	return a - b;
 }
 
 const DB_EXT = '.sqlite';
@@ -264,7 +268,7 @@ async function setMsgIndexInfoIntoAttrOf(
 }
 
 function dbFileName(shardTS: number|undefined): string {
-	return (shardTS ? LATEST_DB : `${shardTS}${DB_EXT}`);
+	return (shardTS ? `${shardTS}${DB_EXT}` : LATEST_DB);
 }
 
 function shardTSFromFileName(fName: string): number|undefined {
@@ -348,7 +352,7 @@ export async function makeSqliteDBs(dbsFS: WritableFS) {
 
 	async function* iterateDBsFromLatestToOldest() {
 		yield { db: latest };
-		for (let i=(fileTSs.length-1); i>=0; i=-1) {
+		for (let i=(fileTSs.length-1); i>=0; i-=1) {
 			const fileTS = fileTSs[i];
 			if (!fileTS) { continue; }
 			const db = await dbShardFromCacheOrFS(fileTS);
@@ -450,7 +454,7 @@ export async function makeSqliteDBs(dbsFS: WritableFS) {
 		if (!shardTS) {
 			return;
 		}
-		for (let i=fileTSs.length; i>=0; i-1) {
+		for (let i=fileTSs.length; i>=0; i-=1) {
 			const ts = fileTSs[i]
 			if (ts < shardTS) {
 				fileTSs.slice(i+1, shardTS);

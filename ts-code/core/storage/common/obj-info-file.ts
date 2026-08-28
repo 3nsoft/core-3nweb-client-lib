@@ -178,8 +178,12 @@ export function addArchived(versions: VersionsInfo, version: number): boolean {
 		return false;
 	}
 	versions.archived.push(version);
-	versions.archived.sort();
+	versions.archived.sort(compareNumbers);
 	return true;
+}
+
+function compareNumbers(a: number, b: number): number {
+	return a - b;
 }
 
 export function isEmptyVersions(versions: VersionsInfo): boolean {

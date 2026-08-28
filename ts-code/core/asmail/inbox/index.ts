@@ -44,6 +44,7 @@ import { AsyncRNG } from '../../../lib-common/rng-def';
 
 type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
+type InboxException = web3n.asmail.InboxException;
 type WritableFS = web3n.files.WritableFS;
 type InboxService = web3n.asmail.InboxService;
 type JsonKey = web3n.keys.JsonKey;
@@ -191,7 +192,7 @@ export async function makeInboxOnServer(
 	async function msgFromDiskOrDownload(msgId: string): Promise<MsgOnDisk> {
 		const msgOnDisk = await cache.findMsg(msgId);
 		if (msgOnDisk) { return msgOnDisk; }
-		const meta = await downloader.getMsgMeta(msgId);
+		const meta = await downloader.getMsgMeta(msgId, false);
 		return await cache.addMsg(msgId, meta);
 	}
 
@@ -317,8 +318,10 @@ export async function makeInboxOnServer(
 			if (msgIds.length === 0) { return indexedMsgs; }
 			await Promise.all(msgIds.map(msgId =>
 				startCachingAndAddKeyToIndex(msgId)
-				.catch(async (exc) => {
-					await logError(exc, `Failed to start caching message ${msgId}`);
+				.catch(async (exc: InboxException) => {
+					if (!exc.incompleteDelivery && !exc.msgNotFound) {
+						await logError(exc, `Failed to start caching message ${msgId}`);
+					}
 				})
 			));
 			return index.listMsgs(fromTS);
@@ -337,7 +340,14 @@ export async function makeInboxOnServer(
 		}
 		if (msgIds.length === 0) { return []; }
 		// cache and index these
-		await Promise.all(msgIds.map(msgId => startCachingAndAddKeyToIndex(msgId)));
+		await Promise.all(msgIds.map(msgId =>
+			startCachingAndAddKeyToIndex(msgId)
+			.catch(async (exc: InboxException) => {
+				if (!exc.incompleteDelivery && !exc.msgNotFound) {
+					await logError(exc, `Failed to start caching message ${msgId}`);
+				}
+			})
+		));
 		// get info's from index, focusing on specific messages only
 		return (await index.listMsgs(fromTS)).filter(({ msgId }) => msgIds.includes(msgId));
 	}
