@@ -48,6 +48,8 @@ export interface SendingParamsHolder {
 	thisSide: SendingParamsThisSide;
 	otherSides: SendingParamsOtherSides;
 	close: () => Promise<void>;
+	forgetCorrespondentAt(cAddr: string): Promise<void>;
+	forgetAllCorrespondentsAtDomain(domain: string): Promise<void>;
 }
 
 
@@ -70,10 +72,22 @@ export async function makeSendingParamsHolder(
 		await otherSides.close();
 	}
 
+	async function forgetCorrespondentAt(cAddr: string): Promise<void> {
+		await otherSides.forgetCorrespondentAt(cAddr);
+		await thisSide.forgetCorrespondentAt(cAddr);
+	}
+
+	async function forgetAllCorrespondentsAtDomain(domain: string): Promise<void> {
+		await otherSides.forgetAllCorrespondentsAtDomain(domain);
+		await thisSide.forgetAllCorrespondentsAtDomain(domain);
+	}
+
 	return {
 		thisSide,
 		otherSides,
-		close
+		close,
+		forgetCorrespondentAt,
+		forgetAllCorrespondentsAtDomain
 	};
 }
 

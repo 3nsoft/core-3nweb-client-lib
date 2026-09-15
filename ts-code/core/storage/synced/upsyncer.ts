@@ -293,7 +293,8 @@ class UploadTask implements Task<UploadExecLabel> {
 				this.info.needUpload = undefined;
 				this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
 					message: `Fail to upload version ${this.info.uploadVersion} of local version ${this.info.localVersion}`,
-					localVersion: this.info.uploadVersion,
+					localVersion: this.info.localVersion,
+					uploadVersion: this.info.uploadVersion,
 					cause: exc
 				}));
 				await this.objStatus.recordUploadCancellation(this.info);

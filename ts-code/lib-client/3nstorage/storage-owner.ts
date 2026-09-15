@@ -282,7 +282,8 @@ export class StorageOwner extends ServiceUser {
 		}
 
 		const rep = await this.doBinarySessionRequest<api.currentObj.ReplyToPut>(
-			{ appPath, method: 'PUT', responseType: 'json' }, bytes);
+			{ appPath, method: 'PUT', responseType: 'json' }, bytes
+		);
 		if (rep.status === api.currentObj.SC.okPut) {
 			return rep.data.transactionId;
 		} else if (rep.status === api.currentObj.SC.objAlreadyExists) {
@@ -294,8 +295,7 @@ export class StorageOwner extends ServiceUser {
 		} else if (rep.status === api.currentObj.SC.unknownTransaction) {
 			throw makeUnknownTransactionExc(objId!);
 		} else if (rep.status === api.currentObj.SC.mismatchedObjVer) {
-			const curVer = (rep as any as api.currentObj.MismatchedObjVerReply).current_version;
-			// XXX is undefined expected, or, was that an error from server? Is it is a header?
+			const curVer = (rep.data as api.currentObj.MismatchedObjVerReply).current_version;
 			if (!Number.isInteger(curVer)) {
 				throw new Error(`Got non-integer current object version value from a version mismatch reply ${curVer}`);
 			}

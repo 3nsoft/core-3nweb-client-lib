@@ -26,6 +26,7 @@ import { NetClient } from '../../../lib-client/request-utils';
 import { LogWarning, LogError } from '../../../lib-client/logging/log-to-file';
 import { ServiceLocator } from '../../../lib-client/service-locator';
 import { AsyncRNG } from '../../../lib-common/rng-def';
+import { makeRuntimeException } from '../../../lib-common/exceptions/runtime';
 
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
@@ -35,6 +36,7 @@ type FS = web3n.files.FS;
 type WritableFS = web3n.files.WritableFS;
 type File = web3n.files.File;
 type JsonKey = web3n.keys.JsonKey;
+type ASMailSendException = web3n.asmail.ASMailSendException;
 
 const ATTACHMENTS_NAME = 'attachments';
 
@@ -196,6 +198,8 @@ export interface ResourcesForSending {
 		 */
 		newParamsForSendingReplies: (address: string) => Promise<SendingParams|undefined>;
 
+		isAddressBlocked(address: string): boolean;
+
 	};
 	cryptor: AsyncSBoxCryptor;
 	random: AsyncRNG;
@@ -209,6 +213,10 @@ export interface SavedMsgToSend {
 	sender: string;
 	recipients: string[];
 	retryOpts: DeliveryOptions['retryRecipient'];
+}
+
+export function makeDeliveryException(params: Partial<ASMailSendException>): ASMailSendException {
+	return makeRuntimeException<ASMailSendException>('asmail-delivery', params, {});
 }
 
 Object.freeze(exports);

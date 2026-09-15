@@ -17,9 +17,6 @@
 
 import { isLikeSignedKeyCert } from '../lib-common/jwkeys';
 import { Reply, NetClient } from './request-utils';
-// XXX rm dns
-import type { promises as dnsPromises } from 'dns';
-// import { CONNREFUSED, NODATA, NOTFOUND, SERVFAIL, TIMEOUT } from 'dns';
 import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 import { MailerIdRootRoute } from '../lib-common/service-api/mailer-id/root-route';
 import { StorageRootRoute } from '../lib-common/service-api/3nstorage/root-route';
@@ -27,7 +24,6 @@ import { ASMailRootRoute } from '../lib-common/service-api/asmail/root-route';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
 import { LogError } from './logging/log-to-file';
 
-type RuntimeException = web3n.RuntimeException;
 type SignedLoad = web3n.keys.SignedLoad;
 
 async function readJSONLocatedAt<T>(
@@ -206,7 +202,7 @@ function noConnectionExc(
  * undefined, when service record is not found.
  */
 function extractPair(
-	txtRecords: string[][], serviceLabel: ServiceTypeDNSLabel
+	txtRecords: string[][], serviceLabel: ServiceTypeDNSLabel | 'report'
 ): string|undefined {
 	for (const txtRecord of txtRecords) {
 		let joinedTXTstanzas = txtRecord.join('');
@@ -228,10 +224,11 @@ function extractPair(
 	return;
 }
 
-const recordsStarts: { [key in ServiceTypeDNSLabel]: string; } = {
+const recordsStarts: { [key in ServiceTypeDNSLabel | 'report']: string; } = {
 	"3nstorage": '3nstorage=',
 	asmail: 'asmail=',
-	mailerid: 'mailerid='
+	mailerid: 'mailerid=',
+	report: 'report='
 }
 
 function getRecordAtStartOf(txt: string): {
@@ -270,14 +267,14 @@ interface DnsError extends Error {
 export type ServiceTypeDNSLabel = 'mailerid' | 'asmail' | '3nstorage';
 
 export type ServiceLocatorMaker = (
-	serviceLabel: ServiceTypeDNSLabel,
+	serviceLabel: ServiceTypeDNSLabel | 'report',
 	logError: LogError
 ) => ServiceLocator;
 
 export type ServiceLocator = (address: string) => Promise<string>;
 
 export interface DnsResolver {
-	resolveTxt: (typeof dnsPromises)['resolveTxt'];
+	resolveTxt: (hostname: string) => Promise<string[][]>;
 }
 export const NODATA = "ENODATA";
 // export const FORMERR = "EFORMERR";
@@ -335,7 +332,11 @@ export function makeServiceLocator(...resolvers: DnsResolver[]): ServiceLocatorM
 			}
 			const recValue = extractPair(txtRecords, serviceLabel);
 			if (recValue) {
-				return checkAndPrepareURL(recValue);
+				if (serviceLabel === 'report') {
+					return recValue;
+				} else {
+					return checkAndPrepareURL(recValue);
+				}
 			} else {
 				exc ??= noServiceRecordExc(address);
 			}

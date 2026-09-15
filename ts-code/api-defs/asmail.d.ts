@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2020, 2022, 2024 - 2025 3NSoft Inc.
+ Copyright (C) 2016, 2020, 2022, 2024 - 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -33,6 +33,10 @@ declare namespace web3n.asmail {
 		delivery: DeliveryService;
 
 		config: ASMailConfigService;
+
+		getReportAddressForDomain(domain: string): Promise<string>;
+
+		filter: ASMailFilter;
 
 	}
 
@@ -307,6 +311,7 @@ declare namespace web3n.asmail {
 	interface ASMailSendException extends RuntimeException {
 		type: 'asmail-delivery';
 		address?: string;
+		id?: string;
 		
 		// errors that are due to remote side,
 		// these will be placed into ProgressDelivery object
@@ -319,10 +324,11 @@ declare namespace web3n.asmail {
 		allowedSize?: number;
 		recipientHasNoPubKey?: true;
 		recipientPubKeyFailsValidation?: true;
-		msgNotFound?: true;
 		
 		// errors that are due to this side
 		msgCancelled?: true;
+		recipientBlocked?: true;
+		msgNotFound?: true;
 	}
 
 	interface ASMailConfigService {
@@ -378,7 +384,7 @@ declare namespace web3n.asmail {
 	 */
 	interface AddressesList {
 		[address: string]: number;
-	}	
+	}
 
 	/**
 	 * Invites list is a map from invites to respective maximum message size in
@@ -386,6 +392,25 @@ declare namespace web3n.asmail {
 	 */
 	interface InvitesList {
 		[invite: string]: number;
-	}	
+	}
+
+	interface ASMailFilter {
+		listRules(): Promise<FilteringRule[]>;
+		addRule(rule: FilteringRule): Promise<{ ruleIndex: number; rule: FilteringRule; }>;
+		removeRule(ruleIndex: number, rule: FilteringRule): Promise<boolean>;
+	}
+
+	interface BlockAddressRule {
+		ruleType: 'block-address';
+		domain: string;
+		username: string;
+	}
+
+	interface BlockDomainRule {
+		ruleType: 'block-domain';
+		domain: string;
+	}
+
+	type FilteringRule = BlockAddressRule | BlockDomainRule;
 
 }

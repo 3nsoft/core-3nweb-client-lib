@@ -112,6 +112,8 @@ export interface ResourcesForReceiving {
 
 		midResolver: ServiceLocator;
 
+		isAddressBlocked(address: string): boolean;
+
 	};
 
 	logError: LogError;
@@ -234,6 +236,9 @@ export async function makeInboxOnServer(
 			);
 			if (decrOut) {
 				const { decrInfo, openedMsg } = decrOut;
+				if (r.correspondents.isAddressBlocked(decrInfo.correspondent)) {
+					return false;
+				}
 				openedMsg.setMsgKeyRole(decrInfo.keyStatus);
 				// XXX we have never used this part of protocol, should it be removed at all from ASMail protocol?
 				checkServerAuthIfPresent(meta, decrInfo);

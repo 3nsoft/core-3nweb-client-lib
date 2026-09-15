@@ -17,7 +17,7 @@
 import { MsgPacker, PackJSON } from '../msg/packer';
 import { NamedProcs, SingleProc } from '../../../lib-common/processes/synced';
 import { utf8 } from '../../../lib-common/buffer-utils';
-import { ResourcesForSending, Attachments, SavedMsgToSend, SEG_SIZE_IN_K_QUATS, estimatePackedSizeOf } from './common';
+import { ResourcesForSending, Attachments, SavedMsgToSend, SEG_SIZE_IN_K_QUATS, estimatePackedSizeOf, makeDeliveryException } from './common';
 import { WIP, WIPstate } from './per-recipient-wip';
 import { Observable, Subject } from 'rxjs';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
@@ -261,12 +261,7 @@ export class Msg {
 		const filesProc = Msg.progressSavingProcs.latestTaskAtThisMoment(this.id);
 		if (!filesProc) { return; }
 		await filesProc.catch(() => {});
-		const exc: web3n.asmail.ASMailSendException = {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			msgCancelled: true
-		};
-		this.progressPublisher.error(exc);
+		this.progressPublisher.error(makeDeliveryException({ id: this.id, msgCancelled: true }));
 	}
 
 	/**

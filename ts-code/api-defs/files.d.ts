@@ -70,6 +70,7 @@ declare namespace web3n.files {
 		type: 'fs-sync';
 		path: string;
 		localVersion?: number;
+		uploadVersion?: number;
 		remoteVersion?: number;
 		alreadyUploading?: true;
 		uploadTaskId?: number;
@@ -1681,8 +1682,8 @@ declare namespace web3n.files {
 		upload(path: string, opts?: OptionsToUploadLocal): Promise<number|undefined>;
 
 		/**
-		 * This method is for resolving conflicts on folders.
-		 * It adopts given folder item, that is present in remote version and is missing in local version.
+		 * This method is for resolving conflicts on folders, an action item by item.
+		 * It adopts only given folder item, that is present in remote version and is missing in local version.
 		 * Returns new local version.
 		 * @param path 
 		 * @param remoteItemName 
@@ -1694,7 +1695,9 @@ declare namespace web3n.files {
 
 		/**
 		 * This method is for resolving conflicts on folders.
-		 * It absorbs folder changes done in remote version.
+		 * It completely absorbs folder changes done in remote version.
+		 * Such wholesome may or may not be appriate in all circumstances, so use `adoptRemoteFolderItem`
+		 * for a more nuanced item-by-item operations.
 		 * Returns new local version, if there were remote items to adopt and their were added to local state.
 		 * @param path 
 		 * @param opts

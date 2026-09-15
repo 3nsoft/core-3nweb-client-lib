@@ -18,7 +18,7 @@
 import { FileException, ensureCorrectFS } from '../../../lib-common/exceptions/file';
 import { MailSender } from '../../../lib-client/asmail/sender';
 import { Msg } from './msg';
-import { Attachments, ResourcesForSending } from './common';
+import { Attachments, makeDeliveryException, ResourcesForSending } from './common';
 import { copy as jsonCopy } from '../../../lib-common/json-utils';
 import { Subject } from 'rxjs';
 import { share } from 'rxjs/operators';
@@ -29,7 +29,6 @@ type DeliveryService = web3n.asmail.DeliveryService;
 type DeliveryProgress = web3n.asmail.DeliveryProgress;
 type DeliveryOptions = web3n.asmail.DeliveryOptions;
 type OutgoingMessage = web3n.asmail.OutgoingMessage;
-type ASMailSendException = web3n.asmail.ASMailSendException;
 type Observer<T> = web3n.Observer<T>;
 
 const SMALL_MSG_SIZE = 1024*1024;
@@ -122,12 +121,7 @@ export class Delivery {
 		const msg = this.msgs.get(id);
 		if (!msg) {
 			if (observer.error) {
-				const exc: ASMailSendException = {
-					runtimeException: true,
-					type: 'asmail-delivery',
-					msgNotFound: true
-				};
-				observer.error(exc);
+				observer.error(makeDeliveryException({ id, msgNotFound: true }));
 			}
 			return () => {};
 		}
@@ -171,6 +165,11 @@ export class Delivery {
 		
 		if (!Array.isArray(recipients) || (recipients.length === 0)) {
 			throw new Error(`Given invalid recipients: ${recipients} for message ${id}`);
+		}
+		for (const recipient of recipients) {
+			if (this.r.correspondents.isAddressBlocked(recipient)) {
+				throw makeDeliveryException({ address: recipient, recipientBlocked: true });
+			}
 		}
 		if (this.msgs.has(id)) {
 			throw new Error(`Message with id ${id} has already been added for delivery`);

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2018, 2020 - 2022, 2025 3NSoft Inc.
+ Copyright (C) 2015 - 2018, 2020 - 2022, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -30,13 +30,16 @@ import { ServiceLocatorMaker } from '../../lib-client/service-locator';
 import { MakeNet } from '..';
 import { getOrMakeDirOnInit, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
 import { AsyncRNG } from '../../lib-common/rng-def';
+import { AddressFilter, makeAddressFilter } from './filtering';
 
 type WritableFS = web3n.files.WritableFS;
 type Service = web3n.asmail.Service;
+type FilteringRule = web3n.asmail.FilteringRule;
 
 const INBOX_DATA_FOLDER = 'inbox';
 const DELIVERY_DATA_FOLDER = 'delivery';
 const SEND_PARAMS_DATA_FOLDER = 'sending-params';
+const FILTERS_DATA_FOLDER = 'filtering';
 
 export type MailCAPMaker = () => Service;
 
@@ -49,6 +52,8 @@ export class ASMail {
 	private delivery: Delivery = (undefined as any);
 	private config: ConfigOfASMailServer = (undefined as any);
 	private sendingParams: SendingParamsHolder = (undefined as any);
+	private getReportAddressForDomain: Service['getReportAddressForDomain'] = (undefined as any);
+	private filter: AddressFilter = (undefined as any);
 
 	constructor(
 		private readonly cryptor: AsyncSBoxCryptor,
@@ -69,6 +74,8 @@ export class ASMail {
 		try {
 			this.address = address;
 
+			this.getReportAddressForDomain = makeResolver('report', this.logger.logError);
+
 			// XXX this should be part of proper syncing logic
 			// await getRemoteFolderChanges(syncedFS);
 
@@ -77,6 +84,11 @@ export class ASMail {
 			this.keyring = keyring;
 
 			await this.setupSendingParams(syncedFS);
+
+			this.filter = await makeAddressFilter(
+				await getOrMakeDirOnInit(syncedFS, FILTERS_DATA_FOLDER), this.logger.logError,
+				this.applyNewFilteringRuleToPeersInfo.bind(this)
+			);
 
 			await Promise.all([
 				this.setupInbox(syncedFS, localFS, getSigner, getStorages, makeResolver),
@@ -115,7 +127,8 @@ export class ASMail {
 				generateIntroKeysToSendMsg: this.keyring.generateIntroKeysToSendMsg,
 				getEstablishedKeysToSendMsg: this.keyring.getEstablishedKeysToSendMsg,
 				paramsForSendingTo: this.sendingParams.otherSides.get,
-				newParamsForSendingReplies: this.sendingParams.thisSide.getUpdated
+				newParamsForSendingReplies: this.sendingParams.thisSide.getUpdated,
+				isAddressBlocked: this.filter.isAddressBlocked
 			},
 			notifyMsgProgress: () => { throw new Error(`Method not set`); },
 			makeNet: this.makeNet,
@@ -144,7 +157,8 @@ export class ASMail {
 					msgDecryptor: this.keyring.decrypt,
 					markOwnSendingParamsAsUsed: this.sendingParams.thisSide.setAsUsed,
 					saveParamsForSendingTo: this.sendingParams.otherSides.set,
-					midResolver: makeResolver('mailerid', this.logger.logError)
+					midResolver: makeResolver('mailerid', this.logger.logError),
+					isAddressBlocked: this.filter.isAddressBlocked
 				},
 				makeNet: this.makeNet,
 				logError: this.logger.logError
@@ -157,7 +171,9 @@ export class ASMail {
 			getUserId: async () => this.address,
 			delivery: this.delivery.makeCAP(),
 			inbox: this.inbox.makeCAP(),
-			config: this.config.makeCAP()
+			config: this.config.makeCAP(),
+			getReportAddressForDomain: this.getReportAddressForDomain,
+			filter: this.filter.makeCAP()
 		};
 		return Object.freeze(w);
 	};
@@ -178,6 +194,7 @@ export class ASMail {
 		await this.delivery.close();
 		await this.keyring.close();
 		await this.sendingParams.close();
+		this.filter.close();
 	}
 
 	suspendNetworkActivity(): void {
@@ -190,6 +207,24 @@ export class ASMail {
 
 	get connectivityEvent$() {
 		return this.inbox.connectivityEvent$;
+	}
+
+	private async applyNewFilteringRuleToPeersInfo(r: FilteringRule): Promise<void> {
+		switch (r.ruleType) {
+			case 'block-address': {
+				const { username, domain } = r;
+				const cAddr = `${username}@${domain}`;
+				await this.keyring.forgetCorrespondentAt(cAddr);
+				await this.sendingParams.forgetCorrespondentAt(cAddr);
+				break;
+			}
+			case 'block-domain': {
+				const { domain } = r;
+				await this.keyring.forgetCorrespondentAt(domain);
+				await this.sendingParams.forgetCorrespondentAt(domain);
+				break;
+			}
+		}
 	}
 
 }

@@ -31,7 +31,11 @@ export type ParamsFromOthers = Awaited<ReturnType<typeof makeParamsFromOthers>>;
 
 export async function makeParamsFromOthers(
 	fs: WritableFS, fileName: string
-): Promise<SendingParamsHolder['otherSides'] & { close: () => Promise<void>; }> {
+): Promise<SendingParamsHolder['otherSides'] & {
+	close: () => Promise<void>;
+	forgetCorrespondentAt(cAddr: string): Promise<void>;
+	forgetAllCorrespondentsAtDomain(domain: string): Promise<void>;
+}> {
 
 	const {
 		file: paramsFile, changeProc
@@ -128,19 +132,47 @@ export async function makeParamsFromOthers(
 				return;
 			}
 			params[address] = copyParams(params);
-			await paramsFile.writeJSON(params);
-			triggerUpload();
+			await saveParamsAndTriggerUpload();
 		});
+	}
+
+	async function saveParamsAndTriggerUpload(): Promise<void> {
+		await paramsFile.writeJSON(params);
+		triggerUpload();		
 	}
 
 	async function close(): Promise<void> {
 		stopFileWatching();
 	}
 
+	async function forgetCorrespondentAt(cAddr: string): Promise<void> {
+		return changeProc.startOrChain(async () => {
+			if (params[cAddr]) {
+				delete params[cAddr];
+				await saveParamsAndTriggerUpload();
+			}
+		});
+	}
+
+	async function forgetAllCorrespondentsAtDomain(domain: string): Promise<void> {
+		return changeProc.startOrChain(async () => {
+			const atDomain = `@${domain}`;
+			const addressesToRm = Object.keys(params).filter(addr => addr.endsWith(atDomain));
+			if (addressesToRm.length > 0) {
+				for (const addr of addressesToRm) {
+					delete params[addr];
+				}
+				await saveParamsAndTriggerUpload();
+			}
+		});
+	}
+
 	return {
 		get,
 		set,
-		close
+		close,
+		forgetCorrespondentAt,
+		forgetAllCorrespondentsAtDomain
 	};
 }
 

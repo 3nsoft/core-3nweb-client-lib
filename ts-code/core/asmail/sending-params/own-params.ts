@@ -43,7 +43,11 @@ export type OwnSendingParams = Awaited<ReturnType<typeof makeOwnSendingParams>>;
 
 export async function makeOwnSendingParams(
 	fs: WritableFS, fileName: string, anonInvites: AnonymousInvites
-): Promise<SendingParamsHolder['thisSide'] & { close: () => Promise<void>; }> {
+): Promise<SendingParamsHolder['thisSide'] & {
+	close: () => Promise<void>;
+	forgetCorrespondentAt(cAddr: string): Promise<void>;
+	forgetAllCorrespondentsAtDomain(domain: string): Promise<void>;
+}> {
 
 	let params: Record<string, ParamsForAcceptingMsgs> = {};
 	let defaultParams: SendingParams|undefined = undefined;
@@ -87,7 +91,7 @@ export async function makeOwnSendingParams(
 					invitation
 				};
 			}
-			await persist();
+			await saveParamsAndTriggerUpload();
 		});
 	}
 
@@ -98,7 +102,7 @@ export async function makeOwnSendingParams(
 		};
 	}
 
-	async function persist(): Promise<void> {
+	async function saveParamsAndTriggerUpload(): Promise<void> {
 		await paramsFile.writeJSON(currentToFileJSON());
 		triggerUpload();
 	}
@@ -200,7 +204,7 @@ export async function makeOwnSendingParams(
 			};
 			p.suggested!.timestamp = Date.now();
 			params[p.address] = p;
-			await persist();
+			await saveParamsAndTriggerUpload();
 			return p.suggested;
 		});
 	}
@@ -213,7 +217,7 @@ export async function makeOwnSendingParams(
 			}
 			p.inUse = p.suggested;
 			p.suggested = undefined;
-			await persist();
+			await saveParamsAndTriggerUpload();
 		});
 	}
 
@@ -222,10 +226,34 @@ export async function makeOwnSendingParams(
 		stopFileWatching();
 	}
 
+	async function forgetCorrespondentAt(cAddr: string): Promise<void> {
+		return changeProc.startOrChain(async () => {
+			if (params[cAddr]) {
+				delete params[cAddr];
+				await saveParamsAndTriggerUpload();
+			}
+		});
+	}
+
+	async function forgetAllCorrespondentsAtDomain(domain: string): Promise<void> {
+		return changeProc.startOrChain(async () => {
+			const atDomain = `@${domain}`;
+			const addressesToRm = Object.keys(params).filter(addr => addr.endsWith(atDomain));
+			if (addressesToRm.length > 0) {
+				for (const addr of addressesToRm) {
+					delete params[addr];
+				}
+				await saveParamsAndTriggerUpload();
+			}
+		});
+	}
+
 	return {
 		close,
 		getUpdated,
-		setAsUsed
+		setAsUsed,
+		forgetCorrespondentAt,
+		forgetAllCorrespondentsAtDomain
 	};
 }
 

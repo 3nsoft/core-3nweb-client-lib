@@ -33,6 +33,9 @@ export function toCanonicalAddress(address: string): string {
 		domain = address.substring(indOfAt+1);
 		user = address.substring(0, indOfAt).replace(whiteSpace, '');
 	}
+	if (domain.endsWith('.')) {
+		domain = domain.substring(0, domain.length - 1);
+	}
 	checkDomainString(domain, address);
 	return (user+'@'+domain).toLowerCase();
 }

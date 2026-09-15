@@ -23,12 +23,11 @@ import * as api from '../../lib-common/service-api/asmail/delivery';
 import { asmailInfoAt, ServiceLocator } from '../service-locator';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
+import { makeDeliveryException } from '../../core/asmail/delivery/common';
 
 const LIMIT_ON_MAX_CHUNK = 1024*1024;
 
 const TOO_EARLY_RESTART_PERIOD = 5*60*1000;
-
-type ASMailSendException = web3n.asmail.ASMailSendException;
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;
@@ -117,60 +116,6 @@ export class MailSender {
 		if (!info.delivery) { throw new Error(`Missing delivery service url in ASMail information at ${serviceUrl}`); }
 		this.uri = info.delivery;
 	}
-	
-	private badRedirectExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			badRedirect: true
-		};
-	}
-	
-	private unknownRecipientExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			unknownRecipient: true
-		};
-	}
-	
-	private senderNotAllowedExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			senderNotAllowed: true
-		};
-	}
-	
-	private inboxIsFullExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			inboxIsFull: true
-		};
-	}
-	
-	private authFailedOnDeliveryExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			authFailedOnDelivery: true
-		};
-	}
-
-	private recipientHasNoPubKeyExc(): ASMailSendException {
-		return {
-			runtimeException: true,
-			type: 'asmail-delivery',
-			address: this.recipient,
-			recipientHasNoPubKey: true
-		};
-	}
 
 	/**
 	 * This method throws, if given message size is greater that a maximum
@@ -182,14 +127,11 @@ export class MailSender {
 			throw new Error(`Premature call to ensure size fit: maximum message length isn't set.`);
 		}
 		if (msgSize > this.maxMsgLength) {
-				const exc: ASMailSendException =  {
-				runtimeException: true,
-				type: 'asmail-delivery',
+			throw makeDeliveryException({
 				address: this.recipient,
 				msgTooBig: true,
 				allowedSize: this.maxMsgLength
-			};
-			throw exc;
+			});
 		}
 	}
 	
@@ -197,11 +139,17 @@ export class MailSender {
 		if (("string" !== typeof rep.redirect)
 		|| (rep.redirect.length === 0)
 		|| ((new URL(rep.redirect)).protocol !== 'https:')) {
-			throw this.badRedirectExc();
+			throw makeDeliveryException({
+				address: this.recipient, badRedirect: true,
+				message: `Server returns invalid url for redirect`
+			});
 		}
 		// refuse second redirect
 		if (this.redirectedFrom !== undefined) {
-			throw this.badRedirectExc();
+			throw makeDeliveryException({
+				address: this.recipient, badRedirect: true,
+				message: `Recipient's server points to second redirect, which is one too many`
+			});
 		}
 		// set params
 		this.redirectedFrom = this.deliveryURI;
@@ -242,11 +190,11 @@ export class MailSender {
 			this.prepareRedirectOrThrowUp(<any> rep.data);
 			return this.performPreFlight();
 		} else if (rep.status == api.preFlight.SC.unknownRecipient) {
-			throw this.unknownRecipientExc();
+			throw makeDeliveryException({ address: this.recipient, unknownRecipient: true });
 		} else if (rep.status == api.preFlight.SC.senderNotAllowed) {
-			throw this.senderNotAllowedExc();
+			throw makeDeliveryException({ address: this.recipient, senderNotAllowed: true });
 		} else if (rep.status == api.preFlight.SC.inboxFull) {
-			throw this.inboxIsFullExc();
+			throw makeDeliveryException({ address: this.recipient, inboxIsFull: true })
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}
@@ -293,11 +241,11 @@ export class MailSender {
 			this.prepareRedirectOrThrowUp(<any> rep.data);
 			return this.startSession();
 		} else if (rep.status == api.sessionStart.SC.unknownRecipient) {
-			throw this.unknownRecipientExc();
+			throw makeDeliveryException({ address: this.recipient, unknownRecipient: true });
 		} else if (rep.status == api.sessionStart.SC.senderNotAllowed) {
-			throw this.senderNotAllowedExc();
+			throw makeDeliveryException({ address: this.recipient, senderNotAllowed: true });
 		} else if (rep.status == api.sessionStart.SC.inboxFull) {
-			throw this.inboxIsFullExc();
+			throw makeDeliveryException({ address: this.recipient, inboxIsFull: true });
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}
@@ -336,7 +284,7 @@ export class MailSender {
 			this.prepareRedirectOrThrowUp(<any> rep.data);
 			return this.restartSession();
 		} else if (rep.status == api.sessionRestart.SC.unknownRecipient) {
-			throw this.unknownRecipientExc();
+			throw makeDeliveryException({ address: this.recipient, unknownRecipient: true });
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}
@@ -365,7 +313,7 @@ export class MailSender {
 		if (rep.status === api.authSender.SC.ok) { return; }
 		this.sessionId = (undefined as any);
 		if (rep.status === api.authSender.SC.authFailed) {
-			throw this.authFailedOnDeliveryExc();
+			throw makeDeliveryException({ address: this.recipient, authFailedOnDelivery: true });
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}
@@ -389,7 +337,7 @@ export class MailSender {
 			this.recipientPubKeyCerts = rep.data;
 			return this.recipientPubKeyCerts;
 		} else if (rep.status === api.initPubKey.SC.pkeyNotRegistered) {
-			throw this.recipientHasNoPubKeyExc();
+			throw makeDeliveryException({ address: this.recipient, recipientHasNoPubKey: true });
 		} else {
 			throw makeUnexpectedStatusHTTPException(rep);
 		}

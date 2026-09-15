@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016, 2018, 2020 3NSoft Inc.
+ Copyright (C) 2016, 2018, 2020, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -20,6 +20,8 @@ import { setupWithUsers } from '../libs-for-tests/setups';
 import { loadSpecs } from '../libs-for-tests/spec-module';
 import { join } from 'path';
 import { assert } from '../../lib-common/assert';
+import { checkAndTransformAddress } from '../../lib-common/canonical-address';
+import { deepEqual } from '../libs-for-tests/json-equal';
 
 
 describe('ASMail', () => {
@@ -41,6 +43,8 @@ describe('ASMail', () => {
 			expect(typeof w3n.mail!.inbox).toBe('object');
 			expect(typeof w3n.mail!.config).toBe('object');
 			expect(typeof w3n.mail!.getUserId).toBe('function');
+			expect(typeof w3n.mail!.getReportAddressForDomain).toBe('function');
+			expect(typeof w3n.mail!.filter).toBe('object');
 		}
 	}, undefined, s);
 
@@ -93,6 +97,40 @@ describe('ASMail', () => {
 
 	});
 
+	describe(`filter`, () => {
+
+		let filter: NonNullable<web3n.caps.common.W3N['mail']>['filter'];
+
+		beforeAll(() => {
+			filter = s.testAppCapsByUserIndex(0).mail!.filter;
+		});
+
+		itCond(`manages filtering rules, applied to incoming and outgoing messages`, async () => {
+			let rules = await filter.listRules();
+			expect(Array.isArray(rules)).toBeTrue();
+
+			let oneAddrBlock = await filter.addRule({
+				ruleType: 'block-address',
+				domain: 'some.do.ma.in',
+				username: 'blocked user'
+			});
+			expect(oneAddrBlock.ruleIndex).toBe(rules.length);
+			await filter.addRule({
+				ruleType: 'block-domain',
+				domain: 'bad.do.ma.in'
+			});
+
+			rules = await filter.listRules();
+			expect(deepEqual(rules[oneAddrBlock.ruleIndex], oneAddrBlock.rule)).toBeTrue();
+
+			let foundAndRemoved = await filter.removeRule(oneAddrBlock.ruleIndex, oneAddrBlock.rule);
+			expect(foundAndRemoved).toBeTrue();
+			foundAndRemoved = await filter.removeRule(oneAddrBlock.ruleIndex, oneAddrBlock.rule);
+			expect(foundAndRemoved).toBeFalse();
+		});
+
+	});
+
 	itCond('inbox lists incoming messages (no messages)', async () => {
 		assert(s.users.length > 0);
 		for (const u of s.users) {
@@ -100,6 +138,18 @@ describe('ASMail', () => {
 			const msgs = await w3n.mail!.inbox.listMsgs();
 			expect(Array.isArray(msgs)).toBe(true);
 			expect(msgs.length).toBe(0);
+		}
+	}, undefined, s);
+
+	itCond('hosts report address getting', async () => {
+		assert(s.users.length > 0);
+		for (const u of s.users) {
+			const w3n = s.testAppCapsByUser(u);
+			const someAddr = await w3n.mail!.getUserId();
+			const domain = someAddr.substring(someAddr.indexOf('@'));
+			const domainReportAddr = await w3n.mail!.getReportAddressForDomain(domain);
+			expect(typeof domainReportAddr).toBe('string');
+			expect(checkAndTransformAddress(domainReportAddr)).toBeTruthy();
 		}
 	}, undefined, s);
 

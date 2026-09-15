@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2020 - 2023, 2025 3NSoft Inc.
+ Copyright (C) 2020 - 2023, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -23,8 +23,8 @@ import { Subject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { exposeFSService, FSMsg, makeFSCaller } from '../../core-ipc/fs';
 import { toRxObserver } from '../../lib-common/utils-for-observables';
-import { makeReqRepObjCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
-import { wrapReqReplySrvMethod } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
+import { makeReqRepObjCaller, makeReqRepFuncCaller } from "../../core-ipc/json-ipc-wrapping/caller-side-wrap";
+import { wrapReqReplySrvMethod, wrapReqReplyFunc } from "../../core-ipc/json-ipc-wrapping/service-side-wrap";
 
 type ASMailService = web3n.asmail.Service;
 type PreFlight = web3n.asmail.PreFlightOnlyService;
@@ -55,8 +55,7 @@ export function exposeASMailCAP(
 				addMsg: addMsg.wrapService(out.addMsg, expServices),
 				currentState: currentState.wrapService(out.currentState),
 				listMsgs: delivListMsgs.wrapService(out.listMsgs),
-				observeAllDeliveries: observeAllDeliveries.wrapService(
-					out.observeAllDeliveries),
+				observeAllDeliveries: observeAllDeliveries.wrapService(out.observeAllDeliveries),
 				observeDelivery: observeDelivery.wrapService(out.observeDelivery),
 				preFlight: preFlight.wrapService(out.preFlight),
 				rmMsg: rmMsg.wrapService(out.rmMsg)
@@ -67,7 +66,9 @@ export function exposeASMailCAP(
 				removeMsg: removeMsg.wrapService(box.removeMsg),
 				subscribe: inboxSubscribe.wrapService(box.subscribe, expServices)
 			},
-			config: exposeConfigCAP(cap.config)
+			config: exposeConfigCAP(cap.config),
+			getReportAddressForDomain: wrapReqReplyFunc(cap, cap.getReportAddressForDomain),
+			filter: exposeFilterCAP(cap.filter)
 		};
 	}
 }
@@ -85,8 +86,7 @@ function makeASMailBasedOnListing(
 				addMsg: addMsg.makeCaller(caller, delivPath),
 				currentState: currentState.makeCaller(caller, delivPath),
 				listMsgs: delivListMsgs.makeCaller(caller, delivPath),
-				observeAllDeliveries: observeAllDeliveries.makeCaller(
-					caller, delivPath),
+				observeAllDeliveries: observeAllDeliveries.makeCaller(caller, delivPath),
 				observeDelivery: observeDelivery.makeCaller(caller, delivPath),
 				preFlight: preFlight.makeCaller(caller, delivPath),
 				rmMsg: rmMsg.makeCaller(caller, delivPath)
@@ -97,7 +97,9 @@ function makeASMailBasedOnListing(
 				removeMsg: removeMsg.makeCaller(caller, inboxPath),
 				subscribe: inboxSubscribe.makeCaller(caller, inboxPath)
 			},
-			config: makeConfigCaller(caller, objPath.concat('config'))
+			config: makeConfigCaller(caller, objPath.concat('config')),
+			getReportAddressForDomain: makeReqRepFuncCaller(caller, objPath.concat('getReportAddressForDomain')),
+			filter: makeFilterCaller(caller, objPath.concat('filter'))
 		};
 	} else if (capLists === 'preflight') {
 		return {
@@ -853,6 +855,32 @@ function makeConfigCaller(
 	return {
 		getOnServer: callConfig(caller, objPath, 'getOnServer'),
 		setOnServer: callConfig(caller, objPath, 'setOnServer')
+	};
+}
+
+function exposeFilterCAP(
+	cap: ASMailService['filter']
+): ExposedObj<ASMailService['filter']> {
+	return {
+		addRule: wrapReqReplySrvMethod(cap, 'addRule'),
+		listRules: wrapReqReplySrvMethod(cap, 'listRules'),
+		removeRule: wrapReqReplySrvMethod(cap, 'removeRule')
+	};
+}
+
+function callFilder<M extends keyof ASMailService['filter']>(
+	caller: Caller, objPath: string[], method: M
+): ASMailService['filter'][M] {
+	return makeReqRepObjCaller(caller, objPath, method);
+}
+
+function makeFilterCaller(
+	caller: Caller, objPath: string[]
+): ASMailService['filter'] {
+	return {
+		addRule: callFilder(caller, objPath, 'addRule'),
+		listRules: callFilder(caller, objPath, 'listRules'),
+		removeRule: callFilder(caller, objPath, 'removeRule')
 	};
 }
 

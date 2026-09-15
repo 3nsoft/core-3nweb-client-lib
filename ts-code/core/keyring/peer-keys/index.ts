@@ -221,6 +221,17 @@ export async function makePeersKeyring(
 		stopSyncing();
 	}
 
+	async function forgetCorrespondentAt(cAddr: string): Promise<void> {
+		keysDB.forgetCorrespondentAt(cAddr);
+		await logs.recordRemovalOfPeerAtAddress(cAddr);
+	}
+
+
+	async function forgetAllCorrespondentsAtDomain(domain: string): Promise<void> {
+		keysDB.forgetAllCorrespondentsAtDomain(domain);
+		await logs.recordRemovalOfAllPeersAtDomain(domain);
+	}
+
 	return {
 		getPeerAddressForCanonical: keysDB.getPeerAddressForCanonical,
 		needIntroKeyFor,
@@ -235,7 +246,10 @@ export async function makePeersKeyring(
 		markPairAsInUse: makeSyncedFunc(changeProc, undefined, markPairAsInUse),
 		updateReceivedMsgCountIn: keysDB.updateReceivedMsgCountIn,
 		close,
-		getPeerKeysInfo: keysDB.getPeerKeysInfo
+		getPeerKeysInfo: keysDB.getPeerKeysInfo,
+
+		forgetCorrespondentAt,
+		forgetAllCorrespondentsAtDomain
 	};
 }
 

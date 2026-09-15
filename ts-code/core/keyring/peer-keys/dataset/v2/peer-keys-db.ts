@@ -550,6 +550,33 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
     };
   }
 
+	async function forgetCorrespondentAt(peerCAddr: string): Promise<void> {
+    for (const table of [
+      'reception_key_pairs_pids', 'reception_key_pairs', 'sending_key_pairs', 'peers'
+    ]) {
+      keys.db.exec(
+        `--sql
+        DELETE FROM ${table} WHERE peerCAddr=$peerCAddr`,
+        { $peerCAddr: peerCAddr }
+      );
+      noteDbMotificationForFileSaving();
+    }
+	}
+
+	async function forgetAllCorrespondentsAtDomain(domain: string): Promise<void> {
+    for (const table of [
+      'reception_key_pairs_pids', 'reception_key_pairs', 'sending_key_pairs', 'peers'
+    ]) {
+      const atDomain = `@${domain}`;
+      keys.db.exec(
+        `--sql
+        DELETE FROM ${table} WHERE substr(peerCAddr,-${atDomain.length})=$atDomain`,
+        { $atDomain: atDomain }
+      );
+      noteDbMotificationForFileSaving();
+    }
+	}
+
   async function generateRegularSuggestedPairIfNeeded(peerCAddr: string): Promise<{
     nextCrypto: SuggestedNextKeyPair; entryToLog: RecipientKeyPairDbEntry;
   }|undefined> {
@@ -649,6 +676,12 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
           } else if (op.p.opType === 'peer-started-using-pair') {
             const { peerCAddr, peerKId, recipientKId } = op.p;
             markPairAsInUse(peerCAddr, peerKId, recipientKId);
+          } else if (op.p.opType === 'remove-peer-at-address') {
+            const { peerCAddr } = op.p;
+            forgetCorrespondentAt(peerCAddr);
+          } else if (op.p.opType === 'remove-all-peers-at-domain') {
+            const { domain } = op.p;
+            forgetAllCorrespondentsAtDomain(domain);
           }
         } else if (op.syncPoint) {
 
@@ -666,6 +699,7 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
         if (fsEvent.type === 'remote-change') {
 
           // XXX get remote, compare,add to current what is missing, vs remote
+          console.log(`need implementation in peer-keys-db/watchAndApplyOpsFromOtherDevices()`)
 
           resetSyncInterval();
         }
@@ -697,7 +731,10 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
     watchAndApplyOpsFromOtherDevices,
     saveAndSync,
 
-    getPeerKeysInfo
+    getPeerKeysInfo,
+
+    forgetCorrespondentAt,
+    forgetAllCorrespondentsAtDomain
   };
 }
 

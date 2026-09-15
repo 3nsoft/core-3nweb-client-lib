@@ -72,6 +72,8 @@ export interface KeyringForASMail {
 	getEstablishedKeysToSendMsg: SendingResources['getEstablishedKeysToSendMsg'];
 	decrypt: ReceptionResources['msgDecryptor'];
 	close(): Promise<void>;
+	forgetCorrespondentAt(cAddr: string): Promise<void>;
+	forgetAllCorrespondentsAtDomain(domain: string): Promise<void>;
 }
 
 const INTRO_KEYS_FOLDER = 'introductory-keys';
@@ -283,14 +285,16 @@ export async function makeKeyrings(
 			decrypt,
 			generateIntroKeysToSendMsg,
 			getEstablishedKeysToSendMsg,
-			needIntroKeyFor: peerKeys.needIntroKeyFor
+			needIntroKeyFor: peerKeys.needIntroKeyFor,
+			forgetCorrespondentAt: peerKeys.forgetCorrespondentAt,
+			forgetAllCorrespondentsAtDomain: peerKeys.forgetAllCorrespondentsAtDomain
 		};
 	}
 
 	return {
 		close,
 		makeKeyringsCAP,
-		forASMail
+		forASMail,
 	};
 }
 

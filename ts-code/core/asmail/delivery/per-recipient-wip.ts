@@ -24,6 +24,7 @@ import { checkAndExtractPKey } from '../key-verification';
 import { Msg } from './msg';
 import { AsyncSBoxCryptor, ObjSource } from 'xsp-files';
 import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
+import { makeDeliveryException } from './common';
 
 type JsonKey = web3n.keys.JsonKey;
 type PKeyCertChain = web3n.keys.PKeyCertChain;
@@ -319,14 +320,11 @@ export class WIP {
 		return checkAndExtractPKey(
 			this.sender.net, this.msg.r.midResolver, recipient, certs
 		).catch(err => {
-			const exc: web3n.asmail.ASMailSendException = {
-				runtimeException: true,
-				type: 'asmail-delivery',
+			throw makeDeliveryException({
 				address: recipient,
 				recipientPubKeyFailsValidation: true,
 				cause: err
-			}
-			throw exc;
+			});
 		});
 	}
 

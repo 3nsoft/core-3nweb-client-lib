@@ -51,7 +51,19 @@ export interface PeerStartedUsingPair {
 	peerKId: string;
 	recipientKId: string;
 }
-export type PairEvent = PairFromPeerLog | PairSuggestedToPeerLog | PeerStartedUsingPair;
+export interface RemovePeerAtAddress {
+	opType: 'remove-peer-at-address';
+	eventTS: number;
+	peerCAddr: string;
+}
+export interface RemoveAllPeersAtDomain {
+	opType: 'remove-all-peers-at-domain';
+	eventTS: number;
+	domain: string;
+}
+export type PairEvent = 
+PairFromPeerLog | PairSuggestedToPeerLog | PeerStartedUsingPair |
+RemovePeerAtAddress | RemoveAllPeersAtDomain;
 
 export function sendingPairEntryFromJSON(json: PairFromPeerLog['sendingPairRecord']): SendingKeyPairDbEntry {
 	return {
@@ -150,13 +162,31 @@ export async function makePeerKeysChangeLogs(logsFS: WritableFS, localLogsFS: Wr
 		});
 	}
 
+	async function recordRemovalOfPeerAtAddress(peerCAddr: string) {
+		await appendLogsAndUpload({
+			opType: 'remove-peer-at-address',
+			eventTS: Date.now(),
+			peerCAddr
+		});
+	}
+
+	async function recordRemovalOfAllPeersAtDomain(domain: string) {
+		await appendLogsAndUpload({
+			opType: 'remove-all-peers-at-domain',
+			eventTS: Date.now(),
+			domain
+		});
+	}
+
 	return {
 		recordSuggestingCryptoToPeer,
 		recordPeerStartedUsingPair,
 		recordGettingCryptoFromPeer,
 		numOfLogs,
 		cutLogOnDatasetSyncAndUpload,
-		watchAndApplyOpsFromOtherDevices
+		watchAndApplyOpsFromOtherDevices,
+		recordRemovalOfPeerAtAddress,
+		recordRemovalOfAllPeersAtDomain
 	};
 }
 
