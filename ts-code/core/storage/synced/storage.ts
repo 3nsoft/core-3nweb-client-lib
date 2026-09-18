@@ -31,12 +31,15 @@ import { lastValueFrom, Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
 import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { AsyncRNG } from '../../../lib-common/rng-def';
+import { startPeriodicConditionalTriggerProc } from '../../../lib-common/periodic-trigger';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
 type SyncStatus = web3n.files.SyncStatus;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type UploadEvent = web3n.files.UploadEvent;
+
+const CONNECTION_CHECK_WAIT_SECS = 30;
 
 
 export class SyncedStore implements SyncedStorage {
@@ -47,6 +50,7 @@ export class SyncedStore implements SyncedStorage {
 	private readonly remoteEvents: RemoteEvents;
 	private readonly uploader: UpSyncer;
 	private readonly events = new Broadcast<NodeEvent>();
+	private stopConnectionCheckingProc: (() => void)|undefined = undefined;
 
 	private constructor(
 		private readonly files: ObjFiles,
@@ -76,6 +80,7 @@ export class SyncedStore implements SyncedStorage {
 			syncedStore: wrapSyncStorageImplementation(s),
 			startObjProcs: () => {
 				s.remoteEvents.startListening();
+				s.startConnectionCheckingProc();
 			}
 		};
 	}
@@ -98,6 +103,7 @@ export class SyncedStore implements SyncedStorage {
 				setMid(getSigner);
 				s.uploader.start();
 				s.remoteEvents.startListening();
+				s.startConnectionCheckingProc();
 			}
 		};
 	}
@@ -278,6 +284,7 @@ export class SyncedStore implements SyncedStorage {
 
 	async close(): Promise<void> {
 		try {
+			this.stopConnectionCheckingProc?.();
 			await this.uploader.stop();
 			this.events.done();
 			await this.remoteEvents.close();
@@ -301,6 +308,17 @@ export class SyncedStore implements SyncedStorage {
 
 	whenConnected(): Promise<void> {
 		return this.remoteStorage.connectedState.whenStateIsSet();
+	}
+
+	private startConnectionCheckingProc(): void {
+		if (this.stopConnectionCheckingProc) {
+			this.stopConnectionCheckingProc();
+		}
+		this.stopConnectionCheckingProc = startPeriodicConditionalTriggerProc(
+			() => !this.remoteStorage.connectedState.isSet(),
+			() => this.remoteEvents.resumeNetworkActivity(),
+			CONNECTION_CHECK_WAIT_SECS
+		);
 	}
 
 }

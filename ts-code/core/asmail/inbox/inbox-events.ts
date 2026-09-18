@@ -119,6 +119,10 @@ export class InboxEvents {
 		return this.msgReceiver.connectedState.whenStateIsSet();
 	}
 
+	isConnected(): boolean {
+		return this.msgReceiver.connectedState.isSet();
+	}
+
 	private getMessage(msgId: string): Promise<IncomingMessage|undefined> {
 		return this.getMsg(msgId).catch(async (exc: InboxException|ConnectException) => {
 			if ((exc.type === 'connect') || (exc.type === 'inbox')) {

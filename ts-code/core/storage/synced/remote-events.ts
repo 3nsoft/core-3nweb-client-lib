@@ -105,6 +105,10 @@ export class RemoteEvents {
 		return this.remoteStorage.connectedState.whenStateIsSet();
 	}
 
+	isConnected(): boolean {
+		return this.remoteStorage.connectedState.isSet();
+	}
+
 	private absorbObjChange(client: SubscribingClient): Observable<void> {
 		return (new Observable<events.objChanged.Event>(
 			obs => client.subscribe(events.objChanged.EVENT_NAME, obs)
