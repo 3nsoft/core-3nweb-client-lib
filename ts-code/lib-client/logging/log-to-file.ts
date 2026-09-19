@@ -131,9 +131,9 @@ ${stringifyErr(err)}`;
 		});
 	}
 
-	// XXX add cleaner
 	async function removeOlderLogs(): Promise<void> {
-		const logs = (await readdir(utilDir).catch(exc => {
+		const logsDir = join(utilDir, LOGS_FOLDER);
+		const logs = (await readdir(logsDir).catch(exc => {
 			logError(exc, `Error when removing older logs`);
 			return [];
 		}))
@@ -141,7 +141,7 @@ ${stringifyErr(err)}`;
 		const tsCutOff = Date.now() - 4*24*12*60*60*1000;
 		for (const fName of logs) {
 			try {
-				const fPath = join(utilDir, fName);
+				const fPath = join(logsDir, fName);
 				const fStats = await stat(fPath);
 				if (fStats.birthtimeMs < tsCutOff) {
 					await unlink(fPath);
