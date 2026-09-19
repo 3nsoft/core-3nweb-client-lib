@@ -35,7 +35,8 @@ const logger: Logger = {
 	logWarning: async (msg: string, err?: any) => {
 		console.error(`\n --- test logWarning called with ---\nMessage: ${msg}\nError:`, err);
 	},
-	recordUnhandledRejectionsInProcess: () => {}
+	recordUnhandledRejectionsInProcess: () => {},
+	removeOlderLogs: async () => {}
 };
 
 async function logErrorInTest(err: any, msg?: string) {
