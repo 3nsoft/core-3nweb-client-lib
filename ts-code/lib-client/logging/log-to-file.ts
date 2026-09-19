@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017 - 2021 3NSoft Inc.
+ Copyright (C) 2017 - 2021, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -17,16 +17,19 @@
 
 import { stringifyErr } from '../../lib-common/exceptions/error';
 import { SingleProc } from '../../lib-common/processes/synced';
-import { appendFile, ensureFolderExists, FileException } from '../../lib-common/async-fs-node';
+import { appendFile, ensureFolderExists, FileException, stat, readdir, unlink } from '../../lib-common/async-fs-node';
 import { join, dirname } from 'path';
 
 export const LOGS_FOLDER = 'logs';
 
+const LOG_FILE_EXT = 'log.txt';
+
 function logFileName(now: Date, appDomain?: string): string {
 	const dateStr = now.toISOString().slice(0, 10);
 	return (appDomain ?
-		`${dateStr}.${appDomain}.log.txt` :
-		`${dateStr}.log.txt`);
+		`${dateStr}.${appDomain}.${LOG_FILE_EXT}` :
+		`${dateStr}.${LOG_FILE_EXT}`
+	);
 }
 
 let version: string;
@@ -127,9 +130,30 @@ ${stringifyErr(err)}`;
 			logError(err, 'Unhandled exception');
 		});
 	}
+
+	// XXX add cleaner
+	async function removeOlderLogs(): Promise<void> {
+		const logs = (await readdir(utilDir).catch(exc => {
+			logError(exc, `Error when removing older logs`);
+			return [];
+		}))
+		.filter(fName => fName.endsWith(`.${LOG_FILE_EXT}`));
+		const tsCutOff = Date.now() - 4*24*12*60*60*1000;
+		for (const fName of logs) {
+			try {
+				const fPath = join(utilDir, fName);
+				const fStats = await stat(fPath);
+				if (fStats.birthtimeMs < tsCutOff) {
+					await unlink(fPath);
+				}
+			} catch (exc) {
+				logError(exc, `Error when removing older logs`);
+			}
+		}
+	}
 	
 	return Object.freeze({
-		logError, logWarning, appLog, recordUnhandledRejectionsInProcess
+		logError, logWarning, appLog, recordUnhandledRejectionsInProcess, removeOlderLogs
 	});
 }
 
