@@ -21,7 +21,7 @@ import { SyncedStorage, Storage, StorageGetter } from '../../lib-client/xsp-fs/c
 import { XspFS as xspFS } from '../../lib-client/xsp-fs/fs';
 import { SyncedStore } from './synced/storage';
 import { LocalStorage } from './local/storage';
-import { ServiceLocator } from '../../lib-client/service-locator';
+import { ServiceLocator } from '../../lib-client/networks';
 import { deriveStorageSKey, ScryptGenParams } from '../../lib-client/key-derivation';
 import { FileException, makeFileException } from '../../lib-common/exceptions/file';
 import { AsyncSBoxCryptor } from 'xsp-files';

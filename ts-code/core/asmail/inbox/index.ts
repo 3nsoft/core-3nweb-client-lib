@@ -19,7 +19,7 @@ import { StorageGetter } from '../../../lib-client/xsp-fs/common';
 import { ConnectException } from '../../../lib-common/exceptions/http';
 import { NamedProcs } from '../../../lib-common/processes/synced';
 import { MailRecipient, makeFailToDecryptMsgException, makeMsgNotFoundException } from '../../../lib-client/asmail/recipient';
-import { ServiceLocator } from '../../../lib-client/service-locator';
+import { ServiceLocator } from '../../../lib-client/networks';
 import { OpenedMsg, openMsg } from '../msg/opener';
 import { MsgKeyInfo } from '../../keyring';
 import { makeMsgIndex } from './msg-indexing';

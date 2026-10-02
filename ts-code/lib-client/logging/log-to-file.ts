@@ -138,7 +138,7 @@ ${stringifyErr(err)}`;
 			return [];
 		}))
 		.filter(fName => fName.endsWith(`.${LOG_FILE_EXT}`));
-		const tsCutOff = Date.now() - 4*24*12*60*60*1000;
+		const tsCutOff = Date.now() - 4*24*60*60*1000;
 		for (const fName of logs) {
 			try {
 				const fPath = join(logsDir, fName);

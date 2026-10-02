@@ -25,7 +25,7 @@ import { copy as jsonCopy } from '../lib-common/json-utils';
 import { Logger, makeLogger } from '../lib-client/logging/log-to-file';
 import { NetClient } from '../lib-client/request-utils';
 import { AppDirs, appDirs } from './app-files';
-import { ServiceLocatorMaker } from '../lib-client/service-locator';
+import { ServiceLocatorMaker } from '../lib-client/networks';
 import { makeKeyrings } from './keyring';
 import { ASMAIL_APP_NAME, KEYRINGS_APP_NAME, MAILERID_APP_NAME } from './storage/common/constants';
 import { ConfigOfASMailServer } from './asmail/config';

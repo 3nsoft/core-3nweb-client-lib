@@ -16,7 +16,7 @@
 */
 
 import { RequestFn, RequestOpts } from "./request-utils";
-import { DnsResolver, CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from "./service-locator";
+import { DnsResolver, CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from "./networks";
 import { ConnectException } from '../lib-common/exceptions/http';
 
 export function dohAt(request: RequestFn<unknown>, dohServerUrl: string): DnsResolver {

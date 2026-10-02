@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { ServiceLocator } from '../../lib-client/service-locator';
+import { ServiceLocator } from '../../lib-client/networks';
 import { MailConfigurator, ParamOnServer } from '../../lib-client/asmail/service-config';
 import { GetSigner } from '../id-manager';
 import { NetClient } from '../../lib-client/request-utils';

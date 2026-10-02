@@ -24,7 +24,7 @@ import { LOGS_FOLDER } from "../../lib-client/logging/log-to-file";
 import { stringifyErr } from "../../lib-common/exceptions/error";
 import { assert } from "../../lib-common/assert";
 import { wrapCommonW3N, wrapStartupW3N } from "./caps-ipc-wrap";
-import { makeServiceLocator } from "../../lib-client/service-locator";
+import { wrapNetworkFns } from "../../lib-client/networks";
 import { resolveTxt as resolveDnsTxt } from 'dns';
 import { makeNativeCryptor } from "napi-nacl";
 import { makeRequestFromNode } from "../../lib-common-on-node/request-from-node";
@@ -72,6 +72,22 @@ const DATA_FOLDER = join(__dirname, '..', '..', '..', 'test-data');
 type CommonW3N = web3n.caps.common.W3N;
 type StartupW3N = web3n.startup.W3N;
 
+function resolveTxt(domain: string): Promise<string[][]> {
+	return new Promise((resolve, reject) => resolveDnsTxt(domain, (err, records) => {
+		if (err) {
+			reject(err);
+		} else {
+			resolve(records);
+		}
+	}));
+}
+
+const { makeLocator, makeNet } = wrapNetworkFns({ regular: {
+	naming: [{ resolveTxt }],
+	openServiceEventsSource: openServiceEventsSrcFromNode,
+	requests: makeRequestFromNode()
+} });
+
 
 export class CoreRunner {
 
@@ -107,14 +123,8 @@ export class CoreRunner {
 		}
 		this.runningCore = Core.make(
 			{ dataDir: this.dataFolder, signUpUrl: this.signUpUrl },
-			() => makeNetClient(makeRequestFromNode(), openServiceEventsSrcFromNode),
-			makeServiceLocator({
-				resolveTxt: domain => new Promise(
-					(resolve, reject) => resolveDnsTxt(domain, (err, texts) => {
-						if (err) { reject(err); }
-						else { resolve(texts as any); }
-					}))
-			}),
+			makeNet,
+			makeLocator,
 			sysFilesOnDevice,
 			makeNativeCryptor,
 			random

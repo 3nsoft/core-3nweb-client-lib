@@ -24,7 +24,7 @@ import { GenerateKey } from '../startup/sign-in';
 import { LogError, LogWarning } from '../../lib-client/logging/log-to-file';
 import { NetClient } from '../../lib-client/request-utils';
 import { startMidSession, authenticateMidSession } from '../../lib-client/mailer-id/login';
-import { ServiceLocator } from '../../lib-client/service-locator';
+import { ServiceLocator } from '../../lib-client/networks';
 import { IdKeysStorage } from './key-storage';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { verifySignature } from '../../lib-common/mailerid-sigs/relying-party';

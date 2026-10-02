@@ -26,7 +26,7 @@ import { GetSigner } from '../id-manager';
 import { AsyncSBoxCryptor } from 'xsp-files';
 import { makeSendingParamsHolder, SendingParamsHolder } from './sending-params';
 import { Logger } from '../../lib-client/logging/log-to-file';
-import { ServiceLocatorMaker } from '../../lib-client/service-locator';
+import { ServiceLocatorMaker } from '../../lib-client/networks';
 import { MakeNet } from '..';
 import { getOrMakeDirOnInit, uploadFolderChangesIfAny } from '../../lib-client/fs-utils/fs-sync-utils';
 import { AsyncRNG } from '../../lib-common/rng-def';

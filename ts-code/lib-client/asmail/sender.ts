@@ -20,10 +20,11 @@
 
 import { NetClient } from '../request-utils';
 import * as api from '../../lib-common/service-api/asmail/delivery';
-import { asmailInfoAt, ServiceLocator } from '../service-locator';
+import { asmailInfoAt } from '../service-locator';
 import { MailerIdSigner } from '../../lib-common/mailerid-sigs/user';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 import { makeDeliveryException } from '../../core/asmail/delivery/common';
+import { ServiceLocator } from '../networks';
 
 const LIMIT_ON_MAX_CHUNK = 1024*1024;
 

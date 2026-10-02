@@ -24,7 +24,7 @@ import { Encryptor } from '../../../lib-common/async-cryptor-wrap';
 import { ASMailKeyPair } from '../../keyring/common';
 import { NetClient } from '../../../lib-client/request-utils';
 import { LogWarning, LogError } from '../../../lib-client/logging/log-to-file';
-import { ServiceLocator } from '../../../lib-client/service-locator';
+import { ServiceLocator } from '../../../lib-client/networks';
 import { AsyncRNG } from '../../../lib-common/rng-def';
 import { makeRuntimeException } from '../../../lib-common/exceptions/runtime';
 

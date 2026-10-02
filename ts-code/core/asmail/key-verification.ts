@@ -17,10 +17,11 @@
 
 import { toCanonicalAddress } from '../../lib-common/canonical-address';
 import { getKeyCert } from '../../lib-common/jwkeys';
-import { getMailerIdInfoFor, ServiceLocator } from '../../lib-client/service-locator';
+import { getMailerIdInfoFor } from '../../lib-client/service-locator';
 import { NetClient } from '../../lib-client/request-utils';
 import { verifyPubKey } from '../../lib-common/mailerid-sigs/relying-party';
 import { makeMalformedCertsException } from '../../lib-common/mailerid-sigs';
+import { ServiceLocator } from '../../lib-client/networks';
 
 type JsonKey = web3n.keys.JsonKey;
 type SignedLoad = web3n.keys.SignedLoad;

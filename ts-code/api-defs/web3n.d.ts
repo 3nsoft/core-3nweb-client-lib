@@ -54,6 +54,13 @@ declare namespace web3n {
 		connectType: 'dns';
 	}
 
+	interface NetworkConnectException extends ConnectException {
+		connectType: 'network';
+		networkType: 'regular' | 'onion' | 'i2p';
+		location: string;
+		noImplementationSet?: true;
+	}
+
 	interface HTTPException extends HTTPErrorDetails {
 		type: 'http-request';
 		status: number;

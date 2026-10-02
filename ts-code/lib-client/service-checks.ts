@@ -16,8 +16,9 @@
 */
 
 import { checkAvailableDomains } from "./3nweb-signup";
+import { ServiceLocatorMaker, ServiceTypeDNSLabel } from "./networks";
 import { NetClient } from "./request-utils";
-import { asmailInfoAt, mailerIdInfoAt, ServiceLocatorMaker, ServiceTypeDNSLabel, storageInfoAt } from "./service-locator";
+import { asmailInfoAt, mailerIdInfoAt, storageInfoAt } from "./service-locator";
 
 export interface Check {
 	service: 'signup'|'asmail'|'3nstorage'|'mailerid';
