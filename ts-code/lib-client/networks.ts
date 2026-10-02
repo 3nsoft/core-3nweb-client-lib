@@ -35,12 +35,6 @@ function domainOfAddress(address: string): string {
   }
 }
 
-function checkAndPrepareURL(value: string): string {
-  // XXX insert some value sanity check
-  
-  return 'https://'+value;
-}
-
 type ServLocException = web3n.ServLocException;
 type DNSConnectException = web3n.DNSConnectException;
 
@@ -92,9 +86,7 @@ function noConnectionToWellKnownExc(message: string, cause: any): DNSConnectExce
  * @return string value for a given service among given dns TXT records, or
  * undefined, when service record is not found.
  */
-function extractPair(
-  txtRecords: string[][], serviceLabel: ServiceTypeDNSLabel | 'report'
-): string|undefined {
+function extractPair(txtRecords: string[][], serviceLabel: DNSLabel): string|undefined {
   for (const txtRecord of txtRecords) {
     let joinedTXTstanzas = txtRecord.join('');
     let record = getRecordAtStartOf(joinedTXTstanzas);
@@ -115,11 +107,12 @@ function extractPair(
   return;
 }
 
-const recordsStarts: { [key in ServiceTypeDNSLabel | 'report']: string; } = {
+const recordsStarts: { [key in DNSLabel]: string; } = {
   "3nstorage": '3nstorage=',
   asmail: 'asmail=',
   mailerid: 'mailerid=',
-  report: 'report='
+  report: 'report=',
+  w3nApp: 'w3n-app='
 }
 
 function getRecordAtStartOf(txt: string): {
@@ -156,9 +149,10 @@ interface DnsError extends Error {
 }
 
 export type ServiceTypeDNSLabel = 'mailerid' | 'asmail' | '3nstorage';
+export type DNSLabel = ServiceTypeDNSLabel | 'report' | 'w3nApp'
 
 export type ServiceLocatorMaker = (
-  serviceLabel: ServiceTypeDNSLabel | 'report',
+  serviceLabel: DNSLabel,
   logError: LogError
 ) => ServiceLocator;
 
@@ -191,24 +185,6 @@ export const TIMEOUT = "ETIMEOUT";
 // export const LOADIPHLPAPI = "ELOADIPHLPAPI";
 // export const ADDRGETNETWORKPARAMS = "EADDRGETNETWORKPARAMS";
 // export const CANCELLED = "ECANCELLED";
-
-// XXX
-//  - service exist in network.
-//  - we go from name to address to service location in a network, and a request function ?
-//    Or, should we assume that request function will engage with proper network, based on location,
-//    implying that location string should always map to one network: regular | tor | i2p.
-//    Implicit rule allows us not to force making request fn here, as well as naming system in one net,
-//    pointing to another. bank.xyz can be served by server <key>.onion, and vice versa.
-//
-//  - this function, ... doesn't have to change, as DnsResolver is given. May be  we should make a more
-//    general wrap, that gonna use this for DNS in regular net?
-//  - and, we may probably want to make function here as a reusable wrapper around different network request fns.
-//    Regular net request, may internally switch into proxy/hidding modes. Other networks provide anonymity,
-//    hence, these additional options should stay "inside" regular network request fn.
-//
-//  - should we have a reusable wrapper creator here, creating coherent pair of naming and request functions.
-//    Cause, if embedding doesn't have explicit implementation for Tor, both initial naming and net-maker functions
-//    should be coherent.
 
 const onionTLD = '.onion';
 const i2pTLD = '.i2p';
@@ -308,7 +284,7 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
     throw Error(`no DNS resolvers given`);
   }
   async function locateInDNS(
-    address: string, serviceLabel: ServiceTypeDNSLabel | 'report', logError: LogError
+    address: string, serviceLabel: DNSLabel, logError: LogError
   ): ReturnType<ServiceLocator> {
     const domain = domainOfAddress(address);
     let exc: any = undefined;
@@ -336,11 +312,7 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
       }
       const recValue = extractPair(txtRecords, serviceLabel);
       if (recValue) {
-        if (serviceLabel === 'report') {
-          return recValue;
-        } else {
-          return checkAndPrepareURL(recValue);
-        }
+        return postProcessValue(serviceLabel, recValue);
       } else {
         exc ??= noServiceRecordExc(address);
       }
@@ -350,6 +322,21 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
   return locateInDNS;
 }
 
+function postProcessValue(serviceLabel: DNSLabel, recordValue: string): string {
+  switch (serviceLabel) {
+    case 'report':
+      return recordValue;
+    default:
+      return checkAndPrepareURL(recordValue);
+  }
+}
+
+function checkAndPrepareURL(value: string): string {
+  // XXX insert some value sanity check
+  
+  return 'https://'+value;
+}
+
 const wellKnownPath = '/.well-known/3nweb.json';
 
 interface WellKnown3NWeb {
@@ -357,10 +344,11 @@ interface WellKnown3NWeb {
   asmail?: string;
   '3nstorage'?: string;
   report?: string;
+  'w3n-app'?: string;
 }
 
 async function locateInWellKnown(
-  request: NetClient['doBodylessRequest'], address: string, serviceLabel: ServiceTypeDNSLabel | 'report'
+  request: NetClient['doBodylessRequest'], address: string, serviceLabel: DNSLabel
 ): ReturnType<ServiceLocator> {
   const host = domainOfAddress(address);
   try {
@@ -371,11 +359,7 @@ async function locateInWellKnown(
     if (reply.status === 200) {
       const recValue = reply.data[serviceLabel];
       if (recValue) {
-        if (serviceLabel === 'report') {
-          return recValue;
-        } else {
-          return checkAndPrepareURL(recValue);
-        }
+        return postProcessValue(serviceLabel, recValue);
       } else {
         throw noServiceRecordExc(address);
       }

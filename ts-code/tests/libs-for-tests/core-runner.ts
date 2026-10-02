@@ -15,7 +15,7 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Core, makeNetClient } from "../../lib-index";
+import { Core } from "../../lib-index";
 import { join } from "path";
 import { rmDirWithContent, FileException, readdir, readFile } from "../../lib-common/async-fs-node";
 import { stringOfB64Chars, bytes as random } from "../../lib-common-on-node/random-node";
@@ -73,6 +73,7 @@ type CommonW3N = web3n.caps.common.W3N;
 type StartupW3N = web3n.startup.W3N;
 
 function resolveTxt(domain: string): Promise<string[][]> {
+	// used non-promise dns method mocked for test data, hence, we use it here
 	return new Promise((resolve, reject) => resolveDnsTxt(domain, (err, records) => {
 		if (err) {
 			reject(err);
