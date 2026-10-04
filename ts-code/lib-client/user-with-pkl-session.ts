@@ -52,10 +52,12 @@ export abstract class ServiceUser {
 	get serviceURI(): string {
 		return this.uri;
 	}
-	set serviceURI(uriString: string) {
+	protected set serviceURI(uriString: string) {
 		const u = new URL(uriString);
 		if (u.protocol !== 'https:') {
-			throw new Error("Url protocol must be https.");
+			if (!u.hostname.endsWith('.onion')) {
+				throw new Error("Url protocol must be https.");
+			}
 		}
 		if (!u.host) {
 			throw new Error("Host name is missing.");

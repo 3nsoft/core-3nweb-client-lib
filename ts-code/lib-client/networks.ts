@@ -53,6 +53,12 @@ function noServiceRecordExc(address: string): ServLocException {
   );
 }
 
+function noMalformedRecordExc(address: string): ServLocException {
+  return makeRuntimeException<ServLocException>(
+    'service-locating', { address }, { malformedRecord: true }
+  );
+}
+
 function noConnectionExc(
   cause: { code: string; hostname: string; message: string; }
 ): DNSConnectException {
@@ -312,7 +318,7 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
       }
       const recValue = extractPair(txtRecords, serviceLabel);
       if (recValue) {
-        return postProcessValue(serviceLabel, recValue);
+        return postProcessValueFromDNS(serviceLabel, recValue, address);
       } else {
         exc ??= noServiceRecordExc(address);
       }
@@ -322,19 +328,23 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
   return locateInDNS;
 }
 
-function postProcessValue(serviceLabel: DNSLabel, recordValue: string): string {
+function postProcessValueFromDNS(serviceLabel: DNSLabel, recordValue: string, address: string): string {
   switch (serviceLabel) {
     case 'report':
       return recordValue;
     default:
-      return checkAndPrepareURL(recordValue);
+      return checkAndPrepareURLfromDNS(recordValue, address);
   }
 }
 
-function checkAndPrepareURL(value: string): string {
-  // XXX insert some value sanity check
-  
-  return 'https://'+value;
+function checkAndPrepareURLfromDNS(value: string, address: string): string {
+  value = `https://${value}`;
+  try {
+    new URL(value);
+    return value;
+  } catch (err) {
+    throw noMalformedRecordExc(address);
+  }
 }
 
 const wellKnownPath = '/.well-known/3nweb.json';
@@ -359,7 +369,7 @@ async function locateInWellKnown(
     if (reply.status === 200) {
       const recValue = reply.data[serviceLabel];
       if (recValue) {
-        return postProcessValue(serviceLabel, recValue);
+        return recValue;
       } else {
         throw noServiceRecordExc(address);
       }

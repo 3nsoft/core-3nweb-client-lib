@@ -17,39 +17,35 @@
 
 import * as WebSocket from 'ws';
 import type { IncomingMessage, OutgoingHttpHeaders } from 'http';
-import { SESSION_ID_HEADER, Reply, ConnectionStatus, RequestOpts } from '../lib-client/request-utils';
+import { SESSION_ID_HEADER, Reply, ConnectionStatus, RequestOpts, OpenServiceEventsSource } from '../lib-client/request-utils';
 import { defer, Deferred } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
-import { globalAgent as agent } from 'https';
+import { globalAgent, Agent } from 'https';
 import { MultiObserverWrap, type Envelope, type RawDuplex } from '../lib-common/ipc/generic-ipc';
 import { makeWSException } from '../lib-common/ipc/ws-ipc';
 import { Observable, share, Subject } from 'rxjs';
 
 type Observer<T> = web3n.Observer<T>;
 
-export async function openServiceEventsSrcFromNode(req: RequestOpts): Promise<{
-	status: number;
-	data: {
-		comm: RawDuplex<Envelope>;
-		watch: (obs: Observer<ConnectionStatus>) => (() => void);
-	};
-}> {
-	const { url, sessionId } = req;
-	const rep = await openSocketFromNode(url!, sessionId!);
-	if (rep.status !== 200) {
-		return rep as any;
-	}
-	const { comm, heartbeat } = makeJsonCommPoint(rep.data);
-	return {
-		status: rep.status,
-		data: {
-			comm,
-			watch: obs => {
-				const sub = heartbeat.subscribe(obs);
-				return () => sub.unsubscribe();
-			}
+export function makeServiceEventsSourceFromNode(getAgent?: () => Agent|undefined): OpenServiceEventsSource {
+	return async function openServiceEventsSrcFromNode(req) {
+		const { url, sessionId } = req;
+		const rep = await openSocketFromNode(url!, sessionId!, getAgent);
+		if (rep.status !== 200) {
+			return rep as any;
 		}
-	};
+		const { comm, heartbeat } = makeJsonCommPoint(rep.data);
+		return {
+			status: rep.status,
+			data: {
+				comm,
+				watch: obs => {
+					const sub = heartbeat.subscribe(obs);
+					return () => sub.unsubscribe();
+				}
+			}
+		};
+	}
 }
 
 const MAX_TXT_BUFFER = 64*1024;
@@ -184,13 +180,13 @@ function makeHeartbeat(url: string) {
 	};
 }
 
-function openSocketFromNode(url: string, sessionId: string): Promise<Reply<WebSocket>> {
-	if (!url.startsWith('wss://')) {
-		throw new Error(`Url protocol must be wss`);
-	}
+function openSocketFromNode(
+	url: string, sessionId: string, getAgent: (() => Agent|undefined)|undefined
+): Promise<Reply<WebSocket>> {
+	ensureWebSocketUrlOK(url);
 	const headers: OutgoingHttpHeaders = {};
 	headers[SESSION_ID_HEADER] = sessionId;
-	const ws = new WebSocket(url, { headers, agent });
+	const ws = new WebSocket(url, { headers, agent: getAgent?.() ?? globalAgent });
 	let opening: Deferred<Reply<WebSocket>>|undefined = defer<Reply<WebSocket>>();
 	const initOnError = (err: any) => {
 		opening?.reject(makeConnectionException(url, undefined, `WebSocket connection error: ${err.message}`));
@@ -221,5 +217,15 @@ function openSocketFromNode(url: string, sessionId: string): Promise<Reply<WebSo
 	});
 	return opening.promise;
 }
+
+function ensureWebSocketUrlOK(href: string): void {
+	const url = new URL(href);
+	if (url.protocol === 'ws:') {
+		if (!url.hostname.endsWith('.onion')) {
+			throw new Error(`Url protocol must be wss`);
+		}
+	}
+}
+
 
 Object.freeze(exports);

@@ -82,6 +82,11 @@ declare namespace web3n {
 		 * domain in the address.
 		 */
 		noServiceRecord?: true;
+
+		/**
+		 * malformedRecord flag indicates that 3NWeb service value is malformed.
+		 */
+		malformedRecord?: true;
 	}
 
 	interface EncryptionException {

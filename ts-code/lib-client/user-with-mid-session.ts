@@ -47,7 +47,9 @@ export abstract class ServiceUser {
 	private set serviceURI(uriString: string) {
 		const u = new URL(uriString);
 		if (u.protocol !== 'https:') {
-			throw new Error("Url protocol must be https.");
+			if (!u.hostname.endsWith('.onion')) {
+				throw new Error("Url protocol must be https.");
+			}
 		}
 		if (!u.host) {
 			throw new Error("Host name is missing.");
@@ -225,9 +227,13 @@ export abstract class ServiceUser {
 	protected prepCallOpts(opts: RequestOpts, isWS?: true): RequestOpts {
 		opts.sessionId = this.sessionId;
 		if (opts.appPath) {
-			opts.url = (isWS ?
-				`wss${this.serviceURI.substring(5)}${opts.appPath}` : `${this.serviceURI}${opts.appPath}`
-			);
+			if (isWS) {
+				const columnInd = this.serviceURI.indexOf(':');
+				const h = this.serviceURI.substring(0, columnInd);
+				opts.url = `${(h === 'https') ? 'wss' : 'ws'}${this.serviceURI.substring(columnInd)}${opts.appPath}`;
+			} else {
+				opts.url = `${this.serviceURI}${opts.appPath}`;
+			}
 		} else if (!opts.url) { 
 			throw new Error(`Missing both appPath and ready url in request options.`);
 		}

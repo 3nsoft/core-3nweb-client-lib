@@ -28,7 +28,7 @@ import { wrapNetworkFns } from "../../lib-client/networks";
 import { resolveTxt as resolveDnsTxt } from 'dns';
 import { makeNativeCryptor } from "napi-nacl";
 import { makeRequestFromNode } from "../../lib-common-on-node/request-from-node";
-import { openServiceEventsSrcFromNode } from "../../lib-common-on-node/websocket-from-node";
+import { makeServiceEventsSourceFromNode } from "../../lib-common-on-node/websocket-from-node";
 import { sysFilesOnDevice } from "../../lib-common-on-node/device-fs-places";
 
 export const testApp = {
@@ -85,7 +85,7 @@ function resolveTxt(domain: string): Promise<string[][]> {
 
 const { makeLocator, makeNet } = wrapNetworkFns({ regular: {
 	naming: [{ resolveTxt }],
-	openServiceEventsSource: openServiceEventsSrcFromNode,
+	openServiceEventsSource: makeServiceEventsSourceFromNode(),
 	requests: makeRequestFromNode()
 } });
 
