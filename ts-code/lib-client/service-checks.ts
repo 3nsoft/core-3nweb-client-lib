@@ -58,7 +58,7 @@ export async function checkServicesStartingFromSignup(
 
 	async function checkService(service: ServiceTypeDNSLabel, userDomain: string): Promise<void> {
 		progress?.({ start: true, service, userDomain });
-		const check = await checkUserDomainDNS(srvLocator, service, userDomain);
+		const check = await checkUserDomainNames(srvLocator, service, userDomain);
 		recordResult(check);
 		if (check.isOk) {
 			await checkFstServiceEndpoint(service, check.serviceUrl!);
@@ -149,13 +149,7 @@ async function checkSignup(
 	}
 }
 
-// const srvLocator = makeServiceLocator(
-// 	{ resolveTxt: dns.resolveTxt },
-// 	dohAt(`https://cloudflare-dns.com/dns-query`),
-// 	dohAt(`https://dns.google/resolve`)
-// );
-
-async function checkUserDomainDNS(
+async function checkUserDomainNames(
 	srvLocator: ServiceLocatorMaker, service: ServiceTypeDNSLabel, domain: string
 ): Promise<CheckResult> {
 	try {

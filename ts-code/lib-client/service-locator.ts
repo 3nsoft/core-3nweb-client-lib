@@ -28,7 +28,8 @@ type SignedLoad = web3n.keys.SignedLoad;
 async function readJSONLocatedAt<T>(
 	client: NetClient, url: string
 ): Promise<Reply<T>> {
-	if ((new URL(url)).protocol !== 'https:') {
+	const u = new URL(url);
+	if (u.protocol !== 'https:' && !u.hostname.endsWith('.onion')) {
 		throw new Error("Url protocol must be https.");
 	}
 	const rep = await client.doBodylessRequest<T>({

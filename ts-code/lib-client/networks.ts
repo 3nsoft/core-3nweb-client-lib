@@ -361,10 +361,12 @@ async function locateInWellKnown(
   request: NetClient['doBodylessRequest'], address: string, serviceLabel: DNSLabel
 ): ReturnType<ServiceLocator> {
   const host = domainOfAddress(address);
+  const protocol = (host.endsWith('.onion') ? 'http' : 'https');
   try {
     const reply = await request<WellKnown3NWeb>({
       method: 'GET',
-      url: `https://${host}${wellKnownPath}`
+      url: `${protocol}://${host}${wellKnownPath}`,
+      responseType: 'json'
     });
     if (reply.status === 200) {
       const recValue = reply.data[serviceLabel];

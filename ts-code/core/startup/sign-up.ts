@@ -114,7 +114,7 @@ export class SignUp {
 
 	private async setServiceURL(serviceURL: string): Promise<void> {
 		const url = new URL(serviceURL);
-		if (url.protocol !== 'https:') {
+		if ((url.protocol !== 'https:') && !url.hostname.endsWith('.onion')) {
 			throw new Error("Url protocol must be https.");
 		}
 		this.serviceURL = serviceURL;

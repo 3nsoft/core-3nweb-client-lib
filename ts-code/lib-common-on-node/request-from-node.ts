@@ -16,16 +16,19 @@
 */
 
 import * as https from 'https';
+import * as http from 'http';
 import { formHttpsReqOpts, processRequest, RequestFn } from '../lib-client/request-utils';
 
 export function makeRequestFromNode(getAgent?: () => https.Agent|undefined): RequestFn<unknown> {
-	const nodeRequest = (opts: https.RequestOptions) => https.request(opts);
+	const nodeHttpsRequest = (opts: https.RequestOptions) => https.request(opts);
+	const nodeHttpRequest = (opts: http.RequestOptions) => http.request(opts);
 	return (opts, reqContentType, reqBody) => {
-		const httpsOpts = formHttpsReqOpts(opts, reqContentType, reqBody);
+		const reqOpts = formHttpsReqOpts(opts, reqContentType, reqBody);
 		const agent = getAgent?.();
 		if (agent) {
-				httpsOpts.agent = agent;
+				reqOpts.agent = agent;
 		}
-		return processRequest<unknown>(nodeRequest, httpsOpts, opts, reqBody);
+		const requestFn = ((reqOpts.protocol === 'http:') ? nodeHttpRequest : nodeHttpsRequest);
+		return processRequest<unknown>(requestFn, reqOpts, opts, reqBody);
 	}
 }
