@@ -18,19 +18,16 @@
 import { RequestFn, RequestOpts } from "./request-utils";
 import { DnsResolver, CONNREFUSED, NODATA, NOTFOUND, SERVFAIL } from "./networks";
 import { ConnectException } from '../lib-common/exceptions/http';
+import * as Packet from 'native-node-dns-packet';
+import { base64urlSafe, toBuffer } from "../lib-common/buffer-utils";
 
-export function dohAt(request: RequestFn<unknown>, dohServerUrl: string): DnsResolver {
-
-  async function resolveTxt(domain: string): Promise<string[][]> {
-    const answer = await sendDohQuestion(request as RequestFn<DohReplyJSON>, dohServerUrl, domain, 'TXT');
-    let txt: string[][] = [];
-    for (const { data: line } of answer) {
-      txt.push([line]);
-    }
-    return txt;
-  }
-
-  return { resolveTxt };
+export function dohAt(request: RequestFn<unknown>, dohServerUrl: string, type: 'legacy'|'json'): DnsResolver {
+  return {
+    resolveTxt: ((type === 'legacy') ?
+      domain => sendLegacyDohTxtQuestion(request as RequestFn<Uint8Array>, dohServerUrl, domain) :
+      domain => sendJsonDohTxtQuestion(request as RequestFn<DohReplyJSON>, dohServerUrl, domain)
+    )
+  };
 }
 
 interface DohReplyJSON {
@@ -63,12 +60,12 @@ interface AnswerEntry {
   data: string;
 }
 
-async function sendDohQuestion(
-  request: RequestFn<DohReplyJSON>, serverUrl: string, domain: string, type: 'TXT'
-): Promise<AnswerEntry[]> {
+async function sendJsonDohTxtQuestion(
+  request: RequestFn<DohReplyJSON>, serverUrl: string, domain: string
+): Promise<string[][]> {
   const opts: RequestOpts = {
     method: 'GET',
-    url: `${serverUrl}?name=${domain}&type=${type}`,
+    url: `${serverUrl}?name=${domain}&type=TXT`,
     requestHeaders: {
       accept: 'application/dns-json'
     },
@@ -93,7 +90,67 @@ async function sendDohQuestion(
     throw { code: NOTFOUND, hostname: domain };
   }
   if (data.Answer) {
-    return data.Answer;
+    let txt: string[][] = [];
+    for (const { data: line } of data.Answer) {
+      txt.push([line]);
+    }
+    return txt;
+  } else {
+    throw { code: NODATA, hostname: domain };
+  }
+}
+
+interface DnsPacket {
+  header: { rcode: 0|3; }
+  question: { name: string; type: 16; class: 1 }[];
+  answer: { name: string; data: string[]; ttl: number; type: number; }[];
+}
+
+function packB64TxtDnsQuestionPacket(domain: string): string {
+  const questionPack: DnsPacket = new Packet();
+  questionPack.question.push({ name: domain, type: 16, class: 1 });
+  const buf = Buffer.alloc(500);
+  const len = Packet.write(buf, questionPack);
+  return base64urlSafe.pack(buf.subarray(0, len));
+}
+
+function unpackDnsAnswerPacket(data: Uint8Array): DnsPacket {
+  return Packet.parse(toBuffer(data));
+}
+
+export async function sendLegacyDohTxtQuestion(
+  request: RequestFn<Uint8Array>, serverUrl: string, domain: string
+): Promise<string[][]> {
+  const dnsPacketInB64 = packB64TxtDnsQuestionPacket(domain);
+  const opts: RequestOpts = {
+    method: 'GET',
+    url: `${serverUrl}?dns=${dnsPacketInB64}`,
+    requestHeaders: {
+      accept: 'application/dns-message'
+    },
+    responseType: 'arraybuffer'
+  };
+  const reply = await request(opts)
+  .catch((exc: ConnectException) => {
+    if (exc.type === 'connect') {
+      throw { code: CONNREFUSED, hostname: domain, cause: exc };
+    } else {
+      throw { code: SERVFAIL, hostname: domain, cause: exc };
+    }
+  });
+  const { status, data } = reply;
+  if (status !== 200) {
+    throw {
+      code: SERVFAIL, hostname: domain,
+      message: `status ${reply.status} from DoH server`
+    };
+  }
+  const answerPacket = unpackDnsAnswerPacket(data);
+  if (answerPacket.header.rcode !== 0) {
+    throw { code: NOTFOUND, hostname: domain };
+  }
+  if (answerPacket.answer.length > 0) {
+    return answerPacket.answer.map(({ data }) => data);
   } else {
     throw { code: NODATA, hostname: domain };
   }

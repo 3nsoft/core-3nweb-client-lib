@@ -19,6 +19,11 @@ import * as https from 'https';
 import * as http from 'http';
 import { formHttpsReqOpts, processRequest, RequestFn } from '../lib-client/request-utils';
 
+// XXX
+//  we need a request that uses http2, connected to some host:port, relying on downstream
+//  making NetClient requester for every host:port.
+
+
 export function makeRequestFromNode(getAgent?: () => https.Agent|undefined): RequestFn<unknown> {
 	const nodeHttpsRequest = (opts: https.RequestOptions) => https.request(opts);
 	const nodeHttpRequest = (opts: http.RequestOptions) => http.request(opts);
