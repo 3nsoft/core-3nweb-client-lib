@@ -811,7 +811,6 @@ Object.freeze(V);
 interface PathMapItem {
 	parent?: PathMapItem;
 	nameInParent: string;
-	depth: number;
 }
 
 
@@ -826,7 +825,7 @@ class ObjIdToPathMap {
 	}
 
 	async fillFromTree(root: FolderNode): Promise<void> {
-		const rootItem: PathMapItem = { depth: 0, nameInParent: '.' };
+		const rootItem: PathMapItem = { nameInParent: '.' };
 		this.map.set(root.objId, rootItem);
 		await recursivelyAddIntoMap(this.map, root, rootItem, this.maxDepth, 1);
 	}
@@ -843,9 +842,14 @@ class ObjIdToPathMap {
 		if (parentObjId === undefined) { return; }
 		const parent = this.map.get(parentObjId);
 		if (!parent) { return; }
-		if ((this.maxDepth !== undefined) && (this.maxDepth <= parent.depth)) { return; }
-		const item: PathMapItem = { nameInParent: event.path, parent, depth: parent.depth+1 };
-		this.map.set(objId, item);
+		if ((this.maxDepth !== undefined) && (this.maxDepth <= depthOf(parent))) { return; }
+		let item = this.map.get(objId);
+		if (item) {
+			item.parent = parent;
+		} else {
+			item = { nameInParent: event.path, parent };
+			this.map.set(objId, item);
+		}
 		return pathOfMapItem(item);
 	}
 
@@ -856,7 +860,7 @@ class ObjIdToPathMap {
 			recursivelyRemoveFromMap(this.map, objId, objPathItem);
 			return;
 		}
-		if ((this.maxDepth !== undefined) && (this.maxDepth <= objPathItem.depth)) { return; }
+		if ((this.maxDepth !== undefined) && (this.maxDepth <= depthOf(objPathItem))) { return; }
 		if (event.type === 'entry-renaming') {
 			const childEntry = this.map.get(childObjId!);
 			if (childEntry) {
@@ -864,18 +868,26 @@ class ObjIdToPathMap {
 			}
 		} else if (event.type === 'entry-removal') {
 			const childEntry = this.map.get(childObjId!);
-			if (childEntry && (childEntry.nameInParent === event.name)) {
-				this.map.delete(childObjId!);
+			// Context: FolderNode.moveChildTo() does move with addition first, therefore,
+			// if removal is part of move, parent will be different
+			if ((childEntry?.parent === objPathItem) && (childEntry.nameInParent === event.name)) {
+				recursivelyRemoveFromMap(this.map, childObjId!, childEntry);
 			}
 		} else if (event.type === 'entry-addition') {
-			const childEntry: PathMapItem = {
-				parent: objPathItem, nameInParent: event.entry.name, depth: objPathItem.depth+1
-			};
-			this.map.set(objId, childEntry);
-			// XXX if childEntry is a folder with its own children, subtree should be added
-			// if (event.entry.isFolder && (!this.maxDepth || (childEntry.depth < this.maxDepth))) {
-			// 	await recursivelyAddIntoMap(this.map, childNode, childEntry, this.maxDepth, childEntry.depth+1);
-			// }
+			// Context: FolderNode.moveChildTo() does move with addition first, therefore,
+			// child may exist, and only its parent need change
+			const childEntry = this.map.get(childObjId!);
+			if (childEntry) {
+				childEntry.parent = objPathItem;
+				childEntry.nameInParent = event.entry.name;
+			} else {
+				const childEntry: PathMapItem = { parent: objPathItem, nameInParent: event.entry.name };
+				this.map.set(objId, childEntry);
+				// XXX if childEntry is a folder with its own children, subtree should be added
+				// if (event.entry.isFolder && (!this.maxDepth || (depthOf(childEntry) < this.maxDepth))) {
+				// 	await recursivelyAddIntoMap(this.map, childNode, childEntry, this.maxDepth, childEntry.depth+1);
+				// }
+			}
 		}
 	}
 
@@ -895,7 +907,7 @@ async function recursivelyAddIntoMap(
 ): Promise<void> {
 	const { lst } = parentNode.list();
 	for (const item of lst) {
-		const childItem: PathMapItem = { depth, parent, nameInParent: item.name };
+		const childItem: PathMapItem = { parent, nameInParent: item.name };
 		if (item.isFile || item.isLink) {
 			const { objId } = parentNode.getCurrentNodeInfo(item.name)!;
 			map.set(objId, childItem);
@@ -929,6 +941,12 @@ function pathOfMapItem(item: PathMapItem): string {
 	} else {
 		return item.nameInParent;
 	}
+}
+
+function depthOf(item: PathMapItem): number {
+  let depth = 0;
+  for (let p = item.parent; p; p = p.parent) { depth += 1; }
+  return depth;
 }
 
 function shallowCopyWithPath(event: NodeEvent['event'], path: string): NodeEvent['event'] {

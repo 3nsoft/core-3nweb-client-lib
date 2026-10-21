@@ -274,7 +274,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async adoptRemote(opts: OptionsToAdopteRemote|undefined): Promise<void> {
-		const objsToRm = await this.doChange(true, async () => {
+		await this.doChange(true, async () => {
 			try {
 				const adopted = await this.syncedStorage().adoptRemote(this.objId, opts);
 				if (!adopted) { return; }
@@ -297,16 +297,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 					const event = this.makeEntryRenamingEvent(this.version, 'sync', newName, oldName);
 					this.broadcastEvent(event, false, objId);
 				}
-				return removedNodes;
 			} catch (exc) {
 				throw setPathInExc(exc, this.name);
 			}
 		});
-		if (!objsToRm) { return; }
-		for (const objToRm of objsToRm) {
-			const nodeToRm = await this.getOrMakeChildNodeForInfo(objToRm);
-			this.callRemoveObjOn('sync', nodeToRm);
-		}
 	}
 
 	private makeEntryAdditionEvent(
