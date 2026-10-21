@@ -424,50 +424,51 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	private async getOrMakeChildNodeForInfo<T extends NodeInFS<any>>(
 		info: NodeInfo, fromCurrentNodes = true
 	): Promise<T> {
-		const {
-			node, nodePromise
-		} = this.storage.nodes.getNodeOrPromise<T>(info.objId);
+		const { node, nodePromise } = this.storage.nodes.getNodeOrPromise<T>(info.objId);
 		if (node) { return node; }
 		if (nodePromise) { return nodePromise; }
 		const deferred = defer<T>();
 		const nodeSet = this.storage.nodes.setPromise(info.objId, deferred.promise);
-		try {
-			let node: Node;
+		(async () => {
 			if (info.isFile) {
-				node = await FileNode.makeForExisting(this.storage, this.objId, info.name, info.objId, info.key);
+				return await FileNode.makeForExisting(this.storage, this.objId, info.name, info.objId, info.key);
 			} else if (info.isFolder) {
 				const src = await this.storage.getObjSrc(info.objId);
-				node = await FolderNode.readNodeFromObjBytes(this.storage, info.name, info.objId, src, info.key);
+				return await FolderNode.readNodeFromObjBytes(this.storage, info.name, info.objId, src, info.key);
 			} else if (info.isLink) {
-				node = await LinkNode.makeForExisting(this.storage, this.objId, info.name, info.objId, info.key);
+				return await LinkNode.makeForExisting(this.storage, this.objId, info.name, info.objId, info.key);
 			} else {
 				throw new Error(`Unknown type of fs node`);
 			}
-			deferred.resolve(node as T);
-			return nodeSet;
-		} catch (exc) {
-			if ((exc as web3n.EncryptionException).failedCipherVerification) {
-				exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
-			} else if (exc.objNotFound) {
-				if (fromCurrentNodes) {
-					await this.fixMissingChildAndThrow(exc, info);
-				} else {
-					try {
-						const node = await this.getNonLocal(info);
-						if (node) {
-							deferred.resolve(node as T);
-							return nodeSet;
-						} else {
-							throw exc;
+		})().then(
+			(node: Node) => deferred.resolve(node as T),
+			async exc => {
+				if ((exc as web3n.EncryptionException).failedCipherVerification) {
+					exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
+				} else if (exc.objNotFound) {
+					if (fromCurrentNodes) {
+						try {
+							await this.fixMissingChildAndThrow(exc, info);
+						} catch (exc) {
+							deferred.reject(exc);
+							return;
 						}
-					} catch (exc2) {
-						exc = exc2;
+					} else {
+						try {
+							const node = await this.getNonLocal(info);
+							if (node) {
+								deferred.resolve(node as T);
+								return;
+							}
+						} catch (exc2) {
+							exc = exc2;
+						}
 					}
 				}
+				deferred.reject(errWithCause(exc, `Failed to instantiate fs node '${this.name}/${info.name}'`));
 			}
-			deferred.reject(errWithCause(exc, `Failed to instantiate fs node '${this.name}/${info.name}'`));
-			return nodeSet;
-		}
+		);
+		return nodeSet;
 	}
 
 	private async getNonLocal<T extends NodeInFS<any>>(info: NodeInfo): Promise<T|undefined> {

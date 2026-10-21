@@ -465,9 +465,9 @@ export class SyncedObj {
 	}
 
 	dropCachedLocalObjVersionsLessOrEqual(version: number): void {
-		for (const version of this.localVers.keys()) {
-			if (version <= version) {
-				this.localVers.delete(version);
+		for (const localVersion of this.localVers.keys()) {
+			if (localVersion <= version) {
+				this.localVers.delete(localVersion);
 			}
 		}
 	}

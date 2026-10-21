@@ -808,9 +808,16 @@ Object.freeze(V.prototype);
 Object.freeze(V);
 
 
+interface PathMapItem {
+	parent?: PathMapItem;
+	nameInParent: string;
+	depth: number;
+}
+
+
 class ObjIdToPathMap {
 
-	private readonly map = new Map<ObjId, { path: string; depth: number; }>();
+	private readonly map = new Map<ObjId, PathMapItem>();
 
 	constructor(
 		private readonly maxDepth: number|undefined
@@ -819,59 +826,61 @@ class ObjIdToPathMap {
 	}
 
 	async fillFromTree(root: FolderNode): Promise<void> {
-		const listOfAll = await recursiveIdAndPathList(root, '.', this.maxDepth);
-		for (const [ objId, path, depth ] of listOfAll) {
-			this.map.set(objId, { path, depth });
-		}
+		const rootItem: PathMapItem = { depth: 0, nameInParent: '.' };
+		this.map.set(root.objId, rootItem);
+		await recursivelyAddIntoMap(this.map, root, rootItem, this.maxDepth, 1);
 	}
 
-	private getPathCorrectingTreeMap(
+	private getPathAndIfNeededCorrectTreeMap(
 		{ event, objId, parentObjId, childObjId }: NodeEvent
 	): string|undefined {
-		let pathAndDepth = this.map.get(objId);
-		if (pathAndDepth) {
-			const { path, depth } = pathAndDepth;
-			this.updateFoundObjMapOnEvent(objId, path, depth, childObjId, event);
-			return path;
+		let pathMapItem = this.map.get(objId);
+		if (pathMapItem) {
+			this.updateFoundObjMapOnEvent(objId, pathMapItem, childObjId, event);
+			return pathOfMapItem(pathMapItem);
 		}
 		if (event.type === 'removed') { return; }
 		if (parentObjId === undefined) { return; }
 		const parent = this.map.get(parentObjId);
 		if (!parent) { return; }
-		if ((this.maxDepth !== undefined)
-		&& (this.maxDepth <= parent.depth)) { return; }
-		const path = `${parent.path}/${event.path}`;
-		this.map.set(objId, { path, depth: parent.depth+1 });
-		return path;
+		if ((this.maxDepth !== undefined) && (this.maxDepth <= parent.depth)) { return; }
+		const item: PathMapItem = { nameInParent: event.path, parent, depth: parent.depth+1 };
+		this.map.set(objId, item);
+		return pathOfMapItem(item);
 	}
 
 	private updateFoundObjMapOnEvent(
-		objId: ObjId, path: string, depth: number,
-		childObjId: NodeEvent['childObjId'], event: NodeEvent['event']
+		objId: ObjId, objPathItem: PathMapItem, childObjId: NodeEvent['childObjId'], event: NodeEvent['event']
 	): void {
 		if (event.type === 'removed') {
-			this.map.delete(objId);
+			recursivelyRemoveFromMap(this.map, objId, objPathItem);
 			return;
 		}
-		if ((this.maxDepth !== undefined) && (this.maxDepth <= depth)) { return; }
+		if ((this.maxDepth !== undefined) && (this.maxDepth <= objPathItem.depth)) { return; }
 		if (event.type === 'entry-renaming') {
 			const childEntry = this.map.get(childObjId!);
 			if (childEntry) {
-				childEntry.path === `${path}/${event.newName}`;
+				childEntry.nameInParent === event.newName;
 			}
 		} else if (event.type === 'entry-removal') {
 			const childEntry = this.map.get(childObjId!);
-			if (childEntry && (childEntry.path === `${path}/${event.name}`)) {
+			if (childEntry && (childEntry.nameInParent === event.name)) {
 				this.map.delete(childObjId!);
 			}
 		} else if (event.type === 'entry-addition') {
-			this.map.set(childObjId!,
-				{ path: `${path}/${event.entry.name}`, depth: depth+1 });
+			const childEntry: PathMapItem = {
+				parent: objPathItem, nameInParent: event.entry.name, depth: objPathItem.depth+1
+			};
+			this.map.set(objId, childEntry);
+			// XXX if childEntry is a folder with its own children, subtree should be added
+			// if (event.entry.isFolder && (!this.maxDepth || (childEntry.depth < this.maxDepth))) {
+			// 	await recursivelyAddIntoMap(this.map, childNode, childEntry, this.maxDepth, childEntry.depth+1);
+			// }
 		}
 	}
 
 	copyWithLongPath(nodeEvent: NodeEvent): NodeEvent['event']|undefined {
-		const path = this.getPathCorrectingTreeMap(nodeEvent);
+		const path = this.getPathAndIfNeededCorrectTreeMap(nodeEvent);
 		return (path ? shallowCopyWithPath(nodeEvent.event, path) : undefined);
 	}
 
@@ -880,29 +889,46 @@ Object.freeze(ObjIdToPathMap.prototype);
 Object.freeze(ObjIdToPathMap);
 
 
-async function recursiveIdAndPathList(
-	folder: FolderNode, path: string, maxDepth: number|undefined, depth = 0
-): Promise<[ ObjId, string, number ][]> {
-	const { lst } = folder.list();
-	const idAndPaths: [ ObjId, string, number ][] = [
-		[ folder.objId, path, depth ]
-	];
-	if ((maxDepth !== undefined) && (depth === maxDepth)) {
-		return idAndPaths;
-	}
+async function recursivelyAddIntoMap(
+	map: ObjIdToPathMap['map'], parentNode: FolderNode, parent: PathMapItem,
+	maxDepth: number|undefined, depth: number
+): Promise<void> {
+	const { lst } = parentNode.list();
 	for (const item of lst) {
-		const childPath = `${path}/${item.name}`;
+		const childItem: PathMapItem = { depth, parent, nameInParent: item.name };
 		if (item.isFile || item.isLink) {
-			const { objId } = folder.getCurrentNodeInfo(item.name)!;
-			idAndPaths.push([ objId, childPath, depth+1 ]);
+			const { objId } = parentNode.getCurrentNodeInfo(item.name)!;
+			map.set(objId, childItem);
 		} else if (item.isFolder) {
-			const child = await folder.getFolder(item.name);
-			const childLst = await recursiveIdAndPathList(
-				child!, childPath, maxDepth, depth+1);
-			idAndPaths.push(... childLst);
+			const child = await parentNode.getFolder(item.name);
+			map.set(child!.objId, childItem);
+			if ((maxDepth === undefined) || (depth < maxDepth)) {
+				await recursivelyAddIntoMap(map, child!, childItem, maxDepth, depth+1);
+			}
 		}
 	}
-	return idAndPaths;
+}
+
+function recursivelyRemoveFromMap(map: ObjIdToPathMap['map'], objId: ObjId, objItem: PathMapItem): void {
+	map.delete(objId);
+	const childrenToRm: [ObjId, PathMapItem][] = [];
+	for (const [ childId, childItem ] of map.entries()) {
+		if (childItem.parent === objItem) {
+			childrenToRm.push([ childId, childItem ]);
+		}
+	}
+	for (const [ childId, childItem ] of childrenToRm) {
+		recursivelyRemoveFromMap(map, childId, childItem);
+	}
+}
+
+function pathOfMapItem(item: PathMapItem): string {
+	if (item.parent) {
+		const prefix = pathOfMapItem(item.parent);
+		return `${prefix}/${item.nameInParent}`;
+	} else {
+		return item.nameInParent;
+	}
 }
 
 function shallowCopyWithPath(event: NodeEvent['event'], path: string): NodeEvent['event'] {
