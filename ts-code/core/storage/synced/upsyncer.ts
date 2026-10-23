@@ -117,9 +117,6 @@ export class UpSyncer {
 				obj, localVersion, uploadVersion, uploadHeader?.uploadHeader, syncedBase,
 				createOnRemote, uploadTaskId, eventSink, this.remoteStorage,
 				async () => {
-					if (this.tasksByIds.delete(task.taskId)) {
-						this.tasksByObjIds.delete(task.objId);
-					}
 					await obj.recordUploadCompletion(
 						localVersion, uploadVersion, (uploadHeader ? {
 							newHeader: uploadHeader.uploadHeader,
@@ -134,7 +131,11 @@ export class UpSyncer {
 			this.tasksByIds.set(uploadTaskId, task);
 			this.tasksByObjIds.set(task.objId, task);
 			const completion = task.completion();
-			completion.catch(noop);
+			completion.finally(() => {
+				if (this.tasksByIds.delete(task.taskId)) {
+					this.tasksByObjIds.delete(task.objId);
+				}
+			}).catch(noop);
 			this.execPools.add(task);
 			return { completion, uploadTaskId };
 		});

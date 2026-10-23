@@ -1236,18 +1236,16 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			}
 			if (renamed) {
 				for (const { local, remote, renamedIn } of renamed) {
-					if (renamedIn === 'r') {
+					if ((renamedIn === 'r') || (renamedIn === 'l&r')) {
 						const node = nodes[local];
 						assert(!!node);
+						delete nodes[local];
 						node.name = remote;
 						nodes[node.name] = node;
 						events.push({
 							event: this.makeEntryRenamingEvent(newVersion, 'sync', remote, local),
 							childObjId: node.objId
 						});
-					} else if (renamedIn === 'l&r') {
-						// XXX use mtime to suggest which name to adopt -- TODO
-
 					}
 				}
 			}
