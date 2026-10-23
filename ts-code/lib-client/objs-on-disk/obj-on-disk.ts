@@ -243,8 +243,8 @@ export class ObjOnDisk {
 					thisVerOfs,
 					baseVerOfs
 				});
-				thisVerOfs += len;
-				baseVerOfs += len;
+				thisVerOfs += chunkFromBase.len;
+				baseVerOfs += chunkFromBase.len;
 			}
 		}
 		return segsInfo;
@@ -327,6 +327,8 @@ Object.freeze(ObjOnDisk);
 
 export class Download {
 
+	private downloadPrep: Deferred<number|undefined>|undefined = undefined;
+
 	private readonly segsAsapRequest: {
 		chunk: NotOnDiskFiniteChunk;
 		deferred: Deferred<Uint8Array>;
@@ -402,32 +404,47 @@ export class Download {
 
 	async downloadAllInBackground(eventSink: DownloadEventSink): Promise<number|undefined> {
 		if (!this.segsNotInVersionFiles) {
-			throw new Error(`segsThatNeedDownload is not initialized`);
+			throw new Error(`segsNotInVersionFiles is not initialized`);
 		}
 		if (this.inBkgrnd) {
 			return this.inBkgrnd.downloadTaskId;
+		} else if (this.downloadPrep) {
+			return this.downloadPrep.promise;
 		}
-		const chunks = await this.segsNotInVersionFiles();
-		if (chunks.length === 0) {
-			return;
-		}
-		this.inBkgrnd = {
-			downloadTaskId: Math.floor(Math.random()*Number.MAX_SAFE_INTEGER),
-			eventSink,
-			totalBytesToDownload: chunks.reduce((total, chunk) => (total+chunk.len), 0)
-		};
-		eventSink({
-			type: 'download-started',
-			downloadTaskId: this.inBkgrnd.downloadTaskId,
-			path: '',
-			version: this.version,
-			totalBytesToDownload: this.inBkgrnd.totalBytesToDownload
-		});
-		if (this.segsAsapRequest.length === 0) {
-			this.inBkgrnd.chunks = chunks;
-		}
-		this.downloader.schedule(this);
-		return this.inBkgrnd.downloadTaskId;
+		this.downloadPrep = defer();
+		(async () => {
+			const chunks = await this.segsNotInVersionFiles!();
+			if (chunks.length === 0) {
+				return;
+			}
+			this.inBkgrnd = {
+				downloadTaskId: Math.floor(Math.random()*Number.MAX_SAFE_INTEGER),
+				eventSink,
+				totalBytesToDownload: chunks.reduce((total, chunk) => (total+chunk.len), 0)
+			};
+			eventSink({
+				type: 'download-started',
+				downloadTaskId: this.inBkgrnd.downloadTaskId,
+				path: '',
+				version: this.version,
+				totalBytesToDownload: this.inBkgrnd.totalBytesToDownload
+			});
+			if (this.segsAsapRequest.length === 0) {
+				this.inBkgrnd.chunks = chunks;
+			}
+			this.downloader.schedule(this);
+			return this.inBkgrnd.downloadTaskId;
+		})().then(
+			taskId => {
+				this.downloadPrep?.resolve(taskId);
+				this.downloadPrep = undefined;
+			},
+			err => {
+				this.downloadPrep?.reject(err);
+				this.downloadPrep = undefined;
+			}
+		);
+		return this.downloadPrep.promise;
 	}
 
 	nextActionType(): { runASAP: boolean; }|undefined {
