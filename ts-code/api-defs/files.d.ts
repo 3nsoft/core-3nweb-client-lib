@@ -637,7 +637,8 @@ declare namespace web3n.files {
 		status(skipServerCheck?: boolean): Promise<SyncStatus>;
 
 		/**
-		 * Returns a state of on-disk cache.
+		 * Returns a state of on-disk cache of file, also checking on-disk state of base version(s), when
+		 * given one has it.
 		 * @param version 
 		 */
 		isRemoteVersionOnDisk(
@@ -1438,7 +1439,8 @@ declare namespace web3n.files {
 		status(path: string, skipServerCheck?: boolean): Promise<SyncStatus>;
 
 		/**
-		 * Returns a state of on-disk cache of an item in fs.
+		 * Returns a state of on-disk cache of an item in fs, also checking on-disk state of base version(s), when
+		 * given one has it.
 		 * @param version 
 		 */
 		isRemoteVersionOnDisk(path: string, version: number): Promise<'partial'|'complete'|'none'>;

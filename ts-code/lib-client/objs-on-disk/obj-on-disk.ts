@@ -24,7 +24,7 @@ import { FileWritingProc, FileWrite } from './file-writing-proc';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { ObjVersionFile } from '../../lib-common/objs-on-disk/obj-version-file';
-import { NotOnDiskFiniteChunk, BaseSegsChunk, FiniteChunk } from '../../lib-common/objs-on-disk/file-layout';
+import { NotOnDiskFiniteChunk, BaseSegsChunk, FiniteChunk, OnDiskChunk, NewSegsChunk } from '../../lib-common/objs-on-disk/file-layout';
 import { flatTap, allowOnlySingleStart } from '../../lib-common/utils-for-observables';
 import { DiffInfo } from '../../lib-common/service-api/3nstorage/owner';
 import { defer, Deferred } from '../../lib-common/processes/deferred';
@@ -33,8 +33,17 @@ type DownloadEvent = web3n.files.DownloadEvent;
 type ConnectException = web3n.ConnectException;
 
 export type GetBaseSegsOnDisk = (
-	version: number, ofs: number, len: number
-) => Promise<(Uint8Array|NotOnDiskFiniteChunk)[]>;
+	version: number, ofs: number, len: number, onlyInfo: boolean
+) => Promise<(Uint8Array|SegsChunkPlaceInfo)[]>;
+
+export type SegsChunkPlaceInfo = OnDiskChunk | ChunkInBaseFiles | NewSegsChunk | BaseSegsChunk;
+
+export interface ChunkInBaseFiles {
+	type: 'base-in-files';
+	thisVerOfs: number;
+	len: number;
+	baseVerOfs: number;
+}
 
 export class ObjOnDisk {
 
@@ -51,7 +60,7 @@ export class ObjOnDisk {
 	) {
 		if (this.downloadsInProgress) {
 			this.downloadsInProgress.saveSegs = this.objFile.saveSegs.bind(this.objFile);
-			this.downloadsInProgress.segsThatNeedDownload = this.segsThatNeedDownload.bind(this)
+			this.downloadsInProgress.segsNotInVersionFiles = this.segsNotInVersionFiles.bind(this);
 		}
 		Object.seal(this);
 	}
@@ -168,7 +177,7 @@ export class ObjOnDisk {
 			}
 			this.downloadsInProgress = new Download(
 				this.objId, this.version, this.downloader,
-				this.objFile.saveSegs.bind(this.objFile), this.segsThatNeedDownload.bind(this)
+				this.objFile.saveSegs.bind(this.objFile), this.segsNotInVersionFiles.bind(this)
 			);
 		}
 		return this.downloadsInProgress;
@@ -194,7 +203,9 @@ export class ObjOnDisk {
 		return bytesAndChunks;
 	}
 
-	private async readBaseBytesFromOtherFilesOnDisk(chunk: BaseSegsChunk): Promise<(Uint8Array|BaseSegsChunk)[]> {
+	private async getBaseSegsOrInfo(
+		ofs: number, len: number, onlyInfo: boolean
+	): Promise<(Uint8Array|SegsChunkPlaceInfo)[]> {
 		const baseVersion = this.objFile.getBaseVersion();
 		if (baseVersion === undefined) {
 			throw new Error(`File for object ${this.objId}, version ${this.version} points to base, but base is not set`);
@@ -202,7 +213,45 @@ export class ObjOnDisk {
 		if (!this.getBaseSegsOnDisk) {
 			throw new Error(`Object ${this.objId}, version ${this.version} doesn't have a getter of base source`);
 		}
-		const baseBytesAndChunks = await this.getBaseSegsOnDisk(baseVersion, chunk.baseVerOfs, chunk.len);
+		return await this.getBaseSegsOnDisk(baseVersion, ofs, len, onlyInfo);
+	}
+
+	async getSegsInfo(offset: number, len: number): Promise<SegsChunkPlaceInfo[]> {
+		const segsLocations = this.objFile.segsLocations(offset, len);
+		const segsInfo: SegsChunkPlaceInfo[] = [];
+		for (const chunk of segsLocations) {
+			if (chunk.type !== 'base') {
+				segsInfo.push(chunk);
+				continue;
+			}
+			const chunksFromBase = await this.getBaseSegsOrInfo(chunk.baseVerOfs, chunk.len, true);
+			let thisVerOfs = chunk.thisVerOfs;
+			let baseVerOfs = chunk.baseVerOfs;
+			for (const chunkFromBase of chunksFromBase as SegsChunkPlaceInfo[]) {
+				let isInFiles: boolean;
+				switch (chunkFromBase.type) {
+					case 'base':
+					case 'new':
+						isInFiles = false;
+						break;
+					default:
+						isInFiles = true;
+				}
+				segsInfo.push({
+					type: (isInFiles ? 'base-in-files' : 'base'),
+					len: chunkFromBase.len,
+					thisVerOfs,
+					baseVerOfs
+				});
+				thisVerOfs += len;
+				baseVerOfs += len;
+			}
+		}
+		return segsInfo;
+	}
+
+	private async readBaseBytesFromOtherFilesOnDisk(chunk: BaseSegsChunk): Promise<(Uint8Array|BaseSegsChunk)[]> {
+		const baseBytesAndChunks = await this.getBaseSegsOrInfo(chunk.baseVerOfs, chunk.len, false);
 		// now we should convert new->base, adjusting all offsets, cause all those
 		// labels are relative to base version, and we need 'em to be relative to
 		// this version
@@ -253,26 +302,22 @@ export class ObjOnDisk {
 		return this.objFile.diffFromBase();
 	}
 
-	private segsThatNeedDownload(): NotOnDiskFiniteChunk[] {
+	async segsNotInVersionFiles(): Promise<NotOnDiskFiniteChunk[]> {
 		const totalLen = this.objFile.getTotalSegsLen();
-		const allSegs = this.objFile.segsLocations(0, totalLen);
-		return allSegs.filter(({ type }) => ((type === 'new') || (type === 'base'))) as NotOnDiskFiniteChunk[];
+		const segsInfo = await this.getSegsInfo(0, totalLen);
+		return segsInfo.filter(({ type }) => ((type === 'new') || (type === 'base'))) as NotOnDiskFiniteChunk[];
 	}
 
-	doesFileNeedDownload(): boolean {
-		return (this.segsThatNeedDownload().length !== 0);
-	}
-
-	numOfBytesNeedingDownload(): number {
+	async numOfBytesNeedingDownload(): Promise<number> {
 		let totalLen = 0;
-		for (const { len } of this.segsThatNeedDownload()) {
+		for (const { len } of await this.segsNotInVersionFiles()) {
 			totalLen += len;
 		}
 		return totalLen;
 	}
 
-	startDownloadInBackground(eventSink: DownloadEventSink): number|undefined {
-		return this.downloads().downloadAllInBackground(eventSink);
+	async startDownloadInBackground(eventSink: DownloadEventSink): Promise<number|undefined> {
+		return await this.downloads().downloadAllInBackground(eventSink);
 	}
 
 }
@@ -311,7 +356,7 @@ export class Download {
 		public readonly version: number,
 		private readonly downloader: ObjDownloader,
 		public saveSegs?: ObjVersionFile['saveSegs'],
-		public segsThatNeedDownload?: ObjOnDisk['segsThatNeedDownload']
+		public segsNotInVersionFiles?: ObjOnDisk['segsNotInVersionFiles']
 	) {
 		Object.seal(this);
 	}
@@ -355,14 +400,14 @@ export class Download {
 		return deferred.promise;
 	}
 
-	downloadAllInBackground(eventSink: DownloadEventSink): number|undefined {
-		if (!this.segsThatNeedDownload) {
+	async downloadAllInBackground(eventSink: DownloadEventSink): Promise<number|undefined> {
+		if (!this.segsNotInVersionFiles) {
 			throw new Error(`segsThatNeedDownload is not initialized`);
 		}
 		if (this.inBkgrnd) {
 			return this.inBkgrnd.downloadTaskId;
 		}
-		const chunks = this.segsThatNeedDownload();
+		const chunks = await this.segsNotInVersionFiles();
 		if (chunks.length === 0) {
 			return;
 		}
@@ -463,7 +508,7 @@ export class Download {
 			return;
 		}
 		if (!this.inBkgrnd.chunks) {
-			this.inBkgrnd.chunks = this.segsThatNeedDownload!();
+			this.inBkgrnd.chunks = await this.segsNotInVersionFiles!();
 			if (this.inBkgrnd.chunks.length === 0) {
 				this.completeBkgrnd();
 				return;

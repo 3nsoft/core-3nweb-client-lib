@@ -843,13 +843,8 @@ class ObjIdToPathMap {
 		const parent = this.map.get(parentObjId);
 		if (!parent) { return; }
 		if ((this.maxDepth !== undefined) && (this.maxDepth <= depthOf(parent))) { return; }
-		let item = this.map.get(objId);
-		if (item) {
-			item.parent = parent;
-		} else {
-			item = { nameInParent: event.path, parent };
-			this.map.set(objId, item);
-		}
+		const item = { nameInParent: event.path, parent };
+		this.map.set(objId, item);
 		return pathOfMapItem(item);
 	}
 
@@ -864,7 +859,7 @@ class ObjIdToPathMap {
 		if (event.type === 'entry-renaming') {
 			const childEntry = this.map.get(childObjId!);
 			if (childEntry) {
-				childEntry.nameInParent === event.newName;
+				childEntry.nameInParent = event.newName;
 			}
 		} else if (event.type === 'entry-removal') {
 			const childEntry = this.map.get(childObjId!);
@@ -882,7 +877,7 @@ class ObjIdToPathMap {
 				childEntry.nameInParent = event.entry.name;
 			} else {
 				const childEntry: PathMapItem = { parent: objPathItem, nameInParent: event.entry.name };
-				this.map.set(objId, childEntry);
+				this.map.set(childObjId!, childEntry);
 				// XXX if childEntry is a folder with its own children, subtree should be added
 				// if (event.entry.isFolder && (!this.maxDepth || (depthOf(childEntry) < this.maxDepth))) {
 				// 	await recursivelyAddIntoMap(this.map, childNode, childEntry, this.maxDepth, childEntry.depth+1);

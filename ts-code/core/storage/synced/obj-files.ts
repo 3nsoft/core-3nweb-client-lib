@@ -34,7 +34,7 @@ import { ObjStatus } from './obj-status';
 import { LogError } from '../../../lib-client/logging/log-to-file';
 import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { DiffInfo } from '../../../lib-common/service-api/3nstorage/owner';
-import { FiniteChunk } from '../../../lib-common/objs-on-disk/file-layout';
+import { FiniteChunk, FiniteSegsChunk } from '../../../lib-common/objs-on-disk/file-layout';
 import { StorageOwner as RemoteStorage } from '../../../lib-client/3nstorage/storage-owner';
 import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { saveUploadHeaderFile } from './upload-header-file';
@@ -349,10 +349,10 @@ export class SyncedObj {
 	}
 
 	private readonly localAndSyncedObjSegsGetterFromDisk: GetBaseSegsOnDisk =
-	async (v, ofs, len) => {
+	async (v, ofs, len, infoOnly) => {
 		const latestSynced = this.status.latestSyncedVersion();
 		if (latestSynced && (latestSynced >= v)) {
-			return this.remoteObjSegsGetterFromDisk(v, ofs, len);
+			return this.remoteObjSegsGetterFromDisk(v, ofs, len, infoOnly);
 		}
 		let objVer = this.localVers.get(v);
 		if (!objVer) {
@@ -360,11 +360,11 @@ export class SyncedObj {
 				this.objId, v, this.localVerPath(v), this.downloader, this.localAndSyncedObjSegsGetterFromDisk);
 			this.localVers.set(v, objVer);
 		}
-		return objVer.readSegsOnlyFromDisk(ofs, len);
+		return (infoOnly ? objVer.getSegsInfo(ofs, len) : objVer.readSegsOnlyFromDisk(ofs, len));
 	};
 
 	private readonly remoteObjSegsGetterFromDisk: GetBaseSegsOnDisk =
-	async (v, ofs, len) => {
+	async (v, ofs, len, infoOnly) => {
 		let objVer = this.remoteVers.get(v);
 		if (!objVer) {
 			try {
@@ -378,7 +378,7 @@ export class SyncedObj {
 				return [ { type: 'new', thisVerOfs: ofs, len } ];
 			}
 		}
-		return objVer.readSegsOnlyFromDisk(ofs, len);
+		return (infoOnly ? objVer.getSegsInfo(ofs, len) : objVer.readSegsOnlyFromDisk(ofs, len));
 	};
 
 	async saveNewVersion(
@@ -525,7 +525,8 @@ export class SyncedObj {
 		const verPath = this.remoteVerPath(version);
 		if (!(await isOnDisk(verPath))) { return 'none'; }
 		const objVer = await this.instanceOfRemoteObjVer(version);
-		return (objVer.doesFileNeedDownload() ? 'partial' : 'complete');
+		const segsNotInVerFiles = await objVer.segsNotInVersionFiles();
+		return ((segsNotInVerFiles.length > 0) ? 'partial' : 'complete');
 	}
 
 	async getNumOfBytesNeedingDownload(version: number): Promise<number|'unknown'> {
@@ -539,14 +540,14 @@ export class SyncedObj {
 		const verPath = this.remoteVerPath(version);
 		if (!(await isOnDisk(verPath))) { return 'unknown'; }
 		const objVer = await this.instanceOfRemoteObjVer(version);
-		return objVer.numOfBytesNeedingDownload();
+		return await objVer.numOfBytesNeedingDownload();
 	}
 
 	async startDownloadProcess(
 		version: number, eventSink: DownloadEventSink
 	): Promise<{ downloadTaskId: number; }|undefined> {
 		const objVer = await this.instanceOfRemoteObjVer(version);
-		const downloadTaskId = objVer.startDownloadInBackground(eventSink);
+		const downloadTaskId = await objVer.startDownloadInBackground(eventSink);
 		return (downloadTaskId ? { downloadTaskId } : undefined);
 	}
 
