@@ -969,7 +969,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 			if (removedNodes.length > 0) {
 				// start upload of children's removal after folder's upload;
 				// we also don't await for chidren removal in returned completion
-				completion.then(() => this.uploadRemovalOf(removedNodes));
+				completion.then(() => this.uploadRemovalOf(removedNodes)).catch(noop);
 			}
 			return {
 				completion: completion.catch(exc => {

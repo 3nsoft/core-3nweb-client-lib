@@ -201,7 +201,7 @@ export interface NetworkFns {
 }
 
 export interface RegularNetworkFns extends NetworkFns {
-  naming: DnsResolver[];
+  naming: () => DnsResolver[];
 }
 
 function makeMissingImplementationException(
@@ -223,7 +223,7 @@ export function wrapNetworkFns(impls: {
   makeNet: () => NetClient;
 } {
   const { regular, i2p, onion, resetConnectivity } = impls;
-  const locateInDNS = makeServiceLocatorInDNS(...regular.naming);
+  const locateInDNS = makeServiceLocatorInDNS(regular.naming);
   const locationRequesterInOnion = (onion ?
     makeNetClient(onion.requests, undefined as any).doBodylessRequest : undefined
   );
@@ -285,8 +285,8 @@ export function wrapNetworkFns(impls: {
   return { makeLocator, makeNet };
 }
 
-function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
-  if (resolvers.length === 0) {
+function makeServiceLocatorInDNS(getResolvers: () => DnsResolver[]) {
+  if (getResolvers().length === 0) {
     throw Error(`no DNS resolvers given`);
   }
   async function locateInDNS(
@@ -295,6 +295,7 @@ function makeServiceLocatorInDNS(...resolvers: DnsResolver[]) {
     const domain = domainOfAddress(address);
     let exc: any = undefined;
     let connectionExc: DNSConnectException|undefined = undefined;
+    const resolvers = getResolvers();
     for (let i=0; i<resolvers.length; i+=1) {
       const resolver = resolvers[i];
       let txtRecords: string[][];

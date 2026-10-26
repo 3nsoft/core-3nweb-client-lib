@@ -24,6 +24,7 @@ import { mergeMap, filter, share } from 'rxjs/operators';
 import type { LogError } from '../../../lib-client/logging/log-to-file';
 import { addToStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
 import type { ConnectionStatus } from '../../../lib-client/request-utils';
+import { noop } from '../common/utils';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -120,7 +121,7 @@ export class RemoteEvents {
 				if (!obj) { return; }
 				const syncStatus = obj.syncStatus().syncStatus();
 				if (!syncStatus.synced?.latest || (syncStatus.synced.latest >= newRemoteVersion)) { return; }
-				obj.statusObj().recordRemoteChange(newRemoteVersion);
+				obj.statusObj().recordRemoteChange(newRemoteVersion).catch(noop);
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-change',
 					path: '',
@@ -140,7 +141,7 @@ export class RemoteEvents {
 			mergeMap(async ({ objId }: events.objRemoved.Event) => {
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
-				obj.statusObj().recordRemoteRemoval();
+				obj.statusObj().recordRemoteRemoval().catch(noop);
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
 					type: 'remote-removal',
 					path: '',

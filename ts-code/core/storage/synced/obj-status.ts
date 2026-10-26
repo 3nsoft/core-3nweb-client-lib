@@ -643,10 +643,10 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 	}
 
 	async adoptRemoteVersion(version?: number): Promise<void> {
-		if (this.upload?.type === 'removal') {
+		if (this.status.upload?.type === 'removal') {
 			// uploads should have be cancelled before this is called (need a check),
 			// yet, outstanding removal was noted
-			this.upload == undefined;
+			this.status.upload = undefined;
 		}
 		const { local, remote } = this.status;
 		if (this.stateIndicator !== 'behind') {

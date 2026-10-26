@@ -84,7 +84,7 @@ function resolveTxt(domain: string): Promise<string[][]> {
 }
 
 const { makeLocator, makeNet } = wrapNetworkFns({ regular: {
-	naming: [{ resolveTxt }],
+	naming: () => [{ resolveTxt }],
 	openServiceEventsSource: makeServiceEventsSourceFromNode(),
 	requests: makeRequestFromNode()
 } });
