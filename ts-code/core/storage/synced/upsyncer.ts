@@ -410,9 +410,12 @@ class UploadTask implements Task<UploadExecLabel> {
 		}
 	}
 
-	cancel(): Promise<void> {
-		// XXX
-		throw new Error("UploadTask.cancel() not implemented.");
+	async cancel(): Promise<void> {
+		const transactionId = this.info.needUpload?.transactionId;
+		if (transactionId) {
+			await this.remoteStorage.cancelTransaction(this.objId, transactionId).catch(noop);
+		}
+		await this.objStatus.recordUploadCancellation(this.info).catch(noop);
 	}
 
 }
