@@ -41,7 +41,7 @@ import { makeTimedCache } from "../../../lib-common/timed-cache";
 import { NetClient } from '../../../lib-client/request-utils';
 import { getOrMakeDirOnInit } from '../../../lib-client/fs-utils/fs-sync-utils';
 import { AsyncRNG } from '../../../lib-common/rng-def';
-import { startPeriodicConditionalTriggerProc } from '../../../lib-common/periodic-trigger';
+import { startPeriodicConditionalTriggerProc } from '../../../lib-common/processes/periodic-trigger';
 
 type MsgInfo = web3n.asmail.MsgInfo;
 type IncomingMessage = web3n.asmail.IncomingMessage;
@@ -51,7 +51,7 @@ type InboxService = web3n.asmail.InboxService;
 type JsonKey = web3n.keys.JsonKey;
 type PKeyCertChain = web3n.keys.PKeyCertChain;
 
-const CONNECTION_CHECK_WAIT_SECS = 30;
+const CONNECTION_CHECK_WAIT_SECS = 15;
 
 export interface ResourcesForReceiving {
 	address: string;
@@ -156,6 +156,8 @@ export async function makeInboxOnServer(
 	const cache = await CachedMessages.makeFor(cachePath, downloader, r.logError);
 	const index = await makeMsgIndex(indexSyncedFS, indexLocalFS, r.logError);
 	const inboxEvents = new InboxEvents(msgReceiver, getMsg, listNewMsgs, removeMsg, r.logError);
+
+	inboxEvents.resumeNetworkActivity();
 
 	let stopConnectionCheckingProc: (() => void)|undefined = startPeriodicConditionalTriggerProc(
 		() => !inboxEvents.isConnected(),

@@ -310,6 +310,13 @@ export interface ConnectionStatus {
 	error?: any;
 }
 
+export function addToStatus<T extends ConnectionStatus>(status: ConnectionStatus, params: Partial<T>): T {
+	for (const [ field, value ] of Object.entries(params)) {
+		(status as T)[field] = value;
+	}
+	return status as T;
+}
+
 export function makeNetClient(
 	request: RequestFn<unknown>,
 	openEventSource: OpenServiceEventsSource,

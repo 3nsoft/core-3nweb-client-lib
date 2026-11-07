@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2017, 2019 - 2020, 2022, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
@@ -8,8 +8,9 @@
  You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observable, of, PartialObserver, Subject, Subscription, throwError } from 'rxjs';
-import { share, tap } from 'rxjs/operators';
+import { from, Observable, of, PartialObserver, Subject, Subscription, throwError } from 'rxjs';
+import { mergeMap, share, tap } from 'rxjs/operators';
+import { defer } from './processes/deferred';
 
 /**
  * This is a pipeable operator that runs given async process on completion and
@@ -160,3 +161,58 @@ export class Broadcast<T> {
 }
 Object.freeze(Broadcast.prototype);
 Object.freeze(Broadcast);
+
+
+export interface CancellableProc {
+	completion: Promise<void>;
+	stop: () => void;
+}
+
+export function toCancellableProc(procStart: Promise<Observable<unknown>>): CancellableProc {
+	const whenStops = defer<void>();
+	const sub = from(procStart)
+	.pipe(
+		mergeMap(event$ => event$),
+	)
+	.subscribe({
+		error: () => {
+			whenStops.resolve();
+		},
+		complete: () => {
+			whenStops.resolve();
+		}
+	});
+	return {
+		stop: () => {
+			sub.unsubscribe();
+			whenStops.resolve();
+		},
+		completion: whenStops.promise
+	};
+}
+
+export class CancellableProcHolder {
+
+	proc: CancellableProc|undefined = undefined;
+
+	startWith(procStart: Promise<Observable<unknown>>): void {
+		const proc = toCancellableProc(procStart);
+		proc.completion.then(() => {
+			if (this.proc === proc) {
+				this.proc = undefined;
+			}
+		});
+		this.proc = proc;
+	}
+
+	stop(): Promise<void>|undefined {
+		const proc = this.proc;
+		if (!proc) {
+			return;
+		}
+		this.proc = undefined;
+		proc.stop();
+		return proc.completion;
+	}
+
+}

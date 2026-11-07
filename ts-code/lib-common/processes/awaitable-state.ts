@@ -15,36 +15,41 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+import { defer, Deferred } from "./deferred";
 
-export function startPeriodicConditionalTriggerProc(
-	shouldTrigger: () => boolean,
-	trigger: () => void,
-	timeoutSecond: number
-): (() => void) {
-	let checkActive = true;
-	function checkAndTrigger() {
-		if (!checkActive) {
-			return;
-		}
-		if (shouldTrigger()) {
-			trigger();
-		}
-		setNext();
+
+export class AwaitableState {
+
+	private deferredStateSetPoint: Deferred<void>|undefined = defer();
+
+	constructor() {
+		Object.seal(this);
 	}
 
-	let triggerTime: ReturnType<typeof setTimeout>|undefined = undefined;
-	function setNext() {
-		triggerTime = setTimeout(checkAndTrigger, timeoutSecond*1000);
-		if (typeof triggerTime === 'object') {
-			triggerTime.unref?.();
+	isSet(): boolean {
+		return !this.deferredStateSetPoint;
+	}
+
+	setState(): void {
+		if (this.deferredStateSetPoint) {
+			this.deferredStateSetPoint.resolve();
+			this.deferredStateSetPoint = undefined;
 		}
 	}
 
-	return () => {
-		checkActive = false;
-		clearTimeout(triggerTime);
-	};
+	clearState(): void {
+		if (!this.deferredStateSetPoint) {
+			this.deferredStateSetPoint = defer();
+		}
+	}
+
+	async whenStateIsSet(): Promise<void> {
+		return this.deferredStateSetPoint?.promise;
+	}
+
 }
+Object.freeze(AwaitableState.prototype);
+Object.freeze(AwaitableState);
 
 
 Object.freeze(exports);

@@ -19,10 +19,9 @@ import { ConnectionStatus, extractIntHeader, NetClient } from '../request-utils'
 import * as api from '../../lib-common/service-api/asmail/retrieval';
 import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-with-mid-session';
 import { asmailInfoAt } from '../service-locator';
-import { SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
 import { getStackHere } from '../../lib-common/exceptions/runtime';
-import { makeSubscribingClient } from '../../lib-common/ipc/generic-ipc';
+import { makeSubscribingClient, SubscribingClient } from '../../lib-common/ipc/generic-ipc';
 
 type InboxException = web3n.asmail.InboxException;
 type Observer<T> = web3n.Observer<T>;

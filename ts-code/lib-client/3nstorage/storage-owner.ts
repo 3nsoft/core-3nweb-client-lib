@@ -21,11 +21,10 @@ import { ServiceUser, IGetMailerIdSigner, ServiceAccessParams } from '../user-wi
 import { storageInfoAt } from '../service-locator';
 import * as keyGen from '../key-derivation';
 import { makeObjNotFoundExc, makeConcurrentTransExc, makeUnknownTransactionExc, makeVersionMismatchExc, makeObjExistsExc, makeObjVersionNotFoundExc } from '../xsp-fs/exceptions';
-import { SubscribingClient } from '../../lib-common/ipc/ws-ipc';
 import { ObjId } from '../xsp-fs/common';
 import { assert } from '../../lib-common/assert';
 import { makeMalformedReplyHTTPException, makeUnexpectedStatusHTTPException } from '../../lib-common/exceptions/http';
-import { makeSubscribingClient } from '../../lib-common/ipc/generic-ipc';
+import { makeSubscribingClient, SubscribingClient } from '../../lib-common/ipc/generic-ipc';
 
 export type FirstSaveReqOpts = api.PutObjFirstQueryOpts;
 export type FollowingSaveReqOpts = api.PutObjSecondQueryOpts;

@@ -15,16 +15,17 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { Observable, Subject, from } from 'rxjs';
+import { Observable, Subject, merge } from 'rxjs';
 import { StorageOwner } from '../../../lib-client/3nstorage/storage-owner';
 import { ObjFiles } from './obj-files';
 import { Storage } from '../../../lib-client/xsp-fs/common';
 import { events } from '../../../lib-common/service-api/3nstorage/owner';
 import { mergeMap, filter, share } from 'rxjs/operators';
 import type { LogError } from '../../../lib-client/logging/log-to-file';
-import { addToStatus, SubscribingClient, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
-import type { ConnectionStatus } from '../../../lib-client/request-utils';
+import { addToStatus, type ConnectionStatus } from '../../../lib-client/request-utils';
 import { noop } from '../common/utils';
+import { SubscribingClient } from '../../../lib-common/ipc/generic-ipc';
+import { CancellableProcHolder } from '../../../lib-common/utils-for-observables';
 
 export interface StorageConnectionStatus extends ConnectionStatus {
 	service: 'storage';
@@ -39,8 +40,6 @@ function toStorageConnectionStatus(
 	});
 }
 
-const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
-
 
 /**
  * Remote events are absorbed into objects' statuses, broadcasting respective
@@ -50,7 +49,7 @@ export class RemoteEvents {
 
 	private readonly connectionEvents = new Subject<StorageConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
-	private readonly wsProc: WebSocketListening;
+	private listening = new CancellableProcHolder();
 
 	constructor(
 		private readonly remoteStorage: StorageOwner,
@@ -58,48 +57,34 @@ export class RemoteEvents {
 		private readonly broadcastNodeEvent: Storage['broadcastNodeEvent'],
 		private readonly logError: LogError
 	) {
-		this.wsProc = new WebSocketListening(
-			SERVER_EVENTS_RESTART_WAIT_SECS,
-			this.makeProc.bind(this)
-		);
 		Object.seal(this);
 	}
 
-	private makeProc(): Observable<void> {
-		return from(this.remoteStorage.openEventSource().then(({ client, watchHeartbeat }) => {
-			this.remoteStorage.connectedState.setState();
-			watchHeartbeat({
-				next: ev => {
-					this.connectionEvents.next(toStorageConnectionStatus(ev));
-					if (ev.type === 'heartbeat') {
-						this.remoteStorage.connectedState.setState();
-					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
-						this.remoteStorage.connectedState.clearState();
-					}
+	private async subscribeToEventSrcAndPassHeartbeats(): Promise<Observable<unknown>> {
+		const { client, watchHeartbeat } = await this.remoteStorage.openEventSource();
+		watchHeartbeat({
+			next: ev => {
+				this.connectionEvents.next(toStorageConnectionStatus(ev));
+				if (ev.type === 'heartbeat') {
+					this.remoteStorage.connectedState.setState();
+				} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
+					this.remoteStorage.connectedState.clearState();
 				}
-			});
-			return [
-				this.absorbObjChange(client),
-				this.absorbObjRemoval(client),
+			}
+		});
+		return merge(
+			this.absorbObjChange(client),
+			this.absorbObjRemoval(client),
 
-				// XXX commenting out these for now, as server hasn't implemented these
-				// this.absorbObjVersionArchival(client),
-				// this.absorbArchVersionRemoval(client)
-			];
-		}))
-		.pipe(
-			mergeMap(event$ => event$),
-			mergeMap(event$ => event$),
+			// XXX commenting out these for now, as server hasn't implemented these
+			// this.absorbObjVersionArchival(client),
+			// this.absorbArchVersionRemoval(client)
 		);
 	}
 
-	startListening(): void {
-		this.wsProc.startListening();
-	}
-
 	async close(): Promise<void> {
+		this.listening.stop();
 		this.connectionEvents.complete();
-		this.wsProc.close();
 	}
 
 	whenConnected(): Promise<void> {
@@ -110,12 +95,13 @@ export class RemoteEvents {
 		return this.remoteStorage.connectedState.isSet();
 	}
 
-	private absorbObjChange(client: SubscribingClient): Observable<void> {
+	private absorbObjChange(client: SubscribingClient): Observable<events.objChanged.Event|undefined> {
 		return (new Observable<events.objChanged.Event>(
 			obs => client.subscribe(events.objChanged.EVENT_NAME, obs)
 		))
 		.pipe(
-			mergeMap(async ({ newVer: newRemoteVersion, objId }) => {
+			mergeMap(async ev => {
+				const { newVer: newRemoteVersion, objId } = ev;
 				if (!Number.isInteger(newRemoteVersion) || (newRemoteVersion < 1)) { return; }
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
@@ -128,18 +114,19 @@ export class RemoteEvents {
 					newRemoteVersion,
 					syncStatus: obj.syncStatus().syncStatus()
 				});
+				return ev;
 			}, 1)
 		);
 	}
 
-	private absorbObjRemoval(client: SubscribingClient): Observable<void> {
+	private absorbObjRemoval(client: SubscribingClient): Observable<events.objRemoved.Event|undefined> {
 		return (new Observable<events.objRemoved.Event>(
 			obs => client.subscribe(events.objRemoved.EVENT_NAME, obs)
 		))
 		.pipe(
 			filter(objRmEvent => !!objRmEvent.objId),
-			mergeMap(async ({ objId }: events.objRemoved.Event) => {
-				const obj = await this.files.findObj(objId);
+			mergeMap(async ev => {
+				const obj = await this.files.findObj(ev.objId);
 				if (!obj) { return; }
 				obj.statusObj().recordRemoteRemoval().catch(noop);
 				this.broadcastNodeEvent(obj.objId, undefined, undefined, {
@@ -147,18 +134,20 @@ export class RemoteEvents {
 					path: '',
 					syncStatus: obj.syncStatus().syncStatus()
 				});
+				return ev;
 			}, 1)
 		);
 	}
 
-	private absorbObjVersionArchival(client: SubscribingClient): Observable<void> {
+	private absorbObjVersionArchival(
+		client: SubscribingClient
+	): Observable<events.objVersionArchived.Event|undefined> {
 		return (new Observable<events.objVersionArchived.Event>(
 			obs => client.subscribe(events.objVersionArchived.EVENT_NAME, obs)
 		))
 		.pipe(
-			mergeMap(async ({
-				objId, archivedVer
-			}: events.objVersionArchived.Event) => {
+			mergeMap(async ev => {
+				const { objId, archivedVer } = ev;
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
 				obj.statusObj().recordVersionArchival(archivedVer);
@@ -168,19 +157,20 @@ export class RemoteEvents {
 					archivedVersion: archivedVer,
 					syncStatus: obj.syncStatus().syncStatus()
 				});
+				return ev;
 			}, 1)
 		);
 	}
 
-	private absorbArchVersionRemoval(client: SubscribingClient): Observable<void> {
+	private absorbArchVersionRemoval(
+		client: SubscribingClient
+	): Observable<events.objArchivedVersionRemoved.Event|undefined> {
 		return (new Observable<events.objArchivedVersionRemoved.Event>(
 			obs => client.subscribe(events.objArchivedVersionRemoved.EVENT_NAME, obs)
 		))
 		.pipe(
-			mergeMap(async ({
-				objId, archivedVer
-			}: events.objArchivedVersionRemoved.Event
-			) => {
+			mergeMap(async ev => {
+				const { objId, archivedVer } = ev;
 				const obj = await this.files.findObj(objId);
 				if (!obj) { return; }
 				obj.statusObj().recordArchVersionRemoval(archivedVer);
@@ -190,24 +180,22 @@ export class RemoteEvents {
 					removedArchVer: archivedVer,
 					syncStatus: obj.syncStatus().syncStatus()
 				});
+				return ev;
 			}, 1)
 		);
 	}
 
-	// XXX we should go along:
-	//  - last working connection and ping
-	//  - may be have an expect suspending of network, with less aggressive attempts to reconnect
-	//  - instead of talking about presence of network, expose methods to nudge restarting behaviour, as outside
-	//    may have better clues and able to command behaviour switch
-
-	suspendNetworkActivity(): void {
-		// XXX
-		// - ...
+	stopNetworkActivity(): void {
+		this.listening.stop();
 	}
 
 	resumeNetworkActivity(): void {
-		if (!this.wsProc.isListening) {
-			this.wsProc.startListening();
+		if (this.listening.proc) {
+			this.listening.startWith(
+				this.listening.proc.completion.then(() => this.subscribeToEventSrcAndPassHeartbeats())
+			);
+		} else {
+			this.listening.startWith(this.subscribeToEventSrcAndPassHeartbeats());
 		}
 	}
 

@@ -31,7 +31,7 @@ import { lastValueFrom, Observable } from 'rxjs';
 import { Broadcast } from '../../../lib-common/utils-for-observables';
 import { UploadHeaderChange } from '../../../lib-client/xsp-fs/common';
 import { AsyncRNG } from '../../../lib-common/rng-def';
-import { startPeriodicConditionalTriggerProc } from '../../../lib-common/periodic-trigger';
+import { startPeriodicConditionalTriggerProc } from '../../../lib-common/processes/periodic-trigger';
 
 type FolderEvent = web3n.files.FolderEvent;
 type FileEvent = web3n.files.FileEvent;
@@ -39,7 +39,7 @@ type SyncStatus = web3n.files.SyncStatus;
 type OptionsToAdopteRemote = web3n.files.OptionsToAdopteRemote;
 type UploadEvent = web3n.files.UploadEvent;
 
-const CONNECTION_CHECK_WAIT_SECS = 30;
+const CONNECTION_CHECK_WAIT_SECS = 15;
 
 
 export class SyncedStore implements SyncedStorage {
@@ -79,7 +79,7 @@ export class SyncedStore implements SyncedStorage {
 		return {
 			syncedStore: wrapSyncStorageImplementation(s),
 			startObjProcs: () => {
-				s.remoteEvents.startListening();
+				s.remoteEvents.resumeNetworkActivity();
 				s.startConnectionCheckingProc();
 			}
 		};
@@ -102,7 +102,7 @@ export class SyncedStore implements SyncedStorage {
 			setupRemoteAndStartObjProcs: getSigner => {
 				setMid(getSigner);
 				s.uploader.start();
-				s.remoteEvents.startListening();
+				s.remoteEvents.resumeNetworkActivity();
 				s.startConnectionCheckingProc();
 			}
 		};
@@ -295,7 +295,7 @@ export class SyncedStore implements SyncedStorage {
 	}
 
 	suspendNetworkActivity(): void {
-		this.remoteEvents.suspendNetworkActivity();
+		this.remoteEvents.stopNetworkActivity();
 	}
 
 	resumeNetworkActivity(): void {

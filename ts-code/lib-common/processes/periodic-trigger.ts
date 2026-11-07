@@ -15,41 +15,38 @@
  this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-import { defer, Deferred } from "./processes/deferred";
 
-
-export class AwaitableState {
-
-	private deferredStateSetPoint: Deferred<void>|undefined = defer();
-
-	constructor() {
-		Object.seal(this);
+export function startPeriodicConditionalTriggerProc(
+	shouldTrigger: () => boolean,
+	trigger: () => void,
+	timeoutSecond: number
+): (() => void) {
+	function checkAndTrigger() {
+		if (!procIsON) {
+			return;
+		}
+		if (shouldTrigger()) {
+			trigger();
+		}
+		setNext();
 	}
 
-	isSet(): boolean {
-		return !this.deferredStateSetPoint;
-	}
-
-	setState(): void {
-		if (this.deferredStateSetPoint) {
-			this.deferredStateSetPoint.resolve();
-			this.deferredStateSetPoint = undefined;
+	let triggerTime: ReturnType<typeof setTimeout>|undefined = undefined;
+	function setNext() {
+		triggerTime = setTimeout(checkAndTrigger, timeoutSecond*1000);
+		if (typeof triggerTime === 'object') {
+			triggerTime.unref?.();
 		}
 	}
 
-	clearState(): void {
-		if (!this.deferredStateSetPoint) {
-			this.deferredStateSetPoint = defer();
-		}
-	}
+	let procIsON = true;
+	setNext();
 
-	async whenStateIsSet(): Promise<void> {
-		return this.deferredStateSetPoint?.promise;
-	}
-
+	return () => {
+		procIsON = false;
+		clearTimeout(triggerTime);
+	};
 }
-Object.freeze(AwaitableState.prototype);
-Object.freeze(AwaitableState);
 
 
 Object.freeze(exports);

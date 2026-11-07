@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2017, 2019, 2025 3NSoft Inc.
+ Copyright (C) 2017, 2019, 2025 - 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -22,10 +22,18 @@ import { defer, Deferred } from '../lib-common/processes/deferred';
 import { makeConnectionException } from '../lib-common/exceptions/http';
 import { globalAgent, Agent } from 'https';
 import { MultiObserverWrap, type Envelope, type RawDuplex } from '../lib-common/ipc/generic-ipc';
-import { makeWSException } from '../lib-common/ipc/ws-ipc';
 import { Observable, share, Subject } from 'rxjs';
+import { makeRuntimeException } from '../lib-common/exceptions/runtime';
 
-type Observer<T> = web3n.Observer<T>;
+export interface WSException extends web3n.RuntimeException {
+	type: 'websocket',
+	socketSlow?: true,
+	socketClosed?: true
+}
+
+export function makeWSException(params: Partial<WSException>, flags?: Partial<WSException>): WSException {
+	return makeRuntimeException('websocket', params, flags ?? {});
+}
 
 export function makeServiceEventsSourceFromNode(getAgent?: () => Agent|undefined): OpenServiceEventsSource {
 	return async function openServiceEventsSrcFromNode(req) {

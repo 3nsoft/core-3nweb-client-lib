@@ -26,7 +26,7 @@ import { startMidSession, authenticateMidSession } from './mailer-id/login';
 import { assert } from '../lib-common/assert';
 import { MailerIdSigner } from '../lib-common/mailerid-sigs/user';
 import { makeUnexpectedStatusHTTPException } from '../lib-common/exceptions/http';
-import { AwaitableState } from '../lib-common/awaitable-state';
+import { AwaitableState } from '../lib-common/processes/awaitable-state';
 
 export type IGetMailerIdSigner = () => Promise<MailerIdSigner>;
 
@@ -159,18 +159,21 @@ export abstract class ServiceUser {
 	 * completes.
 	 */
 	async login(midSigner?: MailerIdSigner): Promise<void> {
-		if (this.sessionId) { return; } 
+		if (this.sessionId) { return; }
 		if (this.loginProc) { return this.loginProc; }
 		this.loginProc = (async () => {
-			await this.initServiceURI();
-			const sessionId = await this.startSession();
-			if (!midSigner) {
-				if (!this.getSigner) { throw new Error(`MailerId signer is not given, while signer getter is not set at construction time.`); }
-				midSigner = await this.getSigner();
+			try {
+				await this.initServiceURI();
+				const sessionId = await this.startSession();
+				if (!midSigner) {
+					if (!this.getSigner) { throw new Error(`MailerId signer is not given, while signer getter is not set at construction time.`); }
+					midSigner = await this.getSigner();
+				}
+				await this.authenticateSession(sessionId, midSigner);
+				this.sessionId = sessionId;
+			} finally {
+				this.loginProc = (undefined as any);
 			}
-			await this.authenticateSession(sessionId, midSigner);
-			this.sessionId = sessionId;
-			this.loginProc = (undefined as any);
 		})();
 		return this.loginProc;
 	}

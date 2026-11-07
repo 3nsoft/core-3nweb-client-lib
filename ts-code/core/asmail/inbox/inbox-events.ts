@@ -16,14 +16,13 @@
 */
 
 import { MailRecipient } from '../../../lib-client/asmail/recipient';
-import { from, Observable, Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { msgRecievedCompletely } from '../../../lib-common/service-api/asmail/retrieval';
 import { LogError } from '../../../lib-client/logging/log-to-file';
-import { filter, mergeMap, share, tap } from 'rxjs/operators';
-import { toRxObserver } from '../../../lib-common/utils-for-observables';
-import { addToStatus, WebSocketListening } from '../../../lib-common/ipc/ws-ipc';
+import { mergeMap, share } from 'rxjs/operators';
+import { CancellableProcHolder, toRxObserver } from '../../../lib-common/utils-for-observables';
 import { ConnectException } from '../../../lib-common/exceptions/http';
-import type { ConnectionStatus } from '../../../lib-client/request-utils';
+import { addToStatus, type ConnectionStatus } from '../../../lib-client/request-utils';
 
 type IncomingMessage = web3n.asmail.IncomingMessage;
 type InboxException = web3n.asmail.InboxException;
@@ -45,7 +44,6 @@ function toInboxConnectionStatus(
 	});
 }
 
-const SERVER_EVENTS_RESTART_WAIT_SECS = 5;
 const BUFFER_MILLIS_FOR_LISTING = 2*60*1000;
 
 /**
@@ -64,7 +62,7 @@ export class InboxEvents {
 	private readonly newMsg$ = this.newMsgs.asObservable().pipe(share());
 	private readonly connectionEvents = new Subject<InboxConnectionStatus>();
 	readonly connectionEvent$ = this.connectionEvents.asObservable().pipe(share());
-	private readonly wsProc: WebSocketListening;
+	private listening = new CancellableProcHolder();
 	private disconnectedAt: number|undefined = undefined;
 
 	constructor(
@@ -74,45 +72,36 @@ export class InboxEvents {
 		private readonly rmMsg: (msgId: string) => Promise<void>,
 		private readonly logError: LogError
 	) {
-		this.wsProc = new WebSocketListening(
-			SERVER_EVENTS_RESTART_WAIT_SECS,
-			this.makeProc.bind(this)
-		);
-		this.wsProc.startListening();
 		Object.seal(this);
 	}
 
-	private makeProc(): Observable<IncomingMessage> {
-		const proc$ = from(this.msgReceiver.openEventSource().then(({ client, watchHeartbeat }) => {
-			const channel = msgRecievedCompletely.EVENT_NAME;
-			watchHeartbeat({
-				next: ev => {
-					this.connectionEvents.next(toInboxConnectionStatus(ev));
-					if (ev.type === 'heartbeat') {
-						this.msgReceiver.connectedState.setState();
-					} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
-						this.msgReceiver.connectedState.clearState();
-					}
+	private async subscribeToEventSrcAndPassHeartbeats(): Promise<Observable<unknown>> {
+		const { client, watchHeartbeat } = await this.msgReceiver.openEventSource();
+		this.msgReceiver.connectedState.setState();
+		const channel = msgRecievedCompletely.EVENT_NAME;
+		watchHeartbeat({
+			next: ev => {
+				this.connectionEvents.next(toInboxConnectionStatus(ev));
+				if (ev.type === 'heartbeat' || ev.type == 'connected') {
+					this.msgReceiver.connectedState.setState();
+				} else if ((ev.type === 'heartbeat-skip') || (ev.type === 'disconnected')) {
+					this.msgReceiver.connectedState.clearState();
 				}
-			});
-			return new Observable<Events>(obs => client.subscribe(channel, obs));
-		}))
+			}
+		});
+		const proc = new Observable<Events>(obs => client.subscribe(channel, obs))
 		.pipe(
-			mergeMap(events => events),
-			mergeMap(async ev => this.getMessage(ev.msgId), 5),
-			filter(msg => !!msg),
-			tap({
-				next: msg => this.newMsgs.next(msg),
-				error: () => {
-					if (!this.disconnectedAt) {
-						this.disconnectedAt = Date.now();
-					}
+			mergeMap(async ev => {
+				const msg = await this.getMessage(ev.msgId);
+				if (msg) {
+					this.newMsgs.next(msg);
 				}
-			})
+				return ev;
+			}, 5)
 		);
 		// list messages as a side effect of starting, or at point of starting.
 		this.listMsgsFromDisconnectedPeriod();
-		return proc$;
+		return proc;
 	}
 
 	async whenConnected(): Promise<void> {
@@ -144,32 +133,25 @@ export class InboxEvents {
 	}
 
 	close(): void {
+		this.listening.stop();
 		this.newMsgs.complete();
-		this.wsProc.close();
 	}
 
-	// XXX we should go along:
-	//  - last working connection and ping
-	//  - may be have an expect suspending of network, with less aggressive attempts to reconnect
-	//  - instead of talking about presence of network, expose methods to nudge restarting behaviour, as outside
-	//    may have better clues and able to command behaviour switch
-
 	suspendNetworkActivity(): void {
-
-		// XXX code below shutdown for good, but restart sometimes has been failing.
-		// 
-		// if (this.isListening) {
-		// 	if (!this.disconnectedAt) {
-		// 		this.disconnectedAt = Date.now();
-		// 	}
-		// 	this.stopListening();
-		// }
+		this.listening.stop();
 	}
 
 	resumeNetworkActivity(): void {
-		if (!this.wsProc.isListening) {
-			this.wsProc.startListening();
+		if (this.listening.proc) {
+			this.listening.startWith(
+				this.listening.proc.completion.then(() => this.subscribeToEventSrcAndPassHeartbeats())
+			);
+		} else {
+			this.listening.startWith(this.subscribeToEventSrcAndPassHeartbeats());
 		}
+		this.listening.proc!.completion.then(() => {
+			this.disconnectedAt = Date.now();
+		});
 	}
 
 	private async listMsgsFromDisconnectedPeriod(): Promise<void> {
