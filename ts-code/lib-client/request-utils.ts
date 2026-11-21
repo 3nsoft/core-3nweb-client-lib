@@ -77,8 +77,7 @@ export async function processRequest<T>(
 	} catch (err) {
 		const { isTimeout, canRetry } = isTimeoutErr(err, opts, attempt);
 		if (isTimeout && canRetry) {
-			return processRequest<T>(
-				requester, httpsOpts, opts, reqBody, attempt + 1);
+			return processRequest<T>(requester, httpsOpts, opts, reqBody, attempt + 1);
 		}
 		throw err;
 	}
@@ -100,7 +99,8 @@ export function formHttpsReqOpts(
 		hostname: url.hostname,
 		port: url.port,
 		path: url.pathname + url.search,
-		headers: opts.requestHeaders ?? {}
+		headers: opts.requestHeaders ?? {},
+		timeout: opts.timeout
 	};
 	if (reqBody) {
 		netReqOpts.headers!['Content-Length'] = reqBody.length;
@@ -115,11 +115,8 @@ export function formHttpsReqOpts(
 }
 
 async function attachRequestReaders(
-	clReq: ClientRequest, opts: RequestOpts
+	clReq: ClientRequest, opts: Pick<RequestOpts, 'url' | 'method'>
 ): Promise<{ res: IncomingMessage, resBody: Uint8Array|undefined }> {
-	// XXX do something for timeouts, that doesn't break good long connections
-	// const timeout = (opts.timeout ? opts.timeout : DEFAULT_TIMEOUT);
-
 	// note that we attach reading of body to response as close as possible to
 	// its appearance, so as not to miss any incoming data, which may happen if
 	// next tick occurs in between.

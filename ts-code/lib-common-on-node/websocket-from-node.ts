@@ -35,10 +35,12 @@ export function makeWSException(params: Partial<WSException>, flags?: Partial<WS
 	return makeRuntimeException('websocket', params, flags ?? {});
 }
 
-export function makeServiceEventsSourceFromNode(getAgent?: () => Agent|undefined): OpenServiceEventsSource {
+export function makeServiceEventsSourceFromNode(
+	getAgent?: () => Agent|undefined, timeout = 10000
+): OpenServiceEventsSource {
 	return async function openServiceEventsSrcFromNode(req) {
 		const { url, sessionId } = req;
-		const rep = await openSocketFromNode(url!, sessionId!, getAgent);
+		const rep = await openSocketFromNode(url!, sessionId!, timeout, getAgent);
 		if (rep.status !== 200) {
 			return rep as any;
 		}
@@ -189,12 +191,12 @@ function makeHeartbeat(url: string) {
 }
 
 function openSocketFromNode(
-	url: string, sessionId: string, getAgent: (() => Agent|undefined)|undefined
+	url: string, sessionId: string, timeout: number, getAgent: (() => Agent|undefined)|undefined
 ): Promise<Reply<WebSocket>> {
 	ensureWebSocketUrlOK(url);
 	const headers: OutgoingHttpHeaders = {};
 	headers[SESSION_ID_HEADER] = sessionId;
-	const ws = new WebSocket(url, { headers, agent: getAgent?.() ?? globalAgent });
+	const ws = new WebSocket(url, { headers, agent: getAgent?.() ?? globalAgent, timeout });
 	let opening: Deferred<Reply<WebSocket>>|undefined = defer<Reply<WebSocket>>();
 	const initOnError = (err: any) => {
 		opening?.reject(makeConnectionException(url, undefined, `WebSocket connection error: ${err.message}`));
