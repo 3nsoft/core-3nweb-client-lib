@@ -567,7 +567,6 @@ type StoragePolicy = web3n.caps.common.StoragePolicy;
 
 class PerAppStorage {
 
-	private readonly appFSs = new Map<string, WritableFS>();
 	private readonly revAppDomain: string;
 
 	constructor(
@@ -591,7 +590,7 @@ class PerAppStorage {
 			cap.getSysFS = this.getSysFS.bind(this);
 		}
 		Object.freeze(cap);
-		return { cap, close: () => this.close() };
+		return { cap, close: () => {} };
 	}
 
 	private async getAppSyncedFS(appName?: string): Promise<WritableFS> {
@@ -599,11 +598,7 @@ class PerAppStorage {
 			appName = this.revAppDomain;
 		}
 		this.ensureAppFSAllowed(appName, 'synced');
-		let appFS = this.appFSs.get(appName);
-		if (!appFS) {
-			appFS = await this.appFSsFactory.makeSyncedFSForApp(appName);
-		}
-		return appFS;
+		return await this.appFSsFactory.makeSyncedFSForApp(appName);
 	}
 
 	private async getAppLocalFS(appName?: string): Promise<WritableFS> {
@@ -611,11 +606,7 @@ class PerAppStorage {
 			appName = this.revAppDomain;
 		}
 		this.ensureAppFSAllowed(appName, 'local');
-		let appFS = this.appFSs.get(appName);
-		if (!appFS) {
-			appFS = await this.appFSsFactory.makeLocalFSForApp(appName);
-		}
-		return appFS;
+		return await this.appFSsFactory.makeLocalFSForApp(appName);
 	}
 
 	/**
@@ -654,13 +645,6 @@ class PerAppStorage {
 
 		const sysFS = await this.appFSsFactory.getSysFSs(type);
 		return applyPolicyToFSItem(sysFS, policy, path);
-	}
-	
-	private close(): void {
-		for (const fs of this.appFSs.values()) {
-			this.appFSsFactory.addPreCloseWait(fs.close());
-		}
-		this.appFSs.clear();
 	}
 
 }

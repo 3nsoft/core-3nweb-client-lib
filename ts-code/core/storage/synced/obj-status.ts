@@ -651,6 +651,7 @@ export class ObjStatus implements SyncedObjStatus, UploadStatusRecorder {
 		const { local, remote } = this.status;
 		if (this.stateIndicator !== 'behind') {
 			if (this.stateIndicator === 'synced') {
+				// sync has already been done, nothing to do
 				return;
 			} else if ((this.stateIndicator === 'conflicting') && !version) {
 				throw makeFSSyncException('', {

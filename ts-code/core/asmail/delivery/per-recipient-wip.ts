@@ -204,8 +204,9 @@ export class WIP {
 		return this.proc.startOrChain(async () => {
 			if (this.state.stage === undefined) { return; }
 			this.state.stage = undefined;
-			if (!this.sender.sessionId) { return; }
-			await this.sender.cancelDelivery();
+			if (this.sender.sessionId) {
+				await this.sender.cancelDelivery();
+			}
 		});
 	}
 

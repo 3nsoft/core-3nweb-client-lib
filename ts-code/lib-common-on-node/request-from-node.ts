@@ -24,9 +24,21 @@ import { formHttpsReqOpts, processRequest, RequestFn } from '../lib-client/reque
 //  making NetClient requester for every host:port.
 
 
-export function makeRequestFromNode(getAgent?: () => https.Agent|undefined): RequestFn<unknown> {
-	const nodeHttpsRequest = (opts: https.RequestOptions) => https.request(opts);
-	const nodeHttpRequest = (opts: http.RequestOptions) => http.request(opts);
+export function makeRequestFromNode(
+	getAgent?: () => https.Agent|undefined, timeout = 10000
+): RequestFn<unknown> {
+	const nodeHttpsRequest = (opts: https.RequestOptions) => {
+		if (!opts.timeout) {
+			opts.timeout = timeout;
+		}
+		return https.request(opts);
+	}
+	const nodeHttpRequest = (opts: http.RequestOptions) => {
+		if (!opts.timeout) {
+			opts.timeout = timeout;
+		}
+		return http.request(opts);
+	}
 	return (opts, reqContentType, reqBody) => {
 		const reqOpts = formHttpsReqOpts(opts, reqContentType, reqBody);
 		const agent = getAgent?.();
