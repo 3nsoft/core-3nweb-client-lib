@@ -1209,7 +1209,7 @@ declare namespace web3n.files {
 		syncStatus: ItemSyncStatus;
 	}
 
-	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadDoneEvent;
+	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadErredEvent | UploadDoneEvent;
 
 	interface UploadEventBase extends FSEvent {
 		uploadTaskId: number;
@@ -1231,6 +1231,11 @@ declare namespace web3n.files {
 
 	interface UploadDisconnectedEvent extends UploadEventBase {
 		type: 'upload-disconnected';
+	}
+
+	interface UploadErredEvent extends UploadEventBase {
+		type: 'upload-erred';
+		error: any;
 	}
 
 	interface UploadDoneEvent extends UploadEventBase {

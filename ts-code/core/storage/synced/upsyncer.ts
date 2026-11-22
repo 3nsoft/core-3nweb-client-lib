@@ -265,19 +265,15 @@ class UploadTask implements Task<UploadExecLabel> {
 			}
 			await this.objStatus.recordUploadInterimState(this.info);
 			if (this.info.needUpload) {
-				if (this.eventSink) {
-					this.emitUploadEvent('upload-progress', {
-						totalBytesToUpload: this.totalBytesToUpload,
-						bytesLeftToUpload: countBytesIn(this.info)
-					});
-				}
+				this.emitUploadEvent('upload-progress', {
+					totalBytesToUpload: this.totalBytesToUpload,
+					bytesLeftToUpload: countBytesIn(this.info)
+				});
 				return false;
 			} else {
 				await this.doAtCompletion().finally(() => {
 					this.uploadCompletion.resolve();
-					if (this.eventSink) {
-						this.emitUploadEvent('upload-done', {});
-					}
+					this.emitUploadEvent('upload-done', {});
 				});
 				return true;
 			}
@@ -298,6 +294,9 @@ class UploadTask implements Task<UploadExecLabel> {
 					uploadVersion: this.info.uploadVersion,
 					cause: exc
 				}));
+				this.emitUploadEvent('upload-erred', {
+					error: exc
+				});
 				await this.objStatus.recordUploadCancellation(this.info);
 				return true;
 			}

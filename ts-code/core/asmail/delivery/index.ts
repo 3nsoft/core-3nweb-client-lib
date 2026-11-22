@@ -23,6 +23,7 @@ import { copy as jsonCopy } from '../../../lib-common/json-utils';
 import { Subject } from 'rxjs';
 import { share } from 'rxjs/operators';
 import { toRxObserver } from '../../../lib-common/utils-for-observables';
+import { sleep } from '../../../lib-common/processes/sleep';
 
 type WritableFS = web3n.files.WritableFS;
 type DeliveryService = web3n.asmail.DeliveryService;
@@ -126,12 +127,13 @@ export class Delivery {
 			return () => {};
 		}
 		if (msg.isDone()) {
-			if (observer.next) { observer.next(jsonCopy(msg.progress)); }
-			if (observer.complete) { observer.complete(); }
+			observer.next?.(jsonCopy(msg.progress));
+			sleep(1).then(() => observer.complete?.());
 			return () => {};
+		} else {
+			const subToProgress = msg.progress$.subscribe(toRxObserver(observer));
+			return () => { subToProgress.unsubscribe(); }
 		}
-		const subToProgress = msg.progress$.subscribe(toRxObserver(observer));
-		return () => { subToProgress.unsubscribe(); }
 	}
 
 	observeAllDeliveries(observer: Observer<{ id:string; progress: DeliveryProgress; }>): () => void {
@@ -210,16 +212,12 @@ export class Delivery {
 		// start/schedule delivery process, according to message's size
 		if (sendImmediately || (msg.deliverySizeLeft() <= SMALL_MSG_SIZE)) {
 			this.immediateDelivery.add(msg);
-			msg.sendThisSmallMsgInParallel().then(() => {
-				if (msg.isDone()) {
-					this.immediateDelivery.delete(msg);
-					this.performQueuedDelivery();
-				}
-			}, async (err) => {
-// XXX add to retries queue with some timestamp
+			msg.sendThisSmallMsgInParallel()
+			.catch(async (err) => {
 				await this.r.logWarning('Got error when sending a message', err);
+			}).finally(() => {
 				this.immediateDelivery.delete(msg);
-				this.performQueuedDelivery();				
+				this.performQueuedDelivery();
 			});
 		} else {
 			this.queuedDelivery.push(msg);
@@ -243,7 +241,6 @@ export class Delivery {
 				}
 			}
 		}, async (err) => {
-// XXX add to retries queue with some timestamp
 			await this.r.logWarning('Got error when sending a message', err);
 			if (msg === this.queuedDelivery[0]) {
 				this.queuedDelivery.shift();

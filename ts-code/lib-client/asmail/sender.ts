@@ -454,7 +454,7 @@ export class MailSender {
 	async cancelDelivery(): Promise<void> {
 		if (!this.sessionId) { throw new Error(`Delivery session is not opened, and cannot be cancelled.`); }
 
-		// XXX make delivery canceling request within session
+		// XXX make delivery canceling request within session to protocol
 		
 	}
 	

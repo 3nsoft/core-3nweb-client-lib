@@ -66,7 +66,6 @@ export class Msg {
 	private static readonly progressSavingProcs = new NamedProcs();
 
 	private readonly sendingProc = new SingleProc();
-	private completionPromise: Deferred<DeliveryProgress>|undefined = undefined;
 	private cancelled = false;
 	private sender: string = (undefined as any);
 	private recipients: string[] = (undefined as any);
@@ -171,9 +170,7 @@ export class Msg {
 //		 retryRecipients ?
 
 		if (checkIfAllRecipientsDone(this.progress)) {
-			this.progress.allDone = (hasError(this.progress) ?
-				'with-errors' : 'all-ok'
-			);
+			this.progress.allDone = (hasError(this.progress) ? 'with-errors' : 'all-ok' );
 			saveProgress = true;
 		}
 
@@ -243,14 +240,6 @@ export class Msg {
 		return sizeLeft;
 	}
 
-	getCompletionPromise(): Promise<DeliveryProgress> {
-		if (this.isDone()) { throw new Error(`Message delivery has already completed.`); }
-		if (!this.completionPromise) {
-			this.completionPromise = defer<DeliveryProgress>();
-		}
-		return this.completionPromise.promise;
-	}
-
 	/**
 	 * Calling this method sets this message as cancelled. When returned promise
 	 * completes, it is safe to remove message's folder.
@@ -299,17 +288,6 @@ export class Msg {
 				}
 			});
 			await Promise.all(wipPromises);
-
-// XXX ???
-			if (this.completionPromise && this.isDone()) {
-				this.completionPromise.resolve(this.progress);
-				this.completionPromise = undefined;
-			}
-		}).catch(err => {
-			if (this.completionPromise) {
-				this.completionPromise.reject(err);
-				this.completionPromise = undefined;
-			}
 		});
 	}
 
@@ -349,17 +327,6 @@ export class Msg {
 			await this.sequentialWIP.startNext();
 			if (this.sequentialWIP.isDone()) {
 				this.sequentialWIP = undefined;
-			}
-
-// XXX ???
-			if (this.completionPromise && this.isDone()) {
-				this.completionPromise.resolve(this.progress);
-				this.completionPromise = undefined;
-			}
-		}).catch(err => {
-			if (this.completionPromise) {
-				this.completionPromise.reject(err);
-				this.completionPromise = undefined;
 			}
 		});
 	}
