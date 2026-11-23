@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2020, 2022 3NSoft Inc.
+ Copyright (C) 2016 - 2020, 2022, 2026 3NSoft Inc.
 
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -63,8 +63,7 @@ export class ObjFiles {
 		return this.sync(objId, async () => {
 			const folder = await this.folders.getFolderAccessFor(objId);
 			if (!folder) { return; }
-			obj = await LocalObj.forExistingObj(
-				objId, folder, this.gc.scheduleCollection, this.logError);
+			obj = await LocalObj.forExistingObj(objId, folder, this.gc.scheduleCollection, this.logError);
 			this.objs.set(objId, obj);
 			return obj;
 		});
@@ -73,8 +72,7 @@ export class ObjFiles {
 	private async makeNewObj(objId: ObjId): Promise<LocalObj> {
 		return this.sync(objId, async () => {
 			const folder = await this.folders.getFolderAccessFor(objId, true);
-			const obj = await LocalObj.forNewObj(
-				objId, folder!, this.gc.scheduleCollection, this.logError);
+			const obj = await LocalObj.forNewObj(objId, folder!, this.gc.scheduleCollection, this.logError);
 			this.objs.set(objId, obj);
 			return obj;
 		});
@@ -142,8 +140,7 @@ export class LocalObj {
 		let obj = this.verObjs.get(version);
 		if (obj) { return obj.getSrc(); }
 		const fPath = this.path(version);
-		obj = await ObjOnDisk.forExistingFile(
-			this.objId, version, fPath, undefined, this.objSegsGetterFromDisk);
+		obj = await ObjOnDisk.forExistingFile(this.objId, version, fPath, undefined, this.objSegsGetterFromDisk);
 		const src = obj.getSrc();
 		this.verObjs.set(version, obj);
 		return src;
@@ -153,17 +150,18 @@ export class LocalObj {
 		let obj = this.verObjs.get(ver);
 		if (!obj) {
 			const fPath = this.path(ver);
-			obj = await ObjOnDisk.forExistingFile(
-				this.objId, ver, fPath, undefined, this.objSegsGetterFromDisk);
+			obj = await ObjOnDisk.forExistingFile(this.objId, ver, fPath, undefined, this.objSegsGetterFromDisk);
 			this.verObjs.set(ver, obj);
 		}
 		return obj.readSegsOnlyFromDisk(ofs, len);
 	};
 
 	async saveNewVersion(version: number, encSub: Subscribe): Promise<void> {
-		if (this.verObjs.has(version)) { throw new Error(
-			`Version ${version} already exists in object ${this.objId}`); }
+		if (this.verObjs.has(version)) {
+			throw new Error(`Version ${version} already exists in object ${this.objId}`);
+		}
 		const fPath = this.path(version);
+		// write$ process creates version file, and removes it when error happens
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, undefined, this.objSegsGetterFromDisk
 		);

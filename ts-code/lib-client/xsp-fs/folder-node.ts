@@ -412,7 +412,15 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				throw makeFileException('notLink', childInfo.name);
 			}
 		}
-		return this.getOrMakeChildNodeForInfo<T>(childInfo);
+		try {
+			return await this.getOrMakeChildNodeForInfo<T>(childInfo);
+		} catch (exc) {
+			if (undefOnMissing && (exc as FileException).notFound) {
+				return;
+			} else {
+				throw exc;
+			}
+		}
 	}
 
 	private async getOrMakeChildNodeForInfo<T extends NodeInFS<any>>(
@@ -441,12 +449,10 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 					exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
 				} else if (exc.objNotFound) {
 					if (fromCurrentNodes) {
-						try {
-							await this.fixMissingChildAndThrow(exc, info);
-						} catch (exc) {
-							deferred.reject(exc);
-							return;
-						}
+						// XXX this.fixMissingChildAndThrow() was removing object that has been moved on other device
+						// Should we label found inconsistency, sot that it can be fixed later? Should we have lost&found?
+						deferred.reject(makeFileException('notFound', info.name, exc));
+						return;
 					} else {
 						try {
 							const node = await this.getNonLocal(info);
@@ -500,19 +506,20 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 		return this.getNode<LinkNode>('link', name, undefOnMissing);
 	}
 
-	private async fixMissingChildAndThrow(exc: StorageException, childInfo: NodeInfo): Promise<never> {
-		await this.doTransition(async (state, version) => {
-			const presentChild = state.nodes[childInfo.name];
-			if (!presentChild || (presentChild.objId !== childInfo.objId)) {
-				return [];
-			}
-			delete state.nodes[childInfo.name];
-			return this.makeEntryRemovalEvent(version, 'local', childInfo);
-		}).catch(noop);
-		const fileExc = makeFileException('notFound', childInfo.name, exc);
-		fileExc.inconsistentStateOfFS = true;
-		throw fileExc;
-	}
+	// XXX apparently this causes a problem on moves received on other devices via sync
+	// private async fixMissingChildAndThrow(exc: StorageException, childInfo: NodeInfo): Promise<never> {
+	// 	await this.doTransition(async (state, version) => {
+	// 		const presentChild = state.nodes[childInfo.name];
+	// 		if (!presentChild || (presentChild.objId !== childInfo.objId)) {
+	// 			return [];
+	// 		}
+	// 		delete state.nodes[childInfo.name];
+	// 		return this.makeEntryRemovalEvent(version, 'local', childInfo);
+	// 	}).catch(noop);
+	// 	const fileExc = makeFileException('notFound', childInfo.name, exc);
+	// 	fileExc.inconsistentStateOfFS = true;
+	// 	throw fileExc;
+	// }
 
 	/**
 	 * If no initial local version given, then this performs like doTransition(change) method.
@@ -1344,7 +1351,7 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 				// nodes are same
 			} else {
 				const syncedNode = syncedNodesById.get(remoteNode.objId)!;
-				assert(!!synced);
+				assert(!!syncedNode);
 				const localChanged = (syncedNode.name !== localNode.name);
 				const remoteChanged = (syncedNode.name !== remoteNode.name);
 				renamed.push({
@@ -1358,7 +1365,7 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 			}
 			if (!areBytesEqual(localNode.key, remoteNode.key)) {
 				const syncedNode = syncedNodesById.get(remoteNode.objId)!;
-				assert(!!synced);
+				assert(!!syncedNode);
 				const localChanged = !areBytesEqual(localNode.key, syncedNode.key);
 				const remoteChanged = !areBytesEqual(localNode.key, syncedNode.key);
 				rekeyed.push({

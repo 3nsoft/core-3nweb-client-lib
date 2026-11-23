@@ -178,28 +178,6 @@ export class ObjFiles {
 		return { fileWrite$, newObj };
 	}
 
-	findObjsToRemoveOnRemote(): Observable<ObjId> {
-		return from([undefined])
-		.pipe(
-			// listing recent folders, exactly once
-			mergeMap(() => this.folders.listRecent()),
-			// flatten array and space it in time, to process folders one by one
-			mergeMap(objsAndPaths => objsAndPaths),
-			mergeMap(async ({ objId, path }) => {
-				const obj = this.objs.get(objId);
-				if (obj) {
-					return (obj.statusObj().needsRemovalOnRemote() ?
-						objId : undefined);
-				} else {
-					const needsRm = await ObjStatus.fileShowsObjNeedsRemovalOnRemote(
-						path, objId);
-					return (needsRm ? objId : undefined);
-				}
-			}, 1),
-			filter<ObjId>(objId => (objId !== undefined))
-		);
-	}
-
 	scheduleGC(obj: SyncedObj): void {
 		this.gc.scheduleCollection(obj);
 	}
@@ -384,9 +362,11 @@ export class SyncedObj {
 	async saveNewVersion(
 		version: number, encSub: Subscribe
 	): Promise<{ fileWrite$: Observable<FileWrite[]>; baseVer?: number; }> {
-		if (this.localVers.has(version)) { throw new Error(
-			`Version ${version} already exists in object ${this.objId}`); }
+		if (this.localVers.has(version)) {
+			throw new Error(`Version ${version} already exists in object ${this.objId}`);
+		}
 		const fPath = this.localVerPath(version);
+		// write$ process creates version file, and removes it when error happens
 		const { obj, write$ } = await ObjOnDisk.createFileForWriteOfNewVersion(
 			this.objId, version, fPath, encSub, this.downloader, this.localAndSyncedObjSegsGetterFromDisk
 		);

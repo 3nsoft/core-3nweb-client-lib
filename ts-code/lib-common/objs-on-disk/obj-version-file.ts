@@ -381,7 +381,7 @@ async function createNewV1File(path: string): Promise<void> {
 	const initContent = Buffer.alloc(V1_FILE_START.length + 8, 0);
 	initContent.set(V1_FILE_START);
 	// note that all 8 bytes of layout offset are zeros
-	await fs.writeFile(path, initContent, { flag: 'wx' });
+	await fs.writeFile(path, initContent, { flag: 'w' });
 }
 
 async function recordLayoutOffsetInV1(fd: fs.FileHandle, ofs: number): Promise<void> {
