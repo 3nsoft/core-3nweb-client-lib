@@ -277,7 +277,7 @@ class UploadTask implements Task<UploadExecLabel> {
 				});
 				return false;
 			} else {
-				await this.doAtCompletion().finally(() => {
+				await this.doAtCompletion().then(() => {
 					this.uploadCompletion.resolve();
 					this.rmTask(this);
 					this.emitUploadEvent('upload-done', {});
