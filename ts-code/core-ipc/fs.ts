@@ -84,6 +84,7 @@ export function makeFSCaller(caller: Caller, fsMsg: FSMsg): FS {
 	if (fsMsg.writable) {
 		fs.copyFile = copyFile.makeCaller(caller, objPath);
 		fs.copyFolder = copyFolder.makeCaller(caller, objPath);
+		fs.copyXAttrs = copyXAttrs.makeCaller(caller, objPath);
 		fs.deleteFile = deleteFile.makeCaller(caller, objPath);
 		fs.deleteFolder = deleteFolder.makeCaller(caller, objPath);
 		fs.deleteLink = deleteLink.makeCaller(caller, objPath);
@@ -173,6 +174,7 @@ export function exposeFSService(fs: FS, expServices: CoreSideServices): FSMsg {
 	if (fs.writable) {
 		implExp.copyFile = copyFile.wrapService((fs as WritableFS).copyFile);
 		implExp.copyFolder = copyFolder.wrapService((fs as WritableFS).copyFolder);
+		implExp.copyXAttrs = copyXAttrs.wrapService((fs as WritableFS).copyXAttrs);
 		implExp.deleteFile = deleteFile.wrapService((fs as WritableFS).deleteFile);
 		implExp.deleteFolder = deleteFolder.wrapService((fs as WritableFS).deleteFolder);
 		implExp.deleteLink = deleteLink.wrapService((fs as WritableFS).deleteLink);
@@ -1921,6 +1923,38 @@ namespace copyFolder {
 
 }
 Object.freeze(copyFolder);
+
+
+namespace copyXAttrs {
+
+	interface Request {
+		src: string;
+		dst: string;
+		filter: string[];
+	}
+
+	const requestType = ProtoType.for<Request>(pb.CopyXAttrsRequestBody);
+
+	export function wrapService(fn: WritableFS['copyXAttrs']): ExposedFn {
+		return buf => {
+			const { src, dst, filter } = requestType.unpack(buf);
+			const promise = fn(src, dst, filter);
+			return { promise };
+		};
+	}
+
+	export function makeCaller(
+		caller: Caller, objPath: string[]
+	): WritableFS['copyXAttrs'] {
+		const ipcPath = methodPathFor<WritableFS>(objPath, 'copyXAttrs');
+		return (src, dst, filter) => caller
+		.startPromiseCall(ipcPath, requestType.pack({
+			src, dst, filter: filter ?? []
+		})) as Promise<void>;
+	}
+
+}
+Object.freeze(copyXAttrs);
 
 
 namespace saveFile {

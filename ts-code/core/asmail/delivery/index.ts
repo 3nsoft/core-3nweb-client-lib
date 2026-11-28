@@ -127,8 +127,9 @@ export class Delivery {
 			return () => {};
 		}
 		if (msg.isDone()) {
-			observer.next?.(jsonCopy(msg.progress));
-			sleep(1).then(() => observer.complete?.());
+			sleep(1)
+			.then(() => observer.next?.(jsonCopy(msg.progress)))
+			.then(() => observer.complete?.());
 			return () => {};
 		} else {
 			const subToProgress = msg.progress$.subscribe(toRxObserver(observer));

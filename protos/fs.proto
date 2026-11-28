@@ -324,6 +324,14 @@ message CopyFolderRequestBody {
 	common.BooleanValue merge_and_overwrite = 3;
 }
 
+// --- WritableFS.copyXAttrs ---
+// Reply body is empty
+message CopyXAttrsRequestBody {
+	string src = 1;
+	string dst = 2;
+	repeated string filter = 3;
+}
+
 // --- WritableFS.saveFile ---
 // Reply body is empty
 message SaveFileRequestBody {

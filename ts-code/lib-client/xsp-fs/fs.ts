@@ -550,9 +550,32 @@ export class XspFS implements WritableFS {
 		await pipe(srcBytes, sink);
 	}
 
+	async copyXAttrs(src: string, dst: string, filter?: string[]): Promise<void> {
+		const srcAttrs = await this.listXAttrs(src);
+		if (srcAttrs.length === 0) {
+			return;
+		}
+		if (filter && (filter.length > 0)) {
+			for (let i=0; i<srcAttrs.length; i+=1) {
+				const attr = srcAttrs[i];
+				if (!filter.includes(attr)) {
+					srcAttrs.splice(i, 1);
+					i -= 1;
+				}
+			}
+			if (srcAttrs.length === 0) {
+				return;
+			}
+		}
+		const attrsToCopy: NonNullable<XAttrsChanges['set']> = {};
+		for (const attr of srcAttrs) {
+			attrsToCopy[attr] = await this.getXAttr(src, attr);
+		}
+		await this.updateXAttrs(dst, { set: attrsToCopy });
+	}
+
 	async saveFile(file: File, dst: string, overwrite = false): Promise<void> {
-		const src = (file.v ?
-			(await file.v.getByteSource()).src : await file.getByteSource());
+		const src = (file.v ? (await file.v.getByteSource()).src : await file.getByteSource());
 		const flags: FileFlags = {
 			create: true,
 			exclusive: !overwrite,
@@ -974,7 +997,8 @@ class S implements WritableFSSyncAPI {
 		try {
 			const startedUpload = await node.startUpload(opts, true);
 			if (startedUpload) {
-				const { uploadTaskId, uploadVersion } = startedUpload;
+				const { uploadTaskId, uploadVersion, completion } = startedUpload;
+				completion.catch(noop);
 				return { uploadTaskId, uploadVersion };
 			} else {
 				return;
@@ -1148,6 +1172,9 @@ class S implements WritableFSSyncAPI {
 }
 Object.freeze(S.prototype);
 Object.freeze(S);
+
+
+function noop() {}
 
 
 Object.freeze(exports);

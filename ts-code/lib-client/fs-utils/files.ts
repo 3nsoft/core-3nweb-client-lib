@@ -220,6 +220,7 @@ export function wrapWritableFS(fsImpl: WritableFS): WritableFS {
 		move: fsImpl.move.bind(fsImpl),
 		copyFile: fsImpl.copyFile.bind(fsImpl),
 		copyFolder: fsImpl.copyFolder.bind(fsImpl),
+		copyXAttrs: fsImpl.copyXAttrs.bind(fsImpl),
 		writableFile: fsImpl.writableFile.bind(fsImpl),
 		writableSubRoot: fsImpl.writableSubRoot.bind(fsImpl),
 		saveFile: fsImpl.saveFile.bind(fsImpl),

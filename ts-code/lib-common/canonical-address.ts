@@ -27,8 +27,7 @@ export function toCanonicalAddress(address: string): string {
 	let user: string;
 	let domain: string;
 	if (indOfAt < 0) {
-		domain = address;
-		user = '';
+		throw makeParseExc(address, `No @ in given string`);
 	} else {
 		domain = address.substring(indOfAt+1);
 		user = address.substring(0, indOfAt).replace(whiteSpace, '');
@@ -74,9 +73,9 @@ export interface UserIdParseException extends web3n.RuntimeException {
 }
 
 export function areAddressesEqual(a: string, b: string): boolean {
-	const canonicalA = toCanonicalAddress(a);
+	const canonicalA = checkAndTransformAddress(a);
 	if (!canonicalA) { return false; }
-	const canonicalB = toCanonicalAddress(b);
+	const canonicalB = checkAndTransformAddress(b);
 	if (!canonicalB) { return false; }
 	return (canonicalA === canonicalB);
 }
@@ -90,6 +89,14 @@ export function checkAndTransformAddress(address: string): string|undefined {
 	try {
 		return toCanonicalAddress(address);
 	} catch (err) { }
+}
+
+export function includesAddress(arr: string[], address: string): boolean {
+  const canonAddr = checkAndTransformAddress(address);
+	if (!canonAddr) {
+		return false;
+	}
+	return arr.map(checkAndTransformAddress).includes(canonAddr);
 }
 
 Object.freeze(exports);

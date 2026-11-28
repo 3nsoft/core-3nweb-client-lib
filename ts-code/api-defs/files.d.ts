@@ -995,7 +995,7 @@ declare namespace web3n.files {
 		move(src: string, dst: string): Promise<void>;
 
 		/**
-		 * This returns a promise, resolvable when file has been copied.
+		 * This returns a promise, resolvable when file's contenet has been copied.
 		 * @param src is an initial path of a file
 		 * @param dst is a path of a file
 		 * @param overwrite is a flag that with a true value allows
@@ -1019,7 +1019,16 @@ declare namespace web3n.files {
 		): Promise<void>;
 
 		/**
-		 * This returns a promise, resolvable when file has been saved.
+		 * This returns a promise, resolvable when source item's xattrs are copied
+		 * to destination item
+		 * @param src is source item
+		 * @param dst is destination item
+		 * @param filter is a
+		 */
+		copyXAttrs(src: string, dst: string, filter?: string[]): Promise<void>;
+
+		/**
+		 * This returns a promise, resolvable when file's content has been saved.
 		 * @param file is a file to save
 		 * @param dst is a path where to save given file
 		 * @param overwrite is a flag that with a true value allows
@@ -1209,7 +1218,8 @@ declare namespace web3n.files {
 		syncStatus: ItemSyncStatus;
 	}
 
-	type UploadEvent = UploadStartEvent | UploadProgressEvent | UploadDisconnectedEvent | UploadErredEvent | UploadDoneEvent;
+	type UploadEvent = UploadStartEvent | UploadProgressEvent |
+		UploadDisconnectedEvent | UploadErredEvent | UploadCancelledEvent | UploadDoneEvent;
 
 	interface UploadEventBase extends FSEvent {
 		uploadTaskId: number;
@@ -1236,6 +1246,10 @@ declare namespace web3n.files {
 	interface UploadErredEvent extends UploadEventBase {
 		type: 'upload-erred';
 		error: any;
+	}
+
+	interface UploadCancelledEvent extends UploadEventBase {
+		type: 'upload-cancelled';
 	}
 
 	interface UploadDoneEvent extends UploadEventBase {

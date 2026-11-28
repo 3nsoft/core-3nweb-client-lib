@@ -52,7 +52,7 @@ export async function makePeersKeyring(
 	//  - we want to save and log crypto material, more so, we generate and log new crypto first, then send message
 	//  - logging and saving of marking pair as in use also doesn't have to be immediate (should it be logged?)
 	const logs = await makePeerKeysChangeLogs(logsFS, logsLocalFS, logger.logError);
-	const keysDB = await makePeerKeysDB(peerKeysFS, random);
+	const keysDB = await makePeerKeysDB(peerKeysFS, random, logger.logError);
 
 	async function suggestPairForPeerIntroKey(
 		peerAddr: string, peerIntroPKey: JsonKey

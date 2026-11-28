@@ -196,7 +196,7 @@ function openSocketFromNode(
 	ensureWebSocketUrlOK(url);
 	const headers: OutgoingHttpHeaders = {};
 	headers[SESSION_ID_HEADER] = sessionId;
-	const ws = new WebSocket(url, { headers, agent: getAgent?.() ?? globalAgent, timeout });
+	const ws = new WebSocket(url, { headers, agent: getAgent?.() ?? globalAgent, handshakeTimeout: timeout });
 	let opening: Deferred<Reply<WebSocket>>|undefined = defer<Reply<WebSocket>>();
 	const initOnError = (err: any) => {
 		opening?.reject(makeConnectionException(url, undefined, `WebSocket connection error: ${err.message}`));

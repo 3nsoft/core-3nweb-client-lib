@@ -610,13 +610,13 @@ export abstract class NodeInFS<P extends NodePersistance> implements Node {
 		let isCurrentLocal: boolean;
 		if (state === 'behind') {
 			isCurrentLocal = false;
-			remoteVersion = versionFromBranch(remote!, remoteVersion);
+			remoteVersion = versionFromBranch(remote!, remoteVersion, this.name);
 		} else if (state === 'conflicting') {
 			isCurrentLocal = true;
-			remoteVersion = versionFromBranch(remote!, remoteVersion);
+			remoteVersion = versionFromBranch(remote!, remoteVersion, this.name);
 		} else if (state === 'unsynced') {
 			isCurrentLocal = true;
-			remoteVersion = versionFromBranch(synced!, remoteVersion);
+			remoteVersion = versionFromBranch(synced!, remoteVersion, this.name);
 		} else {
 			return;
 		}
@@ -767,12 +767,12 @@ export function areBytesEqual(b1: Uint8Array, b2: Uint8Array): boolean {
 }
 
 export function versionFromBranch(
-	branch: SyncVersionsBranch, versionInBranch: number|undefined
+	branch: SyncVersionsBranch, versionInBranch: number|undefined, fsItemName: string
 ): number|undefined {
 	if (versionInBranch) {
 		if ((versionInBranch !== branch!.latest!)
 		&& !branch.archived?.includes(versionInBranch)) {
-			throw makeFSSyncException(this.name, {
+			throw makeFSSyncException(fsItemName, {
 				versionMismatch: true,
 				message: `Unknown version in branch: ${versionInBranch}`
 			});

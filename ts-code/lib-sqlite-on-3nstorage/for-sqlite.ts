@@ -125,6 +125,17 @@ export function performTableInsert<T extends object>(
   );
 }
 
+export function performTableInsertOrNothingOnConflict<T extends object>(
+  db: Database, tabName: string, record: T, transforms: TransformDefinition<T>
+): boolean {
+  const { insertParams, orderedColumns, orderedValues } = forTableInsert(record, transforms);
+  db.exec(
+    `INSERT INTO ${tabName} (${orderedColumns}) VALUES (${orderedValues}) ON CONFLICT DO NOTHING`,
+    insertParams
+  );
+  return (db.getRowsModified() > 0);
+}
+
 export function selectFromTable<T extends object>(
   db: Database, tabName: string, selectColumns: (keyof T)[]|'*',
   selectWith: Partial<T>, transforms: TransformDefinition<T>

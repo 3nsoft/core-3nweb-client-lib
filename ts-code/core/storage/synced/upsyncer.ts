@@ -31,6 +31,7 @@ import { utf8 } from "../../../lib-common/buffer-utils";
 import { FiniteChunk } from "../../../lib-common/objs-on-disk/file-layout";
 import { ObjId, UploadEventSink, UploadHeaderChange } from "../../../lib-client/xsp-fs/common";
 import { NamedProcs } from "../../../lib-common/processes/synced";
+import { stringifyErr } from "../../../lib-common/exceptions/error";
 
 const MAX_CHUNK_SIZE = 512*1024;
 
@@ -41,6 +42,7 @@ type UploadNeedInfo = NonNullable<NewVersionUpload['needUpload']>;
 type UploadEvent = web3n.files.UploadEvent;
 type ConnectException = web3n.ConnectException;
 type HTTPException = web3n.HTTPException;
+type RuntimeException = web3n.RuntimeException;
 
 export type FileWriteTapOperator = MonoTypeOperatorFunction<FileWrite[]>;
 
@@ -126,19 +128,20 @@ export class UpSyncer {
 					if (localVersion > uploadVersion) {
 						await obj.removeLocalVersionFilesLessThan(localVersion);
 					}
-				}
+				},
+				this.removeTask
 			);
 			this.tasksByIds.set(uploadTaskId, task);
 			this.tasksByObjIds.set(task.objId, task);
-			const completion = task.completion();
-			completion.finally(() => {
-				if (this.tasksByIds.delete(task.taskId)) {
-					this.tasksByObjIds.delete(task.objId);
-				}
-			}).catch(noop);
 			this.execPools.add(task);
-			return { completion, uploadTaskId };
+			return { completion: task.completion(), uploadTaskId };
 		});
+	}
+
+	private removeTask = (task: UploadTask): void => {
+		if (this.tasksByIds.delete(task.taskId)) {
+			this.tasksByObjIds.delete(task.objId);
+		}
 	}
 
 }
@@ -168,6 +171,7 @@ class UploadTask implements Task<UploadExecLabel> {
 		private readonly info: NewVersionUpload,
 		private readonly uploadHeader: Uint8Array|undefined,
 		private readonly doAtCompletion: () => Promise<void>,
+		private readonly rmTask: UpSyncer['removeTask'],
 		private readonly eventSink: UploadEventSink|undefined,
 		isRestart: boolean
 	) {
@@ -180,7 +184,7 @@ class UploadTask implements Task<UploadExecLabel> {
 	static async for(
 		obj: SyncedObj, localVersion: number, uploadVersion: number, uploadHeader: Uint8Array|undefined,
 		syncedBase: number|undefined, createObj: boolean, taskId: number, eventSink: UploadEventSink|undefined,
-		remoteStorage: StorageOwner, doAtCompletion: () => Promise<void>
+		remoteStorage: StorageOwner, doAtCompletion: () => Promise<void>, rmTask: UpSyncer['removeTask']
 	): Promise<UploadTask> {
 		const src = await obj.getObjSrcFromLocalAndSyncedBranch(localVersion);
 		const objStatus = obj.statusObj();
@@ -189,7 +193,8 @@ class UploadTask implements Task<UploadExecLabel> {
 			if ((info.type === 'new-version')
 			&& (info.localVersion === localVersion) && (info.uploadVersion === uploadVersion)) {
 				return new UploadTask(
-					taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader, doAtCompletion, eventSink, true
+					taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader,
+					doAtCompletion, rmTask, eventSink, true
 				);
 			} else {
 				let message: string;
@@ -220,7 +225,8 @@ class UploadTask implements Task<UploadExecLabel> {
 			};
 			await objStatus.recordUploadStart(info);
 			return new UploadTask(
-				taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader, doAtCompletion, eventSink, false
+				taskId, remoteStorage, obj.objId, objStatus, src, info, uploadHeader,
+				doAtCompletion, rmTask, eventSink, false
 			);
 		}
 	}
@@ -273,6 +279,7 @@ class UploadTask implements Task<UploadExecLabel> {
 			} else {
 				await this.doAtCompletion().finally(() => {
 					this.uploadCompletion.resolve();
+					this.rmTask(this);
 					this.emitUploadEvent('upload-done', {});
 				});
 				return true;
@@ -294,10 +301,11 @@ class UploadTask implements Task<UploadExecLabel> {
 					uploadVersion: this.info.uploadVersion,
 					cause: exc
 				}));
+				await this.objStatus.recordUploadCancellation(this.info).catch(noop);
+				this.rmTask(this);
 				this.emitUploadEvent('upload-erred', {
-					error: exc
+					error: ((exc as RuntimeException).runtimeException ? exc : stringifyErr(exc))
 				});
-				await this.objStatus.recordUploadCancellation(this.info);
 				return true;
 			}
 		}
@@ -415,6 +423,14 @@ class UploadTask implements Task<UploadExecLabel> {
 			await this.remoteStorage.cancelTransaction(this.objId, transactionId).catch(noop);
 		}
 		await this.objStatus.recordUploadCancellation(this.info).catch(noop);
+		this.uploadCompletion.reject(makeFSSyncException(`obj-upload`, {
+			message: `Upload cancelled`,
+			localVersion: this.info.localVersion,
+			uploadVersion: this.info.uploadVersion,
+			cause: `Upload canacelled`
+		}));
+		this.rmTask(this);
+		this.emitUploadEvent('upload-cancelled', {});
 	}
 
 }

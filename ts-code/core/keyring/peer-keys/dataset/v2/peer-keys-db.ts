@@ -16,7 +16,7 @@
 */
 
 import { toCanonicalAddress } from "../../../../../lib-common/canonical-address";
-import { andEqualExprFor, booleanTransform, jsonTransform, optJsonTransform, passOmitting, performTableInsert, queryParamsFrom, selectFromTable, setExprFor, TransformDefinition, updateInTable } from "../../../../../lib-sqlite-on-3nstorage/for-sqlite";
+import { andEqualExprFor, booleanTransform, jsonTransform, optJsonTransform, passOmitting, performTableInsert, performTableInsertOrNothingOnConflict, queryParamsFrom, selectFromTable, setExprFor, TransformDefinition, updateInTable } from "../../../../../lib-sqlite-on-3nstorage/for-sqlite";
 import { objectFromQueryExecResult, SQLiteOn3NStorage, SQLiteOnSyncedFS } from "../../../../../lib-sqlite-on-3nstorage";
 import { checkIfV1AndReadPeerKeys, v1RatchetedSendingPairToV2SendingKeyPairDbEntry, v1ReceptionPairToV2RecipientKeyPairDbEntry } from "../v1/json-files";
 import { SuggestedNextKeyPair } from "../../../../asmail/msg/common";
@@ -28,6 +28,7 @@ import { addToNumberLineSegments } from "../../../../../lib-common/number-line";
 import { PairEvent, recipientPairEntryFromJSON, sendingPairEntryFromJSON } from "./logs";
 import { SingleProc } from "../../../../../lib-common/processes/synced";
 import { LogEntry } from "../../../../../lib-common/dataset-sync/per-device-json-array-logs";
+import { LogError } from "../../../../../lib-client/logging/log-to-file";
 
 type WritableFS = web3n.files.WritableFS;
 type WritableFile = web3n.files.WritableFile;
@@ -254,7 +255,7 @@ async function generatePids(random: AsyncRNG): Promise<string[]> {
 }
 
 
-export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
+export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG, logError: LogError) {
 
   const keys = await readOrInitializeDB(peerKeysFS);
 
@@ -359,7 +360,12 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
   }
 
   function addReceptionPair(pair: RecipientKeyPairDbEntry): void {
-    performTableInsert(keys.db, 'reception_key_pairs', pair, receptionKeyPairsTabFields);
+    const added = performTableInsertOrNothingOnConflict(
+      keys.db, 'reception_key_pairs', pair, receptionKeyPairsTabFields
+    );
+    if (!added) {
+      return;
+    }
     const { peerCAddr, peerKId, pids, recipientKId } = pair;
     for (const pid of pids) {
       performTableInsert(
@@ -500,6 +506,16 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
       timestamp: pairTS!,
       senderKid: peerKId!
     };
+  }
+
+  function findReceptionPairStage(
+    { peerCAddr, peerKId, recipientKId }: Pick<RecipientKeyPairDbEntry, 'peerCAddr' | 'recipientKId' | 'peerKId'>
+  ): RecipientKeyPairDbEntry['ratchetStage']|undefined {
+    const pairs = selectFromTable(
+      keys.db, 'reception_key_pairs', [ 'ratchetStage' ],
+      { peerCAddr, peerKId, recipientKId }, receptionKeyPairsTabFields
+    );
+    return (pairs ? pairs[0].ratchetStage : undefined);
   }
 
   async function generateSuggestedPairOnPeerIntroKey(
@@ -643,50 +659,58 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
   ): Promise<void> {
     await changeProc.startOrChain(async () => {
       for (const op of ops) {
-        if (op.p) {
-          if (op.p.opType === 'pair-from-peer') {
-            const { peerAddr, sendingPairRecord: inJSON } = op.p;
-            const existingPair = getSendingPair(inJSON.peerCAddr);
-            if (existingPair) {
-              if (existingPair.pairTS < inJSON.pairTS) {
-                updateSendingPair(sendingPairEntryFromJSON(inJSON));
-              } 
-            } else {
-              if (!getPeerAddressForCanonical(inJSON.peerCAddr)) {
-                addPeer(peerAddr);
+        try {
+          if (op.p) {
+            if (op.p.opType === 'pair-from-peer') {
+              const { peerAddr, sendingPairRecord: inJSON } = op.p;
+              const existingPair = getSendingPair(inJSON.peerCAddr);
+              if (existingPair) {
+                if (existingPair.pairTS < inJSON.pairTS) {
+                  updateSendingPair(sendingPairEntryFromJSON(inJSON));
+                } 
+              } else {
+                if (!getPeerAddressForCanonical(inJSON.peerCAddr)) {
+                  addPeer(peerAddr);
+                }
+                addSendingPair(sendingPairEntryFromJSON(inJSON));
               }
-              addSendingPair(sendingPairEntryFromJSON(inJSON));
-            }
-          } else if (op.p.opType === 'pair-suggested-to-peer') {
-            const { peerAddr, receivingPairRecord: inJSON } = op.p;
-            const existingPair = getPairSuggestedToPeer(inJSON.peerCAddr);
-            if (existingPair) {
-              if (existingPair.timestamp < inJSON.pairTS) {
+            } else if (op.p.opType === 'pair-suggested-to-peer') {
+              const { peerAddr, receivingPairRecord: inJSON } = op.p;
+              const existingPair = getPairSuggestedToPeer(inJSON.peerCAddr);
+              if (existingPair) {
+                if (existingPair.timestamp < inJSON.pairTS) {
 
-                // XXX replace existingPair with one from inJSON
-                //  let's note that in broken situation we may suggest fixing moves
+                  // XXX replace existingPair with one from inJSON
+                  //  let's note that in broken situation we may suggest fixing moves
 
+                  if (!findReceptionPairStage(op.p.receivingPairRecord)) {
+                    addReceptionPair(recipientPairEntryFromJSON(inJSON));
+                  }
+
+                }
+              } else if (!findReceptionPairStage(op.p.receivingPairRecord)) {
+                if (!getPeerAddressForCanonical(inJSON.peerCAddr)) {
+                  addPeer(peerAddr);
+                }
+                addReceptionPair(recipientPairEntryFromJSON(inJSON));
               }
-            } else {
-              if (!getPeerAddressForCanonical(inJSON.peerCAddr)) {
-                addPeer(peerAddr);
-              }
-              addReceptionPair(recipientPairEntryFromJSON(inJSON));
+            } else if (op.p.opType === 'peer-started-using-pair') {
+              const { peerCAddr, peerKId, recipientKId } = op.p;
+              markPairAsInUse(peerCAddr, peerKId, recipientKId);
+            } else if (op.p.opType === 'remove-peer-at-address') {
+              const { peerCAddr } = op.p;
+              forgetCorrespondentAt(peerCAddr);
+            } else if (op.p.opType === 'remove-all-peers-at-domain') {
+              const { domain } = op.p;
+              forgetAllCorrespondentsAtDomain(domain);
             }
-          } else if (op.p.opType === 'peer-started-using-pair') {
-            const { peerCAddr, peerKId, recipientKId } = op.p;
-            markPairAsInUse(peerCAddr, peerKId, recipientKId);
-          } else if (op.p.opType === 'remove-peer-at-address') {
-            const { peerCAddr } = op.p;
-            forgetCorrespondentAt(peerCAddr);
-          } else if (op.p.opType === 'remove-all-peers-at-domain') {
-            const { domain } = op.p;
-            forgetAllCorrespondentsAtDomain(domain);
+          } else if (op.syncPoint) {
+
+            // XXX
+
           }
-        } else if (op.syncPoint) {
-
-          // XXX
-
+        } catch (err) {
+          logError(`Error while absorbing peer key operation in keyring from other device`, err);
         }
       }
       await saveIfNeeded();
@@ -721,10 +745,8 @@ export async function makePeerKeysDB(peerKeysFS: WritableFS, random: AsyncRNG) {
     updateSendingPairFromSuggested,
     findKeyToMatchSuggestedForSendingPair,
 
-    addReceptionPair,
     markPairAsInUse,
     findReceptionPairsForPId,
-    absorbV1DataIfPresent,
     getPeerAddressForCanonical,
     updateReceivedMsgCountIn,
     absorbOpsFromOtherDevices,

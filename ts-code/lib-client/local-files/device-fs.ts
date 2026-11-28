@@ -859,6 +859,10 @@ export class DeviceFS implements WritableFS, Linkable {
 		}
 	}
 
+	copyXAttrs(src: string, dst: string, filter?: string[]): Promise<void> {
+		throw makeNoAttrsExc(src);
+	}
+
 	async saveFile(file: File, dst: string, overwrite = false): Promise<void> {
 		const src = await file.getByteSource();
 		const flags: FileFlags = {

@@ -126,9 +126,11 @@ async function attachRequestReaders(
 	)
 	.pipe(take(1));
 
-	const err$ = fromEvent(
-		clReq, 'error',
-		e => makeConnectionException(opts.url, opts.method, 'Cannot connect', e)
+	const err$ = merge(
+		fromEvent(clReq, 'error', e => makeConnectionException(opts.url, opts.method, 'Cannot connect', e)),
+		fromEvent(clReq, 'timeout', () => makeConnectionException(
+			opts.url, opts.method, 'Cannot connect', TIMEOUT_FLAG
+		))
 	)
 	.pipe(
 		map(exc => { throw exc; }),

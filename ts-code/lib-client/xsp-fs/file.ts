@@ -341,7 +341,8 @@ class S implements WritableFileSyncAPI {
 		const node = await this.n.getNode();
 		const startedUpload = await node.startUpload(opts, true);
 		if (startedUpload) {
-			const { uploadTaskId, uploadVersion } = startedUpload;
+			const { uploadTaskId, uploadVersion, completion } = startedUpload;
+			completion.catch(noop);
 			return { uploadTaskId, uploadVersion };
 		} else {
 			return;
@@ -397,6 +398,9 @@ class S implements WritableFileSyncAPI {
 }
 Object.freeze(S.prototype);
 Object.freeze(S);
+
+
+function noop() {}
 
 
 Object.freeze(exports);

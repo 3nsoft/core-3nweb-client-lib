@@ -142,9 +142,10 @@ export class InboxEvents {
 	}
 
 	resumeNetworkActivity(): void {
-		if (this.listening.proc) {
+		const completion = this.listening.stop();
+		if (completion) {
 			this.listening.startWith(
-				this.listening.proc.completion.then(() => this.subscribeToEventSrcAndPassHeartbeats())
+				completion.then(() => this.subscribeToEventSrcAndPassHeartbeats())
 			);
 		} else {
 			this.listening.startWith(this.subscribeToEventSrcAndPassHeartbeats());

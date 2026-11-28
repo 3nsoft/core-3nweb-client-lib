@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017, 2019 - 2021 3NSoft Inc.
+ Copyright (C) 2016 - 2017, 2019 - 2021, 2026 3NSoft Inc.
  
  This program is free software: you can redistribute it and/or modify it under
  the terms of the GNU General Public License as published by the Free Software
@@ -118,8 +118,8 @@ const EMPTY_BYTE_ARR = new Uint8Array(0);
 export class WIP {
 
 	private proc = new SingleProc();
-	private sender: MailSender = (undefined as any);
-	private packer: MsgPacker = (undefined as any);
+	private sender: MailSender|undefined = undefined;
+	private packer: MsgPacker|undefined = undefined;
 	private doStateRecording: boolean;
 	private currentObjIndInMeta = 0;
 	private currentObj: CurrentObj|undefined = undefined;
@@ -204,7 +204,7 @@ export class WIP {
 		return this.proc.startOrChain(async () => {
 			if (this.state.stage === undefined) { return; }
 			this.state.stage = undefined;
-			if (this.sender.sessionId) {
+			if (this.sender?.sessionId) {
 				await this.sender.cancelDelivery();
 			}
 		});
@@ -248,7 +248,7 @@ export class WIP {
 
 	private async authSender(): Promise<void> {
 		const signer = await this.msg.r.getSigner();
-		await this.sender.authorizeSender(signer);
+		await this.sender!.authorizeSender(signer);
 		if (this.state.stage !== "cancel") {
 			this.state.stage = "3-get-pk";
 		}
@@ -256,7 +256,7 @@ export class WIP {
 
 	private async getRecipientKeyAndEncrypt(): Promise<void> {
 
-		const recipient = this.sender.recipient;
+		const recipient = this.sender!.recipient;
 		const introPKeyFromServer = await this.getIntroKeyIfRecipientIsUnknown(recipient);
 
 		this.packer = await this.msg.msgPacker();
@@ -314,12 +314,12 @@ export class WIP {
 	}
 
 	private async getIntroKeyIfRecipientIsUnknown(recipient: string): Promise<JsonKey|undefined> {
-		if (!this.msg.r.correspondents.needIntroKeyFor(this.sender.recipient)) {
+		if (!this.msg.r.correspondents.needIntroKeyFor(this.sender!.recipient)) {
 			return;
 		}
-		const certs = await this.sender.getRecipientsInitPubKey();
+		const certs = await this.sender!.getRecipientsInitPubKey();
 		return checkAndExtractPKey(
-			this.sender.net, this.msg.r.midResolver, recipient, certs
+			this.sender!.net, this.msg.r.midResolver, recipient, certs
 		).catch(err => {
 			throw makeDeliveryException({
 				address: recipient,
@@ -367,7 +367,7 @@ export class WIP {
 		if (!this.state.pack) {
 			throw new Error(`Message pack is not set.`);
 		}
-		this.state.session = await this.sender.sendMetadata(this.state.pack.meta);
+		this.state.session = await this.sender!.sendMetadata(this.state.pack.meta);
 		this.msg.progress.recipients[this.state.recipient].idOnDelivery = this.state.session.msgId;
 		if (this.state.stage !== "cancel") {
 			this.state.stage = "5-send-objs";
@@ -411,19 +411,19 @@ export class WIP {
 			if (!mainObjEnc) {
 				throw new Error(`Object master encryptor is not given for the main object.`);
 			}
-			src = await this.packer.getSrcForMainObj(mainObjEnc, this.cryptor);
+			src = await this.packer!.getSrcForMainObj(mainObjEnc, this.cryptor);
 		} else if (upload.header) {
 			const header = base64.open(upload.header);
-			src = await this.packer.getRestartedSrcForObj(objId, header, upload.segsOffset, this.cryptor);
+			src = await this.packer!.getRestartedSrcForObj(objId, header, upload.segsOffset, this.cryptor);
 		} else {
-			src = await this.packer.getNewSrcForObj(objId, this.cryptor);
+			src = await this.packer!.getNewSrcForObj(objId, this.cryptor);
 		}
 
 		return { objId, upload, src };
 	}
 
 	private async completeDelivery(): Promise<void> {
-		await this.sender.completeDelivery();
+		await this.sender!.completeDelivery();
 		this.updateInfo(0, true);
 		this.state.stage = undefined;
 		this.sender = (undefined as any);
@@ -490,7 +490,7 @@ export class WIP {
 		if (!isEndless) {
 			obj.upload.expectedSegsSize = size;
 		}
-		let segsChunk = await obj.src.segSrc.readNext(this.sender.maxChunkSize - header.length);
+		let segsChunk = await obj.src.segSrc.readNext(this.sender!.maxChunkSize - header.length);
 
 		// check if we'll be done in this request
 		const segsSize = obj.upload.expectedSegsSize;
@@ -509,7 +509,7 @@ export class WIP {
 		}
 
 		// send bytes
-		await this.sender.sendObj(obj.objId, [ header, segsChunk ], opts, undefined);
+		await this.sender!.sendObj(obj.objId, [ header, segsChunk ], opts, undefined);
 		
 		// record progress
 		obj.upload.headerDone = true;
@@ -531,11 +531,11 @@ export class WIP {
 	private async followingObjSendingRequest(obj: CurrentObj): Promise<boolean> {
 		// read from source
 		const segsSize = obj.upload.expectedSegsSize;
-		const chunk = await obj.src.segSrc.readNext(this.sender.maxChunkSize);
+		const chunk = await obj.src.segSrc.readNext(this.sender!.maxChunkSize);
 		
 		// return early, when there are no bytes
 		if (!chunk) {
-			await this.sender.sendObj(
+			await this.sender!.sendObj(
 				obj.objId, EMPTY_BYTE_ARR, undefined,
 				{ ofs: obj.upload.segsOffset, last: true }
 			);
@@ -551,7 +551,7 @@ export class WIP {
 		}
 		
 		// if we shouldn't expect any more bytes from source, we are done
-		const isObjDone = (chunk.length < this.sender.maxChunkSize) ||
+		const isObjDone = (chunk.length < this.sender!.maxChunkSize) ||
 			(!!segsSize && ((ofs + chunk.length) === segsSize));
 		
 		// prepare request options
@@ -561,7 +561,7 @@ export class WIP {
 		}
 
 		// send bytes
-		await this.sender.sendObj(obj.objId, chunk, undefined, opts);
+		await this.sender!.sendObj(obj.objId, chunk, undefined, opts);
 		
 		obj.upload.segsOffset += chunk.length;
 		this.updateInfo(chunk.length);

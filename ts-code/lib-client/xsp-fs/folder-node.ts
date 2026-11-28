@@ -448,12 +448,7 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 				if ((exc as web3n.EncryptionException).failedCipherVerification) {
 					exc = makeFileException('ioError', `${this.name}/${info.name}`, exc);
 				} else if (exc.objNotFound) {
-					if (fromCurrentNodes) {
-						// XXX this.fixMissingChildAndThrow() was removing object that has been moved on other device
-						// Should we label found inconsistency, sot that it can be fixed later? Should we have lost&found?
-						deferred.reject(makeFileException('notFound', info.name, exc));
-						return;
-					} else {
+					if (!fromCurrentNodes) {
 						try {
 							const node = await this.getNonLocal(info);
 							if (node) {
@@ -741,6 +736,8 @@ export class FolderNode extends NodeInFS<FolderPersistance> {
 	}
 
 	async removeChildEntryUnconditionally(name: string): Promise<void> {
+		// XXX this removal of record is done in presence of error, which may lead to non-accessible child obj.
+		// Should we label found inconsistency, so that it can be fixed later? Should we have lost&found?
 		await this.doTransition(async (state, version) => {
 			const child = state.nodes[name];
 			if (!child) {
@@ -1339,9 +1336,10 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 } {
 	const currentNodesById = orderByIds(current.nodes);
 	const syncedNodesById = orderByIds(synced.nodes);
-	const removed: NonNullable<FolderDiff['removed']> = { inLocal: [], inRemote: [] };
+	const removedInLocal: string[] = [];
 	const renamed: NonNullable<FolderDiff['renamed']> = [];
-	const added: NonNullable<FolderDiff['added']> = { inLocal: [], inRemote: [] };
+	const addedInLocal: string[] = [];
+	const addedInRemote: string[] = [];
 	const rekeyed: NonNullable<FolderDiff['rekeyed']> = [];
 	const nameOverlaps: string[] = [];
 	for (const remoteNode of Object.values(remote.nodes)) {
@@ -1367,7 +1365,7 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 				const syncedNode = syncedNodesById.get(remoteNode.objId)!;
 				assert(!!syncedNode);
 				const localChanged = !areBytesEqual(localNode.key, syncedNode.key);
-				const remoteChanged = !areBytesEqual(localNode.key, syncedNode.key);
+				const remoteChanged = !areBytesEqual(remoteNode.key, syncedNode.key);
 				rekeyed.push({
 					local: localNode.name,
 					remote: remoteNode.name,
@@ -1378,9 +1376,9 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 		} else {
 			const syncedNode = syncedNodesById.get(remoteNode.objId)!;
 			if (syncedNode) {
-				removed.inLocal!.push(remoteNode.name);
+				removedInLocal.push(remoteNode.name);
 			} else {
-				added.inRemote!.push(remoteNode.name);
+				addedInRemote.push(remoteNode.name);
 			}
 			if (current.nodes[remoteNode.name]) {
 				nameOverlaps.push(remoteNode.name);
@@ -1390,13 +1388,13 @@ function diffNodes(current: FolderInfo, remote: FolderInfo, synced: FolderInfo):
 	for (const localNode of currentNodesById.values()) {
 		const syncedNode = syncedNodesById.get(localNode.objId)!;
 		if (!syncedNode) {
-			added.inLocal!.push(localNode.name);
+			addedInLocal.push(localNode.name);
 		}
 	}
 	return {
-		removed: reduceEmptyIn(removed),
+		removed: { inLocal: removedInLocal },
 		renamed: ((renamed.length > 0) ? renamed : undefined),
-		added: reduceEmptyIn(added),
+		added: { inLocal: addedInLocal, inRemote: addedInRemote },
 		rekeyed: ((rekeyed.length > 0) ? rekeyed : undefined),
 		nameOverlaps: ((nameOverlaps.length > 0) ? nameOverlaps : undefined),
 	};
@@ -1440,22 +1438,6 @@ function identifyChanges(
 		}
 	}
 	return { addedNodes, removedNodes, renamedNodes };
-}
-
-function reduceEmptyIn(c: NonNullable<FolderDiff['removed']|FolderDiff['added']>) {
-	if (c.inLocal!.length > 0) {
-		if (c.inRemote!.length > 0) {
-			return c;
-		} else {
-			return { inLocal: c.inLocal };
-		}
-	} else {
-		if (c.inRemote!.length > 0) {
-			return { inRemote: c.inRemote };
-		} else {
-			return;
-		}
-	}
 }
 
 
